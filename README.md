@@ -115,13 +115,14 @@ result = http.get("https://api.example.com/data", {});
 ### Pattern Matching
 
 ```calcium
-func fizzbuzz(n) = match n % 15
-    0 => "FizzBuzz"
-    _ => match n % 3
-        0 => "Fizz"
-        _ => match n % 5
-            0 => "Buzz"
-            _ => to_string(n);
+func fizz(n) = match n % 3  0 => "Fizz"  _ => "";
+func buzz(n) = match n % 5  0 => "Buzz"  _ => "";
+
+func fizzbuzz_or(result, n) = match result
+    "" => to_string(n)
+    _ => result;
+
+func fizzbuzz(n) = fizz(n) + buzz(n) |> fizzbuzz_or(n);
 
 func fib(n) = match n
     0 => 0
@@ -131,17 +132,13 @@ func fib(n) = match n
 
 ### Partial Application
 
-`map`, `filter`, and `reduce` support partial application, making them ideal for pipelines:
+`map`, `filter`, and `reduce` work seamlessly with pipelines using `x |> f(y)` = `f(x, y)`:
 
 ```calcium
-// Full application
-map(x => x * 2, [1, 2, 3]);  // [2, 4, 6]
+// Direct call: map(arr, fn)
+map([1, 2, 3], x => x * 2);  // [2, 4, 6]
 
-// Partial application returns a function
-double_all = map(x => x * 2);
-double_all([1, 2, 3]);  // [2, 4, 6]
-
-// Perfect for pipelines
+// Pipeline: arr |> map(fn) becomes map(arr, fn)
 [1, 2, 3, 4, 5]
     |> filter(x => x > 2)
     |> map(x => x * 10)
@@ -167,9 +164,9 @@ use core.array
 numbers = [1, 2, 3, 4, 5];
 
 // Built-in functions
-map(x => x * 2, numbers);            // [2, 4, 6, 8, 10]
-filter(x => x > 2, numbers);         // [3, 4, 5]
-reduce((a, b) => a + b, 0, numbers); // 15
+map(numbers, x => x * 2);            // [2, 4, 6, 8, 10]
+filter(numbers, x => x > 2);         // [3, 4, 5]
+reduce(numbers, (a, b) => a + b, 0); // 15
 
 // Array module functions
 numbers |> array.reverse;   // [5, 4, 3, 2, 1]
@@ -418,9 +415,9 @@ toml.stringify(data);
 
 | Function | Description |
 |----------|-------------|
-| `map(fn, arr)` | Apply function to each element |
-| `filter(pred, arr)` | Keep elements matching predicate |
-| `reduce(fn, init, arr)` | Fold array to single value |
+| `map(arr, fn)` | Apply function to each element |
+| `filter(arr, pred)` | Keep elements matching predicate |
+| `reduce(arr, fn, init)` | Fold array to single value |
 | `range(start, end)` | Generate array of integers |
 | `len(x)` | Get length of array/string/hash |
 | `concat(a, b)` | Concatenate arrays or strings |

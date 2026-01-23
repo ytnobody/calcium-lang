@@ -35,12 +35,15 @@ numbers
     |> array.sum
     |> io.say;
 
-// Define FizzBuzz function
-func fizzbuzz(n) = match true
-    n % 15 == 0 => "FizzBuzz"
-    n % 3 == 0 => "Fizz"
-    n % 5 == 0 => "Buzz"
-    true => to_string(n);
+// Define FizzBuzz functions
+func fizz(n) = match n % 3  0 => "Fizz"  _ => "";
+func buzz(n) = match n % 5  0 => "Buzz"  _ => "";
+
+func fizzbuzz_or(result, n) = match result
+    "" => to_string(n)
+    _ => result;
+
+func fizzbuzz(n) = fizz(n) + buzz(n) |> fizzbuzz_or(n);
 
 // FizzBuzz pipeline
 "FizzBuzz (1-15):" |> io.say;

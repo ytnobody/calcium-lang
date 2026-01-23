@@ -73,4 +73,4 @@ func lines(s) = __str_split(s, "\n");
 func words(s) = __str_split(__str_trim(s), " ") |> filter(w => __str_len(w) > 0);
 
 // reverse reverses a string
-func reverse(s) = reduce((acc, c) => concat(c, acc), "", __str_split(s, ""));
+func reverse(s) = reduce(__str_split(s, ""), (acc, c) => concat(c, acc), "");

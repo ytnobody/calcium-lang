@@ -854,14 +854,14 @@ func TestBuiltinMap(t *testing.T) {
 		input    string
 		expected []int64
 	}{
-		// Basic map with lambda - new argument order: map(fn, arr)
-		{`map(x => x * 2, [1, 2, 3]);`, []int64{2, 4, 6}},
+		// Basic map with lambda - argument order: map(arr, fn)
+		{`map([1, 2, 3], x => x * 2);`, []int64{2, 4, 6}},
 		// Map with named function
-		{`func double(x) = x * 2; map(double, [1, 2, 3]);`, []int64{2, 4, 6}},
+		{`func double(x) = x * 2; map([1, 2, 3], double);`, []int64{2, 4, 6}},
 		// Empty array
-		{`map(x => x * 2, []);`, []int64{}},
+		{`map([], x => x * 2);`, []int64{}},
 		// Map with addition
-		{`map(x => x + 5, [10, 20, 30]);`, []int64{15, 25, 35}},
+		{`map([10, 20, 30], x => x + 5);`, []int64{15, 25, 35}},
 	}
 
 	for _, tt := range tests {
@@ -900,16 +900,16 @@ func TestBuiltinFilter(t *testing.T) {
 		input    string
 		expected []int64
 	}{
-		// Filter even numbers - new argument order: filter(pred, arr)
-		{`func isEven(x) = x % 2 == 0; filter(isEven, [1, 2, 3, 4, 5, 6]);`, []int64{2, 4, 6}},
+		// Filter even numbers - argument order: filter(arr, pred)
+		{`func isEven(x) = x % 2 == 0; filter([1, 2, 3, 4, 5, 6], isEven);`, []int64{2, 4, 6}},
 		// Filter with lambda
-		{`filter(x => x > 2, [1, 2, 3, 4, 5]);`, []int64{3, 4, 5}},
+		{`filter([1, 2, 3, 4, 5], x => x > 2);`, []int64{3, 4, 5}},
 		// Filter all elements
-		{`filter(x => x > 0, [1, 2, 3]);`, []int64{1, 2, 3}},
+		{`filter([1, 2, 3], x => x > 0);`, []int64{1, 2, 3}},
 		// Filter no elements
-		{`filter(x => x > 10, [1, 2, 3]);`, []int64{}},
+		{`filter([1, 2, 3], x => x > 10);`, []int64{}},
 		// Empty array
-		{`filter(x => x > 0, []);`, []int64{}},
+		{`filter([], x => x > 0);`, []int64{}},
 	}
 
 	for _, tt := range tests {
@@ -945,16 +945,16 @@ func TestBuiltinFilter(t *testing.T) {
 // Test reduce function
 func TestBuiltinReduce(t *testing.T) {
 	tests := []vmTestCase{
-		// Sum of array - new argument order: reduce(fn, init, arr)
-		{`reduce((acc, x) => acc + x, 0, [1, 2, 3, 4, 5]);`, int64(15)},
+		// Sum of array - argument order: reduce(arr, fn, init)
+		{`reduce([1, 2, 3, 4, 5], (acc, x) => acc + x, 0);`, int64(15)},
 		// Product of array
-		{`reduce((acc, x) => acc * x, 1, [1, 2, 3, 4]);`, int64(24)},
+		{`reduce([1, 2, 3, 4], (acc, x) => acc * x, 1);`, int64(24)},
 		// Count elements
-		{`reduce((count, x) => count + 1, 0, [1, 2, 3]);`, int64(3)},
+		{`reduce([1, 2, 3], (count, x) => count + 1, 0);`, int64(3)},
 		// Empty array returns initial
-		{`reduce((acc, x) => acc + x, 42, []);`, int64(42)},
+		{`reduce([], (acc, x) => acc + x, 42);`, int64(42)},
 		// String concatenation
-		{`reduce((acc, x) => concat(acc, x), "", ["a", "b", "c"]);`, "abc"},
+		{`reduce(["a", "b", "c"], (acc, x) => concat(acc, x), "");`, "abc"},
 	}
 
 	runVmTests(t, tests)
@@ -963,14 +963,14 @@ func TestBuiltinReduce(t *testing.T) {
 // Test combining map/filter/reduce
 func TestHigherOrderCombined(t *testing.T) {
 	tests := []vmTestCase{
-		// Sum of doubled even numbers - new argument order
+		// Sum of doubled even numbers - argument order: arr first
 		{`
 			arr = [1, 2, 3, 4, 5, 6];
-			evens = filter(x => x % 2 == 0, arr);
-			doubled = map(x => x * 2, evens);
-			reduce((a, b) => a + b, 0, doubled);
+			evens = filter(arr, x => x % 2 == 0);
+			doubled = map(evens, x => x * 2);
+			reduce(doubled, (a, b) => a + b, 0);
 		`, int64(24)}, // (2+4+6) * 2 = 24
-		// Pipeline style with partial application
+		// Pipeline style: x |> f(y) -> f(x, y)
 		{`[1, 2, 3, 4] |> filter(x => x > 1) |> map(x => x * 10) |> reduce((a, b) => a + b, 0);`, int64(90)}, // (2+3+4) * 10 = 90
 	}
 

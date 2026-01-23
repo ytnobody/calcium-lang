@@ -10,7 +10,7 @@ func _min(a, b) = match a < b
 func _reverse_fn(acc, x) = concat([x], acc);
 
 // reverse returns a new array with elements in reverse order
-func reverse(arr) = reduce(_reverse_fn, [], arr);
+func reverse(arr) = reduce(arr, _reverse_fn, []);
 
 // slice extracts a portion of the array (3 arguments)
 func slice(arr, start, end) =
@@ -36,7 +36,7 @@ func index_of(arr, elem) =
 func _flatten_fn(acc, x) = concat(acc, x);
 
 // flatten flattens a nested array by one level
-func flatten(arr) = reduce(_flatten_fn, [], arr);
+func flatten(arr) = reduce(arr, _flatten_fn, []);
 
 // _contains checks if array contains element
 func _contains(arr, elem) = index_of(arr, elem) >= 0;
@@ -47,7 +47,7 @@ func _unique_fn(acc, x) = match _contains(acc, x)
     false => concat(acc, [x]);
 
 // unique removes duplicate elements
-func unique(arr) = reduce(_unique_fn, [], arr);
+func unique(arr) = reduce(arr, _unique_fn, []);
 
 // zip combines two arrays into an array of pairs
 func zip(arr1, arr2) =
@@ -75,16 +75,16 @@ func drop(arr, n) = match n <= 0
     false => _drop_check(arr, n);
 
 // sum calculates the sum of all elements
-func sum(arr) = reduce((acc, x) => acc + x, 0, arr);
+func sum(arr) = reduce(arr, (acc, x) => acc + x, 0);
 
 // product calculates the product of all elements
-func product(arr) = reduce((acc, x) => acc * x, 1, arr);
+func product(arr) = reduce(arr, (acc, x) => acc * x, 1);
 
 // any checks if any element satisfies the predicate
-func any(arr, pred) = reduce((acc, x) => acc || pred(x), false, arr);
+func any(arr, pred) = reduce(arr, (acc, x) => acc || pred(x), false);
 
 // all checks if all elements satisfy the predicate
-func all(arr, pred) = reduce((acc, x) => acc && pred(x), true, arr);
+func all(arr, pred) = reduce(arr, (acc, x) => acc && pred(x), true);
 
 // Helper for find
 func _find_result(filtered) = match len(filtered) == 0

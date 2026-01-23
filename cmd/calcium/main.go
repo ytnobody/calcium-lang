@@ -13,6 +13,7 @@ import (
 	"github.com/example/calcium/pkg/bytecode"
 	"github.com/example/calcium/pkg/compiler"
 	"github.com/example/calcium/pkg/lexer"
+	"github.com/example/calcium/pkg/optimizer"
 	"github.com/example/calcium/pkg/parser"
 	"github.com/example/calcium/pkg/value"
 	"github.com/example/calcium/pkg/vm"
@@ -99,32 +100,55 @@ func main() {
 	switch args[0] {
 	case "run":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: calcium run <file.ca|file.bone>")
+			fmt.Fprintln(os.Stderr, "Usage: calcium run [-O0|-O1|-O2] <file.ca|file.bone>")
 			os.Exit(1)
 		}
-		runFile(args[1])
+		optLevel, fileArg := parseOptLevel(args[1:])
+		if fileArg == "" {
+			fmt.Fprintln(os.Stderr, "Usage: calcium run [-O0|-O1|-O2] <file.ca|file.bone>")
+			os.Exit(1)
+		}
+		runFileWithOpt(fileArg, optLevel)
 
 	case "compile":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: calcium compile <file.ca> [-o output.bone]")
+			fmt.Fprintln(os.Stderr, "Usage: calcium compile [-O0|-O1|-O2] <file.ca> [-o output.bone]")
 			os.Exit(1)
 		}
-		outputFile := ""
-		if len(args) >= 4 && args[2] == "-o" {
-			outputFile = args[3]
+		optLevel, remaining := parseOptLevelArgs(args[1:])
+		if len(remaining) == 0 {
+			fmt.Fprintln(os.Stderr, "Usage: calcium compile [-O0|-O1|-O2] <file.ca> [-o output.bone]")
+			os.Exit(1)
 		}
-		compileFile(args[1], outputFile)
+		inputFile := remaining[0]
+		outputFile := ""
+		for i := 1; i < len(remaining); i++ {
+			if remaining[i] == "-o" && i+1 < len(remaining) {
+				outputFile = remaining[i+1]
+				break
+			}
+		}
+		compileFileWithOpt(inputFile, outputFile, optLevel)
 
 	case "build":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: calcium build <file.ca|file.bone> [-o output]")
+			fmt.Fprintln(os.Stderr, "Usage: calcium build [-O0|-O1|-O2] <file.ca|file.bone> [-o output]")
 			os.Exit(1)
 		}
-		outputFile := ""
-		if len(args) >= 4 && args[2] == "-o" {
-			outputFile = args[3]
+		optLevel, remaining := parseOptLevelArgs(args[1:])
+		if len(remaining) == 0 {
+			fmt.Fprintln(os.Stderr, "Usage: calcium build [-O0|-O1|-O2] <file.ca|file.bone> [-o output]")
+			os.Exit(1)
 		}
-		buildExecutable(args[1], outputFile)
+		inputFile := remaining[0]
+		outputFile := ""
+		for i := 1; i < len(remaining); i++ {
+			if remaining[i] == "-o" && i+1 < len(remaining) {
+				outputFile = remaining[i+1]
+				break
+			}
+		}
+		buildExecutableWithOpt(inputFile, outputFile, optLevel)
 
 	case "repl":
 		runREPL()
@@ -136,9 +160,21 @@ func main() {
 		printHelp()
 
 	default:
-		// If it looks like a file, try to run it
-		if strings.HasSuffix(args[0], ".ca") || strings.HasSuffix(args[0], ".bone") {
-			runFile(args[0])
+		// Check for -O flag followed by a file
+		if strings.HasPrefix(args[0], "-O") {
+			if len(args) < 2 {
+				fmt.Fprintln(os.Stderr, "Usage: calcium [-O0|-O1|-O2] <file.ca|file.bone>")
+				os.Exit(1)
+			}
+			optLevel, fileArg := parseOptLevel(args)
+			if fileArg == "" {
+				fmt.Fprintln(os.Stderr, "Usage: calcium [-O0|-O1|-O2] <file.ca|file.bone>")
+				os.Exit(1)
+			}
+			runFileWithOpt(fileArg, optLevel)
+		} else if strings.HasSuffix(args[0], ".ca") || strings.HasSuffix(args[0], ".bone") {
+			// If it looks like a file, try to run it
+			runFileWithOpt(args[0], optimizer.O1)
 		} else {
 			fmt.Fprintf(os.Stderr, "Unknown command: %s\n", args[0])
 			printHelp()
@@ -151,24 +187,79 @@ func printHelp() {
 	fmt.Println(`Calcium - A functional programming language
 
 Usage:
-  calcium <file.ca>                   Run a Calcium source file
-  calcium <file.bone>                 Run a compiled bytecode file
-  calcium run <file.ca|file.bone>     Run a program
-  calcium compile <file.ca> [-o out]  Compile to bytecode (.bone)
-  calcium build <file> [-o out]       Build standalone executable
-  calcium repl                        Start interactive REPL
-  calcium version                     Show version
-  calcium help                        Show this help
+  calcium <file.ca>                          Run a Calcium source file
+  calcium <file.bone>                        Run a compiled bytecode file
+  calcium run [-O0|-O1|-O2] <file>           Run a program
+  calcium compile [-O0|-O1|-O2] <file> [-o out]  Compile to bytecode (.bone)
+  calcium build [-O0|-O1|-O2] <file> [-o out]    Build standalone executable
+  calcium repl                               Start interactive REPL
+  calcium version                            Show version
+  calcium help                               Show this help
+
+Optimization Levels:
+  -O0    No optimization
+  -O1    Basic optimization (constant folding, dead code elimination) [default]
+  -O2    Full optimization (O1 + bytecode peephole optimization)
 
 Examples:
-  calcium hello.ca                    Run source directly
-  calcium compile hello.ca            Compile to hello.bone
+  calcium hello.ca                    Run source directly (with -O1)
+  calcium -O2 hello.ca                Run with full optimization
+  calcium compile -O2 hello.ca        Compile with full optimization
   calcium build hello.ca -o hello     Build standalone executable
   calcium ./hello                     Run standalone (no calcium needed)
   calcium repl                        Start REPL`)
 }
 
+// parseOptLevel parses optimization level from args, returns level and remaining file arg
+func parseOptLevel(args []string) (optimizer.Level, string) {
+	if len(args) == 0 {
+		return optimizer.O1, ""
+	}
+
+	switch args[0] {
+	case "-O0":
+		if len(args) > 1 {
+			return optimizer.O0, args[1]
+		}
+		return optimizer.O0, ""
+	case "-O1":
+		if len(args) > 1 {
+			return optimizer.O1, args[1]
+		}
+		return optimizer.O1, ""
+	case "-O2":
+		if len(args) > 1 {
+			return optimizer.O2, args[1]
+		}
+		return optimizer.O2, ""
+	default:
+		return optimizer.O1, args[0]
+	}
+}
+
+// parseOptLevelArgs parses optimization level and returns remaining args
+func parseOptLevelArgs(args []string) (optimizer.Level, []string) {
+	if len(args) == 0 {
+		return optimizer.O1, nil
+	}
+
+	switch args[0] {
+	case "-O0":
+		return optimizer.O0, args[1:]
+	case "-O1":
+		return optimizer.O1, args[1:]
+	case "-O2":
+		return optimizer.O2, args[1:]
+	default:
+		return optimizer.O1, args
+	}
+}
+
 func runFile(filename string) {
+	runFileWithOpt(filename, optimizer.O1)
+}
+
+func runFileWithOpt(filename string, optLevel optimizer.Level) {
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
@@ -179,7 +270,7 @@ func runFile(filename string) {
 	if strings.HasSuffix(filename, ".bone") {
 		err = executeBytecode(content)
 	} else {
-		_, err = executeWithFilename(string(content), filename)
+		_, err = executeWithFilenameOpt(string(content), filename, optLevel)
 	}
 
 	if err != nil {
@@ -190,6 +281,10 @@ func runFile(filename string) {
 }
 
 func compileFile(inputFile, outputFile string) {
+	compileFileWithOpt(inputFile, outputFile, optimizer.O1)
+}
+
+func compileFileWithOpt(inputFile, outputFile string, optLevel optimizer.Level) {
 	useColor := isTerminal()
 
 	// Read source file
@@ -211,6 +306,10 @@ func compileFile(inputFile, outputFile string) {
 		os.Exit(1)
 	}
 
+	// Optimize AST
+	opt := optimizer.New(optLevel)
+	program = opt.OptimizeAST(program)
+
 	// Compile
 	comp := compiler.New()
 	comp.SetInput(input)
@@ -220,9 +319,15 @@ func compileFile(inputFile, outputFile string) {
 		os.Exit(1)
 	}
 
+	// Get bytecode
+	instructions := comp.Bytecode().Instructions
+
+	// Optimize bytecode (for O2)
+	instructions = opt.OptimizeBytecode(instructions)
+
 	// Create CompiledBytecode
 	cb := &bytecode.CompiledBytecode{
-		Instructions: comp.Bytecode().Instructions,
+		Instructions: instructions,
 		Constants:    comp.Constants(),
 	}
 
@@ -246,7 +351,16 @@ func compileFile(inputFile, outputFile string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Compiled %s -> %s (%d bytes)\n", inputFile, outputFile, len(data))
+	optLevelStr := ""
+	switch optLevel {
+	case optimizer.O0:
+		optLevelStr = " (O0)"
+	case optimizer.O1:
+		optLevelStr = " (O1)"
+	case optimizer.O2:
+		optLevelStr = " (O2)"
+	}
+	fmt.Printf("Compiled %s -> %s (%d bytes)%s\n", inputFile, outputFile, len(data), optLevelStr)
 }
 
 func executeBytecode(data []byte) error {
@@ -336,6 +450,10 @@ func execute(input string) (string, error) {
 }
 
 func executeWithFilename(input, filename string) (string, error) {
+	return executeWithFilenameOpt(input, filename, optimizer.O1)
+}
+
+func executeWithFilenameOpt(input, filename string, optLevel optimizer.Level) (string, error) {
 	useColor := isTerminal()
 
 	l := lexer.New(input)
@@ -346,6 +464,10 @@ func executeWithFilename(input, filename string) (string, error) {
 		return "", fmt.Errorf("%s", formatParseErrors(filename, p.Errors(), useColor))
 	}
 
+	// Optimize AST
+	opt := optimizer.New(optLevel)
+	program = opt.OptimizeAST(program)
+
 	comp := compiler.New()
 	comp.SetInput(input)
 	err := comp.Compile(program)
@@ -353,8 +475,12 @@ func executeWithFilename(input, filename string) (string, error) {
 		return "", fmt.Errorf("%s", formatCompileErrors(filename, err, useColor))
 	}
 
+	// Get bytecode and optimize (for O2)
+	instructions := comp.Bytecode().Instructions
+	instructions = opt.OptimizeBytecode(instructions)
+
 	machine := vm.New(comp.Constants())
-	err = machine.Run(comp.Bytecode().Instructions)
+	err = machine.Run(instructions)
 	if err != nil {
 		return "", fmt.Errorf("%s", formatError(filename, fmt.Sprintf("runtime error: %v", err), useColor))
 	}
@@ -467,6 +593,10 @@ func tryRunEmbedded() bool {
 
 // buildExecutable creates a standalone executable by combining calcium binary with .bone data
 func buildExecutable(inputFile, outputFile string) {
+	buildExecutableWithOpt(inputFile, outputFile, optimizer.O1)
+}
+
+func buildExecutableWithOpt(inputFile, outputFile string, optLevel optimizer.Level) {
 	var boneData []byte
 	var err error
 
@@ -496,6 +626,10 @@ func buildExecutable(inputFile, outputFile string) {
 			os.Exit(1)
 		}
 
+		// Optimize AST
+		opt := optimizer.New(optLevel)
+		program = opt.OptimizeAST(program)
+
 		comp := compiler.New()
 		comp.SetInput(input)
 		err = comp.Compile(program)
@@ -504,8 +638,12 @@ func buildExecutable(inputFile, outputFile string) {
 			os.Exit(1)
 		}
 
+		// Get bytecode and optimize (for O2)
+		instructions := comp.Bytecode().Instructions
+		instructions = opt.OptimizeBytecode(instructions)
+
 		cb := &bytecode.CompiledBytecode{
-			Instructions: comp.Bytecode().Instructions,
+			Instructions: instructions,
 			Constants:    comp.Constants(),
 		}
 

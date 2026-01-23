@@ -1,0 +1,35 @@
+// core.http! - HTTP client module (effect module)
+// Uses primitives: __http_get, __http_post, __http_put, __http_delete, __http_request
+// Note: These are effect functions that perform network I/O
+
+// get performs a GET request
+// get(url) -> {status, headers, body, ok} | failure(error)
+// get(url, headers) -> {status, headers, body, ok} | failure(error)
+func! get(url, headers) = __http_get(url, headers);
+
+// post performs a POST request
+// post(url, body) -> {status, headers, body, ok} | failure(error)
+// post(url, body, content_type) -> with custom content type
+// post(url, body, content_type, headers) -> with custom headers
+func! post(url, body, content_type, headers) = __http_post(url, body, content_type, headers);
+
+// put performs a PUT request
+// put(url, body) -> {status, headers, body, ok} | failure(error)
+func! put(url, body, content_type, headers) = __http_put(url, body, content_type, headers);
+
+// del performs a DELETE request (named 'del' to avoid keyword conflict)
+// del(url) -> {status, headers, body, ok} | failure(error)
+func! del(url, headers) = __http_delete(url, headers);
+
+// request performs a generic HTTP request
+// request({method, url, headers, body}) -> {status, headers, body, ok} | failure(error)
+func! request(options) = __http_request(options);
+
+// Helper: fetch is an alias for get (familiar name)
+func! fetch(url, headers) = get(url, headers);
+
+// Helper: post_json sends JSON data
+func! post_json(url, data) = __http_post(url, data, "application/json", {});
+
+// Helper: post_form sends form data
+func! post_form(url, data) = __http_post(url, data, "application/x-www-form-urlencoded", {});

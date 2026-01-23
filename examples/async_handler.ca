@@ -1,0 +1,29 @@
+// async_handler.ca - Handler lifecycle example
+// Demonstrates: handler.ready, handler.pause, handler.status
+
+use core.io!;
+use core.async!;
+use core.schedule!;
+
+io.println("Starting handler lifecycle example...");
+
+// Create an event source and handler
+src = schedule.timeout(100);
+handler = async.expects((ev) => "done", src);
+
+io.println("Handler created");
+io.println("Initial status: " + handler.status);
+
+// Activate the handler
+handler.ready();
+io.println("After ready(): " + handler.status);
+
+// Pause the handler
+handler.pause();
+io.println("After pause(): " + handler.status);
+
+// Resume the handler
+handler.resume();
+io.println("After resume(): " + handler.status);
+
+io.println("Handler lifecycle demo complete.");

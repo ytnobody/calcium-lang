@@ -1,0 +1,22 @@
+// async_cancel.ca - Cancellation example
+// Demonstrates: async.cancel for handlers
+
+use core.io!;
+use core.async!;
+use core.schedule!;
+
+io.println("Starting cancellation example...");
+
+// Create an interval handler
+intervalSrc = schedule.interval(50);
+intervalHandler = async.expects((ev) => "tick", intervalSrc);
+
+io.println("Handler status before ready: " + intervalHandler.status);
+intervalHandler.ready();
+io.println("Handler status after ready: " + intervalHandler.status);
+
+// Cancel the handler
+async.cancel(intervalHandler);
+io.println("Handler status after cancel: " + intervalHandler.status);
+
+io.println("Cancellation demo complete.");

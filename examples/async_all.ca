@@ -1,0 +1,22 @@
+// async_all.ca - Wait for multiple tasks example
+// Demonstrates: async.spawn, async.all
+
+use core.io!;
+use core.async!;
+
+io.println("Starting async.all example...");
+
+// Create multiple tasks
+tasks = [
+    async.spawn(() => 10),
+    async.spawn(() => 20),
+    async.spawn(() => 30)
+];
+
+io.println("Tasks created, waiting with async.all...");
+
+// async.all waits for all tasks and returns their results
+results = async.all(tasks);
+
+io.println("All tasks completed!");
+io.println("Results: " + to_string(results));

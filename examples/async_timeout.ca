@@ -1,0 +1,27 @@
+// async_timeout.ca - Basic async timeout example
+// Demonstrates: async.stay, schedule.timeout, async.expects, async.leave
+
+use core.io!;
+use core.schedule!;
+use core.async!;
+
+io.println("Starting timeout example...");
+
+// async.stay creates an event loop that runs until async.leave is called
+result = async.stay(done: false) {
+    // Create a timeout event source (fires once after 2000ms)
+    src = schedule.timeout(2000);
+
+    // Create a handler that will be called when the timeout fires
+    handler = async.expects((ev) => async.leave("completed"), src);
+
+    // Activate the handler to start listening for events
+    handler.ready()
+};
+
+// result is wrapped in success() because async.stay is an effect function
+// Use !? to handle success/failure
+result !? {
+    success(v) => io.println("Result: " + v)
+    failure(e) => io.println("Error: " + e)
+};

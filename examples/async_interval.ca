@@ -1,0 +1,21 @@
+// async_interval.ca - Interval counter example
+// Demonstrates: schedule.interval with a simple counter
+
+use core.io!;
+use core.schedule!;
+use core.async!;
+
+io.println("Starting interval example...");
+io.println("Will fire 3 times then exit.");
+
+// Simple example: just wait for an interval tick and exit
+result = async.stay(done: false) {
+    src = schedule.interval(2000);
+    handler = async.expects((ev) => async.leave("interval fired"), src);
+    handler.ready()
+};
+
+result !? {
+    success(v) => io.println("Result: " + v)
+    failure(e) => io.println("Error: " + e)
+};

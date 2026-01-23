@@ -1,0 +1,45 @@
+// String manipulation in Calcium
+use core.io;
+use core.string;
+
+message = "  Hello, Calcium World!  ";
+
+"Original (with spaces):" |> io.say;
+message |> (s => concat("'", s, "'")) |> io.say;
+
+// パイプラインで文字列変換チェーン
+"Trimmed:" |> io.say;
+message |> string.trim |> io.say;
+
+"Upper case:" |> io.say;
+message |> string.upper |> io.say;
+
+"Lower case:" |> io.say;
+message |> string.lower |> io.say;
+
+// trim → upper のチェーン
+"Trimmed and uppercased:" |> io.say;
+message |> string.trim |> string.upper |> io.say;
+
+// Split → 加工 → Join のパイプライン
+"Split by comma:" |> io.say;
+fruits = "apple,banana,cherry" |> (s => string.split(s, ","));
+fruits |> io.say;
+
+"Joined with ' - ':" |> io.say;
+fruits |> (arr => string.join(arr, " - ")) |> io.say;
+
+// 文字列検査もパイプラインで
+"Contains 'Calcium'?" |> io.say;
+message |> (s => string.contains(s, "Calcium")) |> io.say;
+
+"Starts with '  Hello'?" |> io.say;
+message |> (s => string.starts_with(s, "  Hello")) |> io.say;
+
+// 複合パイプライン: trim → replace → upper
+"Transform pipeline (trim → replace → upper):" |> io.say;
+message
+    |> string.trim
+    |> (s => string.replace(s, "World", "Universe"))
+    |> string.upper
+    |> io.say;

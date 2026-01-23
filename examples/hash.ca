@@ -1,0 +1,64 @@
+// Hash (associative array) examples in Calcium
+use core.io;
+
+// Basic hash creation and access
+"=== Basic Hash ===" |> io.say;
+person = {name: "Alice", age: 30, city: "Tokyo"};
+person |> io.say;
+
+// Dot access
+"Name:" |> io.say;
+person.name |> io.say;
+
+// Bracket access
+"City:" |> io.say;
+person["city"] |> io.say;
+
+// Dynamic key access
+"=== Dynamic Key ===" |> io.say;
+key = "age";
+concat("Age (via dynamic key): ", to_string(person[key])) |> io.say;
+
+// Built-in functions
+"=== Keys and Values ===" |> io.say;
+"Keys:" |> io.say;
+keys(person) |> io.say;
+
+"Values:" |> io.say;
+values(person) |> io.say;
+
+"Length:" |> io.say;
+len(person) |> io.say;
+
+// Nested hashes
+"=== Nested Hash ===" |> io.say;
+user = {
+    profile: {
+        name: "Bob",
+        email: "bob@example.com"
+    },
+    settings: {
+        theme: "dark",
+        notifications: true
+    }
+};
+user |> io.say;
+concat("User name: ", user.profile.name) |> io.say;
+concat("Theme: ", user.settings.theme) |> io.say;
+
+// Hash with array values
+"=== Hash with Arrays ===" |> io.say;
+inventory = {
+    fruits: ["apple", "banana", "orange"],
+    vegetables: ["carrot", "broccoli"],
+    count: 5
+};
+inventory |> io.say;
+concat("First fruit: ", inventory.fruits[0]) |> io.say;
+
+// Iterating over hash keys
+"=== Iterating ===" |> io.say;
+scores = {alice: 95, bob: 87, charlie: 92};
+keys(scores) |> map(name =>
+    concat(name, ": ", to_string(scores[name]))
+) |> map(line => line |> io.say);

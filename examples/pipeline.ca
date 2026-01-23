@@ -1,0 +1,47 @@
+// Pipeline demonstration in Calcium
+use core.io;
+use core.array;
+
+// データ生成
+numbers = range(1, 11);
+
+"Original numbers:" |> io.say;
+numbers |> io.say;
+
+// パイプラインチェーン: 偶数をフィルタ → 2倍 → 合計
+result = numbers
+    |> filter(x => x % 2 == 0)
+    |> map(x => x * 2)
+    |> reduce((a, b) => a + b, 0);
+
+"Sum of doubled even numbers:" |> io.say;
+result |> io.say;
+
+// 配列操作もパイプラインで
+"Reversed:" |> io.say;
+numbers |> array.reverse |> io.say;
+
+"First 5:" |> io.say;
+numbers |> (arr => array.take(arr, 5)) |> io.say;
+
+"Sum:" |> io.say;
+numbers |> array.sum |> io.say;
+
+// 複合パイプライン: 奇数だけ取り出して3乗して合計
+"Sum of cubes of odd numbers (1³+3³+5³+7³+9³):" |> io.say;
+numbers
+    |> filter(x => x % 2 == 1)
+    |> map(x => x * x * x)
+    |> array.sum
+    |> io.say;
+
+// FizzBuzz関数を定義
+func fizzbuzz(n) = match true
+    n % 15 == 0 => "FizzBuzz"
+    n % 3 == 0 => "Fizz"
+    n % 5 == 0 => "Buzz"
+    true => to_string(n);
+
+// FizzBuzzパイプライン
+"FizzBuzz (1-15):" |> io.say;
+range(1, 16) |> map(fizzbuzz) |> io.say;

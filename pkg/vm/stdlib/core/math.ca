@@ -1,0 +1,60 @@
+// core.math - Mathematical functions
+// Uses primitives: __floor, __ceil, __round, __sqrt, __pow, __sin, __cos, __tan, __log, __exp
+
+// Constants
+pi = 3.141592653589793;
+e = 2.718281828459045;
+
+// abs returns the absolute value of a number
+func abs(n) = match n < 0
+    true => -n
+    true => n;
+
+// min returns the smaller of two numbers
+func min(a, b) = match a < b
+    true => a
+    true => b;
+
+// max returns the larger of two numbers
+func max(a, b) = match a > b
+    true => a
+    true => b;
+
+// floor returns the largest integer less than or equal to n
+func floor(n) = __floor(n);
+
+// ceil returns the smallest integer greater than or equal to n
+func ceil(n) = __ceil(n);
+
+// round returns the nearest integer to n
+func round(n) = __round(n);
+
+// sqrt returns the square root of n
+func sqrt(n) = __sqrt(n);
+
+// pow returns base raised to the power of exp
+func pow(base, exp) = __pow(base, exp);
+
+// sin returns the sine of n (in radians)
+func sin(n) = __sin(n);
+
+// cos returns the cosine of n (in radians)
+func cos(n) = __cos(n);
+
+// tan returns the tangent of n (in radians)
+func tan(n) = __tan(n);
+
+// log returns the natural logarithm of n
+func log(n) = __log(n);
+
+// exp returns e raised to the power of n
+func exp(n) = __exp(n);
+
+// clamp restricts a value to be within a range
+func clamp(n, minVal, maxVal) = min(max(n, minVal), maxVal);
+
+// sign returns -1, 0, or 1 based on the sign of n
+func sign(n) = match true
+    n < 0 => -1
+    n > 0 => 1
+    true => 0;

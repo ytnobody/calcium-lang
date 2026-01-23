@@ -1,0 +1,18 @@
+// Factorial example in Calcium
+use core.io;
+
+func factorial(n) = match n
+    0 => 1
+    true => n * factorial(n - 1);
+
+func build_factorial_message(n) = n
+    |> factorial
+    |> (r => concat(to_string(n), "! = ", to_string(r)));
+
+// パイプラインで階乗計算と出力
+"Factorial calculations:" |> io.say;
+
+// 配列をmapで処理し、各要素を出力
+result = [0, 1, 2, 3, 4, 5, 10] |> map(
+    n => build_factorial_message(n) |> io.say
+);

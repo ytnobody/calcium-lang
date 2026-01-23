@@ -1,0 +1,129 @@
+// core.array - Array manipulation functions
+// Uses builtins: len, head, tail, push, range, map, filter, reduce, get, concat
+
+// Helper for min (internal)
+func _min(a, b) = match a < b
+    true => a
+    false => b;
+
+// Helper for reverse
+func _reverse_fn(acc, x) = concat([x], acc);
+
+// reverse returns a new array with elements in reverse order
+func reverse(arr) = reduce(_reverse_fn, [], arr);
+
+// slice extracts a portion of the array (3 arguments)
+func slice(arr, start, end) =
+    range(start, end) |> map(i => get(arr, i));
+
+// slice_from extracts from start to end of array (2 arguments)
+func slice_from(arr, start) =
+    range(start, len(arr)) |> map(i => get(arr, i));
+
+// Helper for index_of and find_index
+func _first_or_neg1(arr) = match len(arr) == 0
+    true => -1
+    false => head(arr);
+
+// index_of finds the first index of an element using filter
+// Returns -1 if not found
+func index_of(arr, elem) =
+    range(0, len(arr))
+    |> filter(i => get(arr, i) == elem)
+    |> _first_or_neg1;
+
+// Helper for flatten
+func _flatten_fn(acc, x) = concat(acc, x);
+
+// flatten flattens a nested array by one level
+func flatten(arr) = reduce(_flatten_fn, [], arr);
+
+// _contains checks if array contains element
+func _contains(arr, elem) = index_of(arr, elem) >= 0;
+
+// Helper for unique
+func _unique_fn(acc, x) = match _contains(acc, x)
+    true => acc
+    false => concat(acc, [x]);
+
+// unique removes duplicate elements
+func unique(arr) = reduce(_unique_fn, [], arr);
+
+// zip combines two arrays into an array of pairs
+func zip(arr1, arr2) =
+    range(0, _min(len(arr1), len(arr2)))
+    |> map(i => [get(arr1, i), get(arr2, i)]);
+
+// Helper for take
+func _take_check(arr, n) = match n >= len(arr)
+    true => arr
+    false => range(0, n) |> map(i => get(arr, i));
+
+// take returns the first n elements
+func take(arr, n) = match n <= 0
+    true => []
+    false => _take_check(arr, n);
+
+// Helper for drop
+func _drop_check(arr, n) = match n >= len(arr)
+    true => []
+    false => range(n, len(arr)) |> map(i => get(arr, i));
+
+// drop removes the first n elements
+func drop(arr, n) = match n <= 0
+    true => arr
+    false => _drop_check(arr, n);
+
+// sum calculates the sum of all elements
+func sum(arr) = reduce((acc, x) => acc + x, 0, arr);
+
+// product calculates the product of all elements
+func product(arr) = reduce((acc, x) => acc * x, 1, arr);
+
+// any checks if any element satisfies the predicate
+func any(arr, pred) = reduce((acc, x) => acc || pred(x), false, arr);
+
+// all checks if all elements satisfy the predicate
+func all(arr, pred) = reduce((acc, x) => acc && pred(x), true, arr);
+
+// Helper for find
+func _find_result(filtered) = match len(filtered) == 0
+    true => failure("not found")
+    false => success(head(filtered));
+
+// find returns the first element satisfying the predicate
+func find(arr, pred) =
+    filter(arr, pred)
+    |> _find_result;
+
+// find_index returns the index of the first element satisfying the predicate
+func find_index(arr, pred) =
+    range(0, len(arr))
+    |> filter(i => pred(get(arr, i)))
+    |> _first_or_neg1;
+
+// count counts elements satisfying the predicate
+func count(arr, pred) = filter(arr, pred) |> len;
+
+// partition splits array into two based on predicate
+func partition(arr, pred) = [filter(arr, pred), filter(arr, x => !pred(x))];
+
+// Note: sort and sort_by not implemented due to parser limitations with mutual recursion
+
+// Helper for chunk
+func _chunk_final(arr) = match len(arr) == 0
+    true => []
+    false => [arr];
+
+// chunk splits array into chunks of size n
+func chunk(arr, n) = match len(arr) <= n
+    true => _chunk_final(arr)
+    false => concat([take(arr, n)], chunk(drop(arr, n), n));
+
+// intersperse places a separator between elements
+func intersperse(arr, sep) = match len(arr) <= 1
+    true => arr
+    false => concat([head(arr), sep], intersperse(tail(arr), sep));
+
+// enumerate adds indices to elements: [a, b] -> [[0, a], [1, b]]
+func enumerate(arr) = zip(range(0, len(arr)), arr);

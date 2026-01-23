@@ -1,0 +1,26 @@
+// async_spawn.ca - Task spawning example
+// Demonstrates: async.spawn to create parallel tasks
+
+use core.io!;
+use core.async!;
+use core.schedule!;
+
+io.println("Starting spawn example...");
+
+// Create a task that runs in parallel
+task = async.spawn(() => 42);
+
+io.println("Task spawned!");
+io.println("Task status: " + task.status);
+
+// Wait a moment for the task to complete, then check result
+result = async.stay(done: false) {
+    src = schedule.timeout(100);
+    handler = async.expects((ev) => async.leave(task.result), src);
+    handler.ready()
+};
+
+result !? {
+    success(v) => io.println("Task result: " + to_string(v))
+    failure(e) => io.println("Error: " + e)
+};

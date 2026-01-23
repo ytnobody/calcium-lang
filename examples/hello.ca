@@ -1,0 +1,6 @@
+// Hello World in Calcium
+use core.io;
+
+// パイプラインで出力
+"Hello, Calcium!" |> io.say;
+"Welcome to the functional world." |> io.say;

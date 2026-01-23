@@ -1,0 +1,49 @@
+// core.io - Input/Output functions
+// Uses primitives: __print, __println, __read_file, __write_file
+// Note: stdin and eof event sources are provided by the VM
+
+// print outputs a value without newline
+func! print(x) = __print(to_string(x));
+
+// println outputs a value with newline
+func! println(x) = __println(to_string(x));
+
+// say is an alias for println
+func! say(x) = __println(to_string(x));
+
+// read_file reads the entire contents of a file
+// Returns success(content) or failure(error)
+func read_file(path) = __read_file(path);
+
+// write_file writes content to a file
+// Returns success(null) or failure(error)
+func! write_file(path, content) = __write_file(path, to_string(content));
+
+// format creates a formatted string by replacing {} with values
+// format("Hello, {}!", "World") -> "Hello, World!"
+func format(template, args) = _format_helper(template, args);
+
+func _format_helper(template, args) = match len(args)
+    0 => template
+    true => _format_helper(
+        _replace_first(template, "{}", to_string(head(args))),
+        tail(args)
+    );
+
+func _replace_first(s, old, new) =
+    match __str_index_of(s, old)
+        -1 => s
+        true => __str_substring(s, 0, __str_index_of(s, old))
+                ++ new
+                ++ __str_substring(s, __str_index_of(s, old) + len(old), len(s));
+
+// read_lines reads a file and returns an array of lines
+func read_lines(path) =
+    read_file(path)
+    |> (result => match result
+        success(content) => success(__str_split(content, "\n"))
+        true => result);
+
+// write_lines writes an array of lines to a file
+func! write_lines(path, lines) =
+    write_file(path, __str_join(lines, "\n"));

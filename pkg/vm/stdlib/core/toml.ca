@@ -1,0 +1,18 @@
+// core.toml - TOML parsing and serialization
+// Uses primitives: __toml_parse, __toml_stringify
+
+// parse converts a TOML string to a hash
+// Returns success(hash) on success, failure(message) on error
+// Example: toml.parse("[section]\nkey = \"value\"")
+func parse(s) = __toml_parse(s);
+
+// stringify converts a hash to a TOML string
+// Returns success(string) on success, failure(message) on error
+// Example: toml.stringify({section: {key: "value"}})
+func stringify(h) = __toml_stringify(h);
+
+// decode is an alias for parse
+func decode(s) = parse(s);
+
+// encode is an alias for stringify
+func encode(h) = stringify(h);

@@ -1,0 +1,76 @@
+// core.string - String manipulation functions
+// Uses primitives: __str_split, __str_join, __str_trim, __str_upper, __str_lower,
+//                  __str_replace, __str_substring, __str_char_at, __str_index_of,
+//                  __str_starts_with, __str_ends_with, __str_contains, __str_len
+
+// split divides a string by a separator
+func split(s, sep) = __str_split(s, sep);
+
+// join combines an array of strings with a separator
+func join(arr, sep) = __str_join(arr, sep);
+
+// trim removes leading and trailing whitespace
+func trim(s) = __str_trim(s);
+
+// upper converts a string to uppercase
+func upper(s) = __str_upper(s);
+
+// lower converts a string to lowercase
+func lower(s) = __str_lower(s);
+
+// replace replaces all occurrences of old with new
+func replace(s, old, new) = __str_replace(s, old, new);
+
+// substring extracts a portion of the string (3 arguments)
+// substring(s, start, end) - from start to end (exclusive)
+func substring(s, start, end) = __str_substring(s, start, end);
+
+// substring_from extracts from start to end of string (2 arguments)
+// substring_from(s, start) - from start to end
+func substring_from(s, start) = __str_substring(s, start, __str_len(s));
+
+// char_at returns the character at the given index
+func char_at(s, index) = __str_char_at(s, index);
+
+// index_of finds the first occurrence of a substring
+// Returns -1 if not found
+func index_of(s, substr) = __str_index_of(s, substr);
+
+// starts_with checks if a string starts with a prefix
+func starts_with(s, prefix) = __str_starts_with(s, prefix);
+
+// ends_with checks if a string ends with a suffix
+func ends_with(s, suffix) = __str_ends_with(s, suffix);
+
+// contains checks if a string contains a substring
+func contains(s, substr) = __str_contains(s, substr);
+
+// length returns the number of characters in a string
+func length(s) = __str_len(s);
+
+// is_empty checks if a string is empty
+func is_empty(s) = __str_len(s) == 0;
+
+// repeat creates a string by repeating s n times
+func repeat(s, n) = __str_join(range(0, n) |> map(i => s), "");
+
+// pad_left pads a string on the left to reach the target length
+func pad_left(s, targetLen, padChar) =
+    match __str_len(s) >= targetLen
+        true => s
+        false => concat(repeat(padChar, targetLen - __str_len(s)), s);
+
+// pad_right pads a string on the right to reach the target length
+func pad_right(s, targetLen, padChar) =
+    match __str_len(s) >= targetLen
+        true => s
+        false => concat(s, repeat(padChar, targetLen - __str_len(s)));
+
+// lines splits a string into lines
+func lines(s) = __str_split(s, "\n");
+
+// words splits a string into words (by whitespace)
+func words(s) = __str_split(__str_trim(s), " ") |> filter(w => __str_len(w) > 0);
+
+// reverse reverses a string
+func reverse(s) = reduce((acc, c) => concat(c, acc), "", __str_split(s, ""));

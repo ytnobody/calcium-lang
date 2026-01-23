@@ -1,0 +1,58 @@
+// Regex Demo - Compile-time optimized regular expressions
+// Regular expressions are compiled at bytecode compilation time for maximum performance
+
+use core.io!;
+use core.regex;
+
+// Basic matching
+io.println("--- Basic Matching ---");
+io.println(regex.matches("hello world", /hello/));    // true
+io.println(regex.matches("goodbye", /hello/));         // false
+
+// Case-insensitive matching with 'i' flag
+io.println("--- Case Insensitive ---");
+io.println(regex.matches("HELLO", /hello/i));          // true
+io.println(regex.matches("HeLLo", /hello/i));          // true
+
+// Pattern validation
+io.println("--- Pattern Validation ---");
+phone = "123-4567";
+io.println(regex.matches(phone, /^\d{3}-\d{4}$/));     // true
+
+email = "test@example.com";
+io.println(regex.matches(email, /^.+@.+\..+$/));       // true
+
+// Find all matches
+io.println("--- Find All ---");
+text = "abc123def456ghi789";
+nums = regex.find_all(text, /\d+/);
+io.println(nums);  // [123, 456, 789]
+
+// Replace
+io.println("--- Replace ---");
+result = regex.replace("Hello World", /World/, "Calcium");
+io.println(result);  // Hello Calcium
+
+censored = regex.replace("My password is secret123", /\w+\d+/, "***");
+io.println(censored);  // My password is ***
+
+// Split
+io.println("--- Split ---");
+csv = "apple,banana;cherry|grape";
+parts = regex.split(csv, /[,;|]/);
+io.println(parts);  // [apple, banana, cherry, grape]
+
+// Capture groups
+io.println("--- Capture Groups ---");
+dateStr = "2024-01-15";
+regex.capture(dateStr, /(\d{4})-(\d{2})-(\d{2})/) !? {
+    success(groups) => io.println(groups)  // [2024-01-15, 2024, 01, 15]
+    failure(e) => io.println("No match")
+};
+
+// URL validation with escapes
+io.println("--- URL Matching ---");
+url = "https://example.com/path";
+io.println(regex.matches(url, /https?:\/\/.+/));  // true
+
+io.println("Done!");

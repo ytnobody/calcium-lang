@@ -1,0 +1,70 @@
+// core.regex - Regular expression functions
+// Uses primitives: __regex_test, __regex_find, __regex_find_all,
+//                  __regex_replace, __regex_split, __regex_capture, __regex_compile
+
+// matches checks if a string matches a regex pattern
+// matches("hello", /ell/) -> true
+func matches(s, pattern) = __regex_test(s, pattern);
+
+// find finds the first match of a pattern
+// Returns success(match) or failure("no match")
+func find(s, pattern) = __regex_find(s, pattern);
+
+// find_all finds all matches of a pattern
+// Returns an array of matches
+func find_all(s, pattern) = __regex_find_all(s, pattern);
+
+// replace replaces all matches with a replacement string
+// replace("hello", /l/, "L") -> "heLLo"
+func replace(s, pattern, replacement) = __regex_replace(s, pattern, replacement);
+
+// split splits a string by a regex pattern
+// split("a1b2c", /\d/) -> ["a", "b", "c"]
+func split(s, pattern) = __regex_split(s, pattern);
+
+// capture returns capture groups from a match
+// capture("hello world", /(\w+) (\w+)/) -> success(["hello world", "hello", "world"])
+func capture(s, pattern) = __regex_capture(s, pattern);
+
+// compile compiles a regex pattern from a string
+// Useful for dynamically constructed patterns
+// compile("hello", "i") -> success(/hello/i)
+func compile(pattern, flags) = __regex_compile(pattern, flags);
+
+// test is an alias for matches
+func test(s, pattern) = matches(s, pattern);
+
+// is_match is an alias for matches
+func is_match(s, pattern) = matches(s, pattern);
+
+// extract extracts named groups (if supported) or returns capture groups
+func extract(s, pattern) = capture(s, pattern);
+
+// replace_first is not implemented due to parser limitations
+// Use replace() which replaces all occurrences
+
+// escape escapes special regex characters in a string
+func escape(s) =
+    __str_replace(
+        __str_replace(
+            __str_replace(
+                __str_replace(
+                    __str_replace(
+                        __str_replace(
+                            __str_replace(
+                                __str_replace(
+                                    __str_replace(
+                                        __str_replace(
+                                            __str_replace(
+                                                __str_replace(s, "\\", "\\\\"),
+                                            ".", "\\."),
+                                        "*", "\\*"),
+                                    "+", "\\+"),
+                                "?", "\\?"),
+                            "[", "\\["),
+                        "]", "\\]"),
+                    "(", "\\("),
+                ")", "\\)"),
+            "{", "\\{"),
+        "}", "\\}"),
+    "|", "\\|");

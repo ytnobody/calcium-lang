@@ -1,0 +1,137 @@
+// Constraint examples in Calcium
+use core.io;
+
+// ===========================================
+// Basic Constraints
+// ===========================================
+
+// Define a constraint that checks if a number is positive
+constraint Positive(n) = n > 0;
+
+// Define a constraint for even numbers
+constraint Even(n) = n % 2 == 0;
+
+// Define a constraint for non-empty strings
+constraint NonEmpty(s) = len(s) > 0;
+
+// ===========================================
+// Using Constraints with Pipe Operator
+// ===========================================
+
+"=== Constraint Check with Pipe ===" |> io.say;
+
+// Check if value satisfies constraint: value |> Constraint?
+// Returns success(value) or failure(value)
+
+result1 = 10 |> Positive?;
+concat("10 |> Positive? = ", to_string(result1)) |> io.say;
+
+result2 = -5 |> Positive?;
+concat("-5 |> Positive? = ", to_string(result2)) |> io.say;
+
+result3 = 4 |> Even?;
+concat("4 |> Even? = ", to_string(result3)) |> io.say;
+
+result4 = 7 |> Even?;
+concat("7 |> Even? = ", to_string(result4)) |> io.say;
+
+// ===========================================
+// Handling Constraint Results
+// ===========================================
+
+"" |> io.say;
+"=== Handling Results with !? ===" |> io.say;
+
+// Use !? to handle success/failure
+42 |> Positive? !? {
+    success(v) => concat("Valid positive: ", to_string(v)) |> io.say
+    failure(v) => concat("Invalid: ", to_string(v)) |> io.say
+};
+
+-10 |> Positive? !? {
+    success(v) => concat("Valid positive: ", to_string(v)) |> io.say
+    failure(v) => concat("Invalid: ", to_string(v)) |> io.say
+};
+
+// ===========================================
+// Constraints in Function Parameters
+// ===========================================
+
+"" |> io.say;
+"=== Constraints in Function Parameters ===" |> io.say;
+
+// Function that only accepts positive numbers
+func! safe_sqrt(n: Positive?) = n ** 0.5;
+
+// Valid call
+result5 = safe_sqrt(16);
+concat("safe_sqrt(16) = ", to_string(result5)) |> io.say;
+
+// Invalid call - returns failure
+result6 = safe_sqrt(-4);
+concat("safe_sqrt(-4) = ", to_string(result6)) |> io.say;
+
+// ===========================================
+// Combining Constraints
+// ===========================================
+
+"" |> io.say;
+"=== Combining Constraints ===" |> io.say;
+
+// Constraint for positive even numbers
+constraint PositiveEven(n) = n > 0 && n % 2 == 0;
+
+8 |> PositiveEven? !? {
+    success(v) => concat(to_string(v), " is positive and even") |> io.say
+    failure(v) => concat(to_string(v), " is NOT positive and even") |> io.say
+};
+
+-4 |> PositiveEven? !? {
+    success(v) => concat(to_string(v), " is positive and even") |> io.say
+    failure(v) => concat(to_string(v), " is NOT positive and even") |> io.say
+};
+
+// ===========================================
+// Range Constraint
+// ===========================================
+
+"" |> io.say;
+"=== Range Constraint ===" |> io.say;
+
+// Constraint for values in range [0, 100] using chained comparisons
+constraint InRange(n) = 0 <= n <= 100;
+
+// Function that accepts percentage values
+func! set_volume(level: InRange?) = concat("Volume set to ", to_string(level), "%");
+
+result7 = set_volume(75);
+concat("set_volume(75) = ", to_string(result7)) |> io.say;
+
+result8 = set_volume(150);
+concat("set_volume(150) = ", to_string(result8)) |> io.say;
+
+// ===========================================
+// Practical Example: Validation Pipeline
+// ===========================================
+
+"" |> io.say;
+"=== Validation Pipeline ===" |> io.say;
+
+// Age constraint using chained comparisons
+constraint ValidAge(age) = 0 <= age <= 150;
+
+// Create a user record with validation
+func! create_user(name: NonEmpty?, age: ValidAge?) = {
+    name: name,
+    age: age,
+    status: "active"
+};
+
+user1 = create_user("Alice", 30);
+concat("create_user(\"Alice\", 30) = ", to_string(user1)) |> io.say;
+
+user2 = create_user("", 25);
+concat("create_user(\"\", 25) = ", to_string(user2)) |> io.say;
+
+user3 = create_user("Bob", -5);
+concat("create_user(\"Bob\", -5) = ", to_string(user3)) |> io.say;

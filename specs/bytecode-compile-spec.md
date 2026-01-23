@@ -1,48 +1,48 @@
-# バイトコードコンパイル仕様
+# Bytecode Compilation Specification
 
-## 概要
+## Overview
 
-Calciumソースファイル(.ca)を事前にバイトコードファイル(.bone)にコンパイルし、実行時のパース・コンパイルを省略できる。
+Pre-compile Calcium source files (.ca) to bytecode files (.bone) to skip parsing and compilation at runtime.
 
-## 利点
+## Benefits
 
-1. **配布時のソース秘匿** - ソースコードを公開せずにプログラムを配布可能
-2. **起動時間の短縮** - パース・コンパイル処理をスキップ
-3. **事前最適化の保存** - 正規表現のコンパイル結果なども保存される
+1. **Source obfuscation during distribution** - Distribute programs without exposing source code
+2. **Faster startup time** - Skip parsing and compilation
+3. **Pre-optimization preservation** - Regex compilation results etc. are also saved
 
 ---
 
-## コマンド
+## Commands
 
-### コンパイル
+### Compile
 
 ```bash
-# 基本形（出力は hello.bone）
+# Basic form (output is hello.bone)
 calcium compile hello.ca
 
-# 出力ファイル指定
+# Specify output file
 calcium compile hello.ca -o output.bone
 ```
 
-### 実行
+### Execute
 
 ```bash
-# ソースを直接実行
+# Run source directly
 calcium hello.ca
 
-# コンパイル済みバイトコードを実行
+# Run compiled bytecode
 calcium hello.bone
 
-# run コマンドでも可
+# Can also use run command
 calcium run hello.ca
 calcium run hello.bone
 ```
 
 ---
 
-## ファイルフォーマット
+## File Format
 
-### .bone (Calcium Bytecode) フォーマット
+### .bone (Calcium Bytecode) Format
 
 ```
 +-------------------+
@@ -50,31 +50,31 @@ calcium run hello.bone
 +-------------------+
 | Version: 2 bytes  |  major, minor
 +-------------------+
-| NumConstants: 4   |  定数の数（uint32, big-endian）
+| NumConstants: 4   |  Number of constants (uint32, big-endian)
 +-------------------+
-| Constants...      |  各定数のシリアライズデータ
+| Constants...      |  Serialized data for each constant
 +-------------------+
-| InsLen: 4 bytes   |  命令列の長さ（uint32）
+| InsLen: 4 bytes   |  Instruction length (uint32)
 +-------------------+
-| Instructions...   |  バイトコード命令列
+| Instructions...   |  Bytecode instructions
 +-------------------+
 ```
 
-### 定数のシリアライズ
+### Constant Serialization
 
-各定数は型タグ(1バイト) + データで構成:
+Each constant consists of type tag (1 byte) + data:
 
-| 型タグ | 型 | データ形式 |
-|--------|-----|------------|
-| 0 | null | なし |
-| 1 | bool | 1バイト (0 or 1) |
-| 2 | int | 8バイト (int64, big-endian) |
-| 3 | float | 8バイト (IEEE 754) |
-| 4 | string | 4バイト長 + UTF-8データ |
-| 5 | function | 後述 |
-| 6 | regex | 後述 |
+| Type Tag | Type | Data Format |
+|----------|------|-------------|
+| 0 | null | None |
+| 1 | bool | 1 byte (0 or 1) |
+| 2 | int | 8 bytes (int64, big-endian) |
+| 3 | float | 8 bytes (IEEE 754) |
+| 4 | string | 4 byte length + UTF-8 data |
+| 5 | function | See below |
+| 6 | regex | See below |
 
-### Function のシリアライズ
+### Function Serialization
 
 ```
 [Name: string]
@@ -86,68 +86,68 @@ calcium run hello.bone
 [Body: bytes]
 ```
 
-### Regex のシリアライズ
+### Regex Serialization
 
 ```
 [Pattern: string]
 [Flags: string]
 ```
 
-※読み込み時に `regexp.Compile()` で再コンパイル
+*Recompiled with `regexp.Compile()` on load
 
 ---
 
-## バージョン互換性
+## Version Compatibility
 
-- メジャーバージョンが異なる場合は読み込み不可
-- マイナーバージョンの違いは許容（後方互換）
+- Different major version: cannot load
+- Different minor version: allowed (backward compatible)
 
-現在のバージョン: **1.0**
-
----
-
-## 実装ファイル
-
-| ファイル | 内容 |
-|---------|------|
-| `pkg/bytecode/serialize.go` | シリアライズ/デシリアライズ実装 |
-| `pkg/bytecode/serialize_test.go` | テスト |
-| `cmd/calcium/main.go` | CLI の compile/run コマンド |
+Current version: **1.0**
 
 ---
 
-## 制限事項
+## Implementation Files
 
-### シリアライズ不可の型
-
-以下の型は定数プールに含まれないため問題なし:
-- Closure（実行時に生成）
-- Module（実行時にロード）
-- Task/Handler/EventSource（非同期処理用、実行時生成）
-
-### 動的機能
-
-- `use` 文で読み込むモジュールは実行時に解決される
-- モジュールの関数は実行時にバインドされる
+| File | Content |
+|------|---------|
+| `pkg/bytecode/serialize.go` | Serialization/deserialization implementation |
+| `pkg/bytecode/serialize_test.go` | Tests |
+| `cmd/calcium/main.go` | CLI compile/run commands |
 
 ---
 
-## 使用例
+## Limitations
 
-### 基本的なワークフロー
+### Non-serializable Types
+
+The following types are not in the constant pool, so no issues:
+- Closure (created at runtime)
+- Module (loaded at runtime)
+- Task/Handler/EventSource (for async processing, created at runtime)
+
+### Dynamic Features
+
+- Modules loaded via `use` are resolved at runtime
+- Module functions are bound at runtime
+
+---
+
+## Usage Examples
+
+### Basic Workflow
 
 ```bash
-# 開発時: ソースを直接実行
+# Development: run source directly
 calcium app.ca
 
-# リリース時: コンパイルして配布
+# Release: compile and distribute
 calcium compile app.ca -o app.bone
 
-# ユーザー: コンパイル済みを実行
+# User: run compiled
 calcium app.bone
 ```
 
-### 正規表現の最適化
+### Regex Optimization
 
 ```calcium
 // app.ca
@@ -157,14 +157,14 @@ email = "test@example.com";
 regex.matches(email, pattern) |> io.println;
 ```
 
-コンパイル時に正規表現がコンパイルされ、`.bone`ファイルに保存。
-実行時は事前コンパイル済みの正規表現を即使用。
+Regex is compiled at compile time and saved in `.bone` file.
+At runtime, pre-compiled regex is immediately usable.
 
 ---
 
-## 今後の拡張（検討中）
+## Future Extensions (Under Consideration)
 
-1. **デバッグ情報** - 行番号マッピングの保存
-2. **圧縮** - gzip などによるファイルサイズ削減
-3. **署名** - 改ざん検知用の署名
-4. **最適化レベル** - `-O0`, `-O1`, `-O2` などのオプション
+1. **Debug info** - Store line number mappings
+2. **Compression** - Reduce file size with gzip etc.
+3. **Signature** - Signature for tampering detection
+4. **Optimization levels** - Options like `-O0`, `-O1`, `-O2`

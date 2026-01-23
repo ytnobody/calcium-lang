@@ -391,9 +391,9 @@ type StayStatePair struct {
 
 // StayExpression represents async.stay(state) { body }
 type StayExpression struct {
-	Token     token.Token   // the 'async' or 'stay' token
-	StateInit []StayStatePair // 状態初期化: results: [], count: 0
-	Body      []Statement   // stay ブロック内のステートメント
+	Token     token.Token     // the 'async' or 'stay' token
+	StateInit []StayStatePair // State initialization: results: [], count: 0
+	Body      []Statement     // Statements inside the stay block
 }
 
 func (se *StayExpression) expressionNode()      {}

@@ -1,7 +1,7 @@
 // Fibonacci example in Calcium
 use core.io;
 
-// 再帰的フィボナッチ
+// Recursive Fibonacci
 func fib(n) = match n
     0 => 0
     1 => 1
@@ -11,14 +11,14 @@ func build_fib_message(n) = n
     |> fib
     |> (r => concat("fib(", to_string(n), ") = ", to_string(r)));
 
-// フィボナッチ数列を出力
+// Output Fibonacci sequence
 "Fibonacci sequence:" |> io.say;
 
 result = range(0, 15) |> map(
     n => build_fib_message(n) |> io.say
 );
 
-// 黄金比に近づく様子を確認
+// Check how it approaches the golden ratio
 "" |> io.say;
 "Ratio fib(n)/fib(n-1) approaches golden ratio:" |> io.say;
 

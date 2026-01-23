@@ -1,48 +1,48 @@
-# 正規表現コンパイル時最適化 仕様
+# Regex Compile-time Optimization Specification
 
-## 概要
+## Overview
 
-正規表現リテラルをバイトコードコンパイル時に事前コンパイルし、実行時のオーバーヘッドを排除する。
+Pre-compile regex literals during bytecode compilation to eliminate runtime overhead.
 
-## 設計方針
+## Design Principles
 
-1. **コンパイル時処理**: 正規表現は Calcium コンパイル時に Go の `regexp.Compile()` で事前コンパイル
-2. **定数プール格納**: コンパイル済み `*regexp.Regexp` を定数として保存
-3. **構文エラー早期検出**: 不正な正規表現はコンパイル時にエラー
-4. **実行時ゼロコスト**: 実行時は事前コンパイル済みオブジェクトを即使用
+1. **Compile-time processing**: Regex is pre-compiled with Go's `regexp.Compile()` during Calcium compilation
+2. **Constant pool storage**: Compiled `*regexp.Regexp` stored as constant
+3. **Early syntax error detection**: Invalid regex causes compile-time error
+4. **Zero runtime cost**: Pre-compiled object is immediately usable at runtime
 
 ---
 
-## 構文
+## Syntax
 
-### 正規表現リテラル
+### Regex Literal
 
 ```calcium
-// 基本形
+// Basic form
 pattern = /^[a-z]+$/;
 
-// フラグ付き
-pattern = /hello/i;        // 大文字小文字無視
-pattern = /^line$/m;       // マルチライン
+// With flags
+pattern = /hello/i;        // Case insensitive
+pattern = /^line$/m;       // Multiline
 
-// エスケープ
-pattern = /https?:\/\//;   // スラッシュをエスケープ
-pattern = /\d{3}-\d{4}/;   // 数字パターン
+// Escaping
+pattern = /https?:\/\//;   // Escape slashes
+pattern = /\d{3}-\d{4}/;   // Digit pattern
 ```
 
-### フラグ
+### Flags
 
-| フラグ | 意味 | Go での対応 |
-|--------|------|------------|
-| `i` | 大文字小文字無視 | `(?i)` プレフィックス |
-| `m` | マルチライン | `(?m)` プレフィックス |
-| `s` | `.` が改行にもマッチ | `(?s)` プレフィックス |
+| Flag | Meaning | Go Equivalent |
+|------|---------|---------------|
+| `i` | Case insensitive | `(?i)` prefix |
+| `m` | Multiline | `(?m)` prefix |
+| `s` | `.` matches newline | `(?s)` prefix |
 
 ---
 
-## レキサー変更
+## Lexer Changes
 
-### 新トークン
+### New Token
 
 ```go
 // token/token.go
@@ -53,15 +53,15 @@ const (
 type Token struct {
     Type    TokenType
     Literal string
-    // 正規表現の場合、追加情報
-    RegexPattern string  // パターン部分
-    RegexFlags   string  // フラグ部分
+    // Additional info for regex
+    RegexPattern string  // Pattern part
+    RegexFlags   string  // Flags part
     Line    int
     Column  int
 }
 ```
 
-### レキサーロジック
+### Lexer Logic
 
 ```go
 // lexer/lexer.go
@@ -71,31 +71,31 @@ func (l *Lexer) NextToken() token.Token {
         if l.isRegexContext() {
             return l.readRegex()
         }
-        // 除算演算子
+        // Division operator
         return newToken(token.SLASH, l.ch, ...)
 }
 
 func (l *Lexer) isRegexContext() bool {
-    // 直前のトークンを見て正規表現か除算かを判定
-    // 正規表現になる文脈:
-    //   - 文の先頭
-    //   - = の後
-    //   - ( の後
-    //   - , の後
-    //   - |> の後
-    //   - 演算子の後
-    // 除算になる文脈:
-    //   - 識別子の後
-    //   - 数値の後
-    //   - ) の後
-    //   - ] の後
+    // Look at previous token to determine regex vs division
+    // Regex context:
+    //   - Start of statement
+    //   - After =
+    //   - After (
+    //   - After ,
+    //   - After |>
+    //   - After operators
+    // Division context:
+    //   - After identifier
+    //   - After number
+    //   - After )
+    //   - After ]
 }
 
 func (l *Lexer) readRegex() token.Token {
-    // /pattern/flags を読み取り
-    // 1. 開始 / を消費
-    // 2. 閉じ / まで読む（エスケープ \/ に注意）
-    // 3. フラグ文字 [imsg]* を読む
+    // Read /pattern/flags
+    // 1. Consume opening /
+    // 2. Read until closing / (watch for \/ escape)
+    // 3. Read flag characters [imsg]*
     pattern := l.readUntilUnescaped('/')
     flags := l.readRegexFlags()
     return token.Token{
@@ -109,9 +109,9 @@ func (l *Lexer) readRegex() token.Token {
 
 ---
 
-## パーサー変更
+## Parser Changes
 
-### AST ノード
+### AST Node
 
 ```go
 // ast/ast.go
@@ -126,7 +126,7 @@ func (rl *RegexLiteral) TokenLiteral() string { return rl.Token.Literal }
 func (rl *RegexLiteral) String() string       { return "/" + rl.Pattern + "/" + rl.Flags }
 ```
 
-### パース処理
+### Parse Processing
 
 ```go
 // parser/parser.go
@@ -139,16 +139,16 @@ func (p *Parser) parseRegexLiteral() ast.Expression {
 }
 
 func init() {
-    // プレフィックス解析関数に登録
+    // Register in prefix parse functions
     p.registerPrefix(token.REGEX, p.parseRegexLiteral)
 }
 ```
 
 ---
 
-## Value 型
+## Value Type
 
-### 新しい型
+### New Type
 
 ```go
 // value/value.go
@@ -158,8 +158,8 @@ const (
 
 type Value struct {
     Type ValueType
-    // ... 既存フィールド ...
-    regex *regexp.Regexp  // コンパイル済み正規表現
+    // ... existing fields ...
+    regex *regexp.Regexp  // Compiled regex
 }
 
 func Regex(re *regexp.Regexp) Value {
@@ -180,9 +180,9 @@ func (v Value) String() string {
 
 ---
 
-## コンパイラ変更
+## Compiler Changes
 
-### コンパイル時処理
+### Compile-time Processing
 
 ```go
 // compiler/compiler.go
@@ -190,23 +190,23 @@ func (c *Compiler) Compile(node ast.Node) error {
     switch node := node.(type) {
 
     case *ast.RegexLiteral:
-        // フラグをGo形式に変換
+        // Convert flags to Go format
         goPattern := convertFlags(node.Pattern, node.Flags)
 
-        // コンパイル時に正規表現をコンパイル
+        // Compile regex at compile time
         re, err := regexp.Compile(goPattern)
         if err != nil {
             return fmt.Errorf("invalid regex /%s/: %s", node.Pattern, err)
         }
 
-        // コンパイル済み正規表現を定数プールに追加
+        // Add compiled regex to constant pool
         idx := c.addConstant(value.Regex(re))
         c.emit(bytecode.OpConstant, idx)
     }
 }
 
 func convertFlags(pattern, flags string) string {
-    // Calcium フラグを Go の (?flags) プレフィックスに変換
+    // Convert Calcium flags to Go (?flags) prefix
     prefix := ""
     for _, f := range flags {
         switch f {
@@ -225,7 +225,7 @@ func convertFlags(pattern, flags string) string {
 }
 ```
 
-### エラー例
+### Error Example
 
 ```
 Error: invalid regex /[unclosed/: error parsing regexp: missing closing ]
@@ -234,22 +234,22 @@ Error: invalid regex /[unclosed/: error parsing regexp: missing closing ]
 
 ---
 
-## VM 変更
+## VM Changes
 
-### 定数ロード
+### Constant Load
 
-定数プールから `TYPE_REGEX` をロードするだけ（特別な処理不要）。
+Just load `TYPE_REGEX` from constant pool (no special handling needed).
 
 ```go
 case bytecode.OpConstant:
     constIndex := // ...
     c := vm.constants[constIndex]
-    vm.push(c)  // regex もそのままプッシュ
+    vm.push(c)  // regex is pushed as-is
 ```
 
 ---
 
-## 組み込み関数
+## Built-in Functions
 
 ### matches(string, regex) → bool
 
@@ -270,19 +270,19 @@ func builtinMatches(args ...value.Value) value.Value {
         return value.Error("second argument must be regex")
     }
 
-    // 事前コンパイル済みなので即マッチング
+    // Pre-compiled, so immediate matching
     matched := re.AsRegex().MatchString(str.AsString())
     return value.Bool(matched)
 }
 ```
 
-### 使用例
+### Usage Example
 
 ```calcium
 email = "test@example.com";
 email |> matches(/^.+@.+\..+$/);  // true
 
-// パイプラインで
+// In pipeline
 input
     |> matches(/^\d{3}-\d{4}$/)
     |> validate;
@@ -290,105 +290,105 @@ input
 
 ---
 
-## 追加の組み込み関数（将来）
+## Additional Built-in Functions (Future)
 
-| 関数 | 説明 |
-|------|------|
-| `matches(s, re)` | マッチするか → bool |
-| `find(s, re)` | 最初のマッチを返す → success/failure |
-| `find_all(s, re)` | 全マッチを配列で返す |
-| `replace(s, re, replacement)` | 置換 |
-| `split(s, re)` | 正規表現で分割 |
-| `capture(s, re)` | キャプチャグループを配列で返す |
+| Function | Description |
+|----------|-------------|
+| `matches(s, re)` | Check if matches → bool |
+| `find(s, re)` | Return first match → success/failure |
+| `find_all(s, re)` | Return all matches as array |
+| `replace(s, re, replacement)` | Replace matches |
+| `split(s, re)` | Split by regex |
+| `capture(s, re)` | Return capture groups as array |
 
 ---
 
-## 実装ステップ
+## Implementation Steps
 
-### Phase 1: 基本実装
+### Phase 1: Basic Implementation
 
-1. [x] `token.REGEX` トークン追加
-2. [x] レキサーに正規表現リテラル読み取り実装
-3. [x] `ast.RegexLiteral` ノード追加
-4. [x] パーサーに正規表現パース実装
-5. [x] `value.TYPE_REGEX` 追加
-6. [x] コンパイラでコンパイル時コンパイル実装
-7. [x] `matches` 組み込み関数実装
-8. [x] テスト
+1. [x] Add `token.REGEX` token
+2. [x] Implement regex literal reading in lexer
+3. [x] Add `ast.RegexLiteral` node
+4. [x] Implement regex parsing in parser
+5. [x] Add `value.TYPE_REGEX`
+6. [x] Implement compile-time compilation in compiler
+7. [x] Implement `matches` built-in function
+8. [x] Tests
 
-### Phase 2: フラグ対応
+### Phase 2: Flag Support
 
-1. [x] `i`, `m`, `s` フラグ実装
-2. [x] フラグ → Go プレフィックス変換
+1. [x] Implement `i`, `m`, `s` flags
+2. [x] Flag → Go prefix conversion
 
-### Phase 3: 追加関数
+### Phase 3: Additional Functions
 
 1. [x] `find`, `find_all`
 2. [x] `replace`
-3. [x] `split` (正規表現版)
+3. [x] `split` (regex version)
 4. [x] `capture`
 
 ---
 
-## テストケース
+## Test Cases
 
 ```calcium
-// 基本マッチ
+// Basic match
 "hello" |> matches(/hello/);           // true
 "HELLO" |> matches(/hello/);           // false
 "HELLO" |> matches(/hello/i);          // true
 
-// パターン
+// Patterns
 "123-4567" |> matches(/^\d{3}-\d{4}$/); // true
 "12-4567" |> matches(/^\d{3}-\d{4}$/);  // false
 
-// エスケープ
+// Escaping
 "https://example.com" |> matches(/https?:\/\//);  // true
 
-// コンパイルエラー
-pattern = /[invalid/;  // コンパイル時エラー: missing closing ]
+// Compile error
+pattern = /[invalid/;  // Compile-time error: missing closing ]
 ```
 
 ---
 
-## パフォーマンス比較
+## Performance Comparison
 
 ```
-実行時コンパイル方式:
-  1000回ループ: ~50ms (毎回 regexp.Compile)
+Runtime compilation method:
+  1000 iterations: ~50ms (regexp.Compile each time)
 
-コンパイル時方式:
-  1000回ループ: ~2ms (事前コンパイル済みを使用)
+Compile-time method:
+  1000 iterations: ~2ms (using pre-compiled)
 
-約25倍高速
+Approximately 25x faster
 ```
 
 ---
 
-## 注意点
+## Notes
 
-### 除算との区別
+### Distinguishing from Division
 
 ```calcium
-a = 10 / 2;        // 除算
-b = /pattern/;     // 正規表現
-c = x / y / z;     // 除算 / 除算
-d = f(/pat/, /tern/);  // 関数引数に正規表現2つ
+a = 10 / 2;        // Division
+b = /pattern/;     // Regex
+c = x / y / z;     // Division / division
+d = f(/pat/, /tern/);  // Two regex as function arguments
 ```
 
-レキサーは直前のトークンを見て判定:
-- 値（識別子、数値、`)`、`]`）の後 → 除算
-- それ以外 → 正規表現
+Lexer looks at previous token to determine:
+- After value (identifier, number, `)`, `]`) → division
+- Otherwise → regex
 
-### 動的パターン
+### Dynamic Patterns
 
 ```calcium
-// これはサポートしない（コンパイル時に確定しない）
+// Not supported (not determined at compile time)
 pattern = "user-" + id;
-matches(input, pattern);  // エラー: regex expected, got string
+matches(input, pattern);  // Error: regex expected, got string
 
-// 代わりに関数を使う
+// Use function instead
 matches(input, /user-\d+/);  // OK
 ```
 
-動的パターンが必要な場合は将来的に `regex(string)` 関数を追加検討。
+For dynamic patterns, consider adding `regex(string)` function in the future.

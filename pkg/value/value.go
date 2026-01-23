@@ -24,10 +24,10 @@ const (
 	TYPE_SUCCESS
 	TYPE_FAILURE
 	TYPE_MODULE
-	TYPE_REGEX        // コンパイル済み正規表現
-	TYPE_TASK         // async.spawn の戻り値
-	TYPE_HANDLER      // async.expects の戻り値
-	TYPE_EVENT_SOURCE // イベントソース (stdin, timeout, interval, task.done)
+	TYPE_REGEX        // Compiled regular expression
+	TYPE_TASK         // Return value of async.spawn
+	TYPE_HANDLER      // Return value of async.expects
+	TYPE_EVENT_SOURCE // Event source (stdin, timeout, interval, task.done)
 )
 
 func (t Type) String() string {
@@ -155,9 +155,9 @@ type Task struct {
 	ID     int64
 	Status TaskStatus
 	Result Value
-	Done   *EventSource  // .done プロパティ
-	Cancel chan struct{} // キャンセルシグナル
-	Error  error         // エラー情報
+	Done   *EventSource  // .done property
+	Cancel chan struct{} // Cancel signal
+	Error  error         // Error information
 }
 
 // Handler represents an event handler (result of async.expects)
@@ -165,7 +165,7 @@ type Handler struct {
 	ID       int64
 	Status   HandlerStatus
 	Source   *EventSource
-	Callback Value // コールバック関数
+	Callback Value // Callback function
 }
 
 // EventSource represents an event source (stdin, timeout, interval, task.done)
@@ -178,9 +178,9 @@ type EventSource struct {
 
 // Regex represents a compiled regular expression
 type Regex struct {
-	Pattern string         // 元のパターン文字列
-	Flags   string         // フラグ (i, m, s)
-	Re      *regexp.Regexp // コンパイル済み正規表現
+	Pattern string         // Original pattern string
+	Flags   string         // Flags (i, m, s)
+	Re      *regexp.Regexp // Compiled regular expression
 }
 
 // HashPair represents a key-value pair in a hash (preserves insertion order)

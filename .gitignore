@@ -1,5 +1,5 @@
 # Binaries
-calcium
+/calcium
 *.exe
 *.exe~
 *.dll
@@ -39,6 +39,9 @@ go.work
 # OS generated files
 Thumbs.db
 ehthumbs.db
+
+# Calcium compiled bytecode
+*.bone
 
 # Calcium cache (if implemented)
 .calcium/

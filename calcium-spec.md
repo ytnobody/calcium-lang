@@ -1,37 +1,37 @@
-# Calcium 言語仕様書
+# Calcium Language Specification
 
-Calcium は「算数をやってきた人が書ける」ことを目指した算数型プログラミング言語である。
+Calcium is an arithmetic-style programming language designed to be writable by anyone who has learned basic mathematics.
 
-## 設計思想
+## Design Philosophy
 
-- 型ではなく「制約」で値を扱う
-- 制御構文を最小限にする（if/else/while を持たない）
-- 再代入を許さない
-- 副作用を構文レベルで分離する
-- 数学的な語彙で説明できる概念のみを使う
+- Use "constraints" instead of types to handle values
+- Minimize control structures (no if/else/while)
+- Disallow reassignment
+- Separate side effects at the syntax level
+- Use only concepts that can be explained with mathematical vocabulary
 
-## コメント
+## Comments
 
-単一行コメントと複数行コメントをサポートする。
+Single-line and multi-line comments are supported.
 
 ```calcium
-// 単一行コメント
+// Single-line comment
 
 /*
-  複数行コメント
-  複数行にわたって記述できる
+  Multi-line comment
+  Can span multiple lines
 */
 ```
 
-## 文の区切り
+## Statement Termination
 
-文の終わりにはセミコロン `;` を記述する。改行は空白として扱われるため、式は自由に複数行にまたがることができる。
+Statements end with a semicolon `;`. Line breaks are treated as whitespace, so expressions can freely span multiple lines.
 
 ```calcium
 x = 5;
 name = "calcium";
 
-// 複数行にまたがる式
+// Multi-line expression
 result = data
   |> transform
   |> validate;
@@ -42,75 +42,75 @@ items = [
   3
 ];
 
-// 関数定義
+// Function definition
 func add(a, b) = a + b;
 ```
 
-## 値
+## Values
 
-Calcium で扱える値は以下の6種類：
+Calcium can handle the following 6 types of values:
 
-- 真偽値: `true`, `false`
-- 数値: `42`, `3.14`, `-10`
-  - 整数: `42`, `-10`
-  - 浮動小数点: `3.14`, `-0.5`
-  - 16進数: `0xFF`, `0x1A3F`
-  - 2進数: `0b1010`, `0b11110000`
-  - 科学的記数法: `1.5e10`, `2.5e-3`
-  - 数値セパレータ: `1_000_000`, `0xFF_FF`
-- 文字列: `"hello"`, `"世界"`
-  - エスケープシーケンス: `\\`(バックスラッシュ), `\"`(ダブルクォート), `\n`(改行), `\t`(タブ), `\r`(キャリッジリターン)
-- 配列: `[1, 2, 3]`, `["a", "b", "c"]`
-- 関数: `(x) => x * 2`
-- 結果型: `success(値)`, `failure(エラー)`
+- Booleans: `true`, `false`
+- Numbers: `42`, `3.14`, `-10`
+  - Integers: `42`, `-10`
+  - Floating point: `3.14`, `-0.5`
+  - Hexadecimal: `0xFF`, `0x1A3F`
+  - Binary: `0b1010`, `0b11110000`
+  - Scientific notation: `1.5e10`, `2.5e-3`
+  - Numeric separators: `1_000_000`, `0xFF_FF`
+- Strings: `"hello"`, `"world"`
+  - Escape sequences: `\\`(backslash), `\"`(double quote), `\n`(newline), `\t`(tab), `\r`(carriage return)
+- Arrays: `[1, 2, 3]`, `["a", "b", "c"]`
+- Functions: `(x) => x * 2`
+- Result types: `success(value)`, `failure(error)`
 
-### 結果型（success/failure）
+### Result Type (success/failure)
 
-`success` と `failure` は組み込みの結果型である。
+`success` and `failure` are built-in result types.
 
 ```calcium
-// 結果を作成
-success(42);         // 成功値
-failure("error");    // 失敗値
+// Create results
+success(42);         // Success value
+failure("error");    // Failure value
 
-// match でパターンマッチ
+// Pattern match with match
 match result
   success(v) => v
   failure(e) => handle_error(e)
 ```
 
-副作用関数 (`func!`) は暗黙的に結果型を返す：
-- 成功時: `success(結果)`
-- 失敗時: `failure(エラー)`
+Effect functions (`func!`) implicitly return result types:
+- On success: `success(result)`
+- On failure: `failure(error)`
 
-ユーザー定義のバリアント型（代数的データ型）は存在しない。
+User-defined variant types (algebraic data types) do not exist.
 
-### null について
+### About null
 
-Calcium には `null` が存在しない。「値がないかもしれない」状況は `get` 関数と `success/failure` パターンで明示的に扱う。
+Calcium has no `null`. Situations where "a value may not exist" are explicitly handled using the `get` function and `success/failure` pattern.
 
 ```calcium
-data = ["name", "田中"];
+data = ["name", "Tanaka"];
 
-// 直接アクセス（キーが必ず存在する前提）
-data.name;                   // "田中"
-data.age;                    // エラー（キーが存在しない）
+// Direct access (assuming key always exists)
+data.name;                   // "Tanaka"
+data.age;                    // Error (key doesn't exist)
 
-// 安全なアクセス
-data |> get("name");         // success("田中")
+// Safe access
+data |> get("name");         // success("Tanaka")
 data |> get("age");          // failure("key not found")
-data |> get("age", 0);       // 0（デフォルト値を指定）
+data |> get("age", 0);       // 0 (with default value)
 
-// JSON の null は failure として扱われる
-json = parse_json('{"name": "田中", "age": null}');
-json |> get("name");         // success("田中")
+// JSON null is treated as failure
+json = parse_json('{"name": "Tanaka", "age": null}');
+json |> get("name");         // success("Tanaka")
 json |> get("age");          // failure("null")
 json |> get("age", 0);       // 0
 ```
 
-### 変数
+### Variables
 
-変数は値に名前をつける。再代入はできない。
+Variables give names to values. Reassignment is not allowed.
 
 ```calcium
 x = 5
@@ -119,66 +119,66 @@ items = [1, 2, 3]
 double = (x) => x * 2
 ```
 
-再代入はエラー：
+Reassignment is an error:
 
 ```calcium
 x = 5
-x = 10  // エラー
+x = 10  // Error
 ```
 
-### 配列
+### Arrays
 
-配列は値のリストである。
+Arrays are lists of values.
 
 ```calcium
 numbers = [1, 2, 3, 4, 5];
 mixed = [1, "hello", [2, 3]];
 ```
 
-配列リテラルでの連結（スペース区切り）：
+Concatenation in array literals (space-separated):
 
-配列リテラル内で要素をスペースで区切ると、配列が連結（フラット化）される。カンマで区切ると個別の要素として保持される。
+When elements in an array literal are separated by spaces, arrays are concatenated (flattened). When separated by commas, they are kept as individual elements.
 
 ```calcium
-// スペース区切り = 連結
+// Space-separated = concatenation
 [1 2 3]              // [1, 2, 3]
 [[1, 2] [3, 4]]      // [1, 2, 3, 4]
 [[1] [2] [3]]        // [1, 2, 3]
 
-// カンマ区切り = 個別要素
+// Comma-separated = individual elements
 [1, 2, 3]            // [1, 2, 3]
-[[1, 2], [3, 4]]     // [[1, 2], [3, 4]]（ネスト維持）
+[[1, 2], [3, 4]]     // [[1, 2], [3, 4]] (nesting preserved)
 
-// 変数でも同様
+// Same with variables
 a = [1, 2];
 b = [3, 4];
-[a b]                // [1, 2, 3, 4]（連結）
-[a, b]               // [[1, 2], [3, 4]]（ネスト）
+[a b]                // [1, 2, 3, 4] (concatenated)
+[a, b]               // [[1, 2], [3, 4]] (nested)
 
-// 混在も可能
+// Can mix both
 [a [5, 6] b]         // [1, 2, 5, 6, 3, 4]
 ```
 
-インデックスアクセス（0始まり）：
+Index access (0-based):
 
 ```calcium
 numbers = [10, 20, 30];
 
 numbers[0];    // 10
 numbers[2];    // 30
-numbers[-1];   // 30（末尾から）
-numbers[-2];   // 20（末尾から2番目）
+numbers[-1];   // 30 (from end)
+numbers[-2];   // 20 (second from end)
 
-// 範囲外アクセスはエラー
-numbers[10];   // エラー
+// Out of bounds access is an error
+numbers[10];   // Error
 
-// 安全なアクセスは get を使う
+// Use get for safe access
 numbers |> get(0);      // success(10)
 numbers |> get(10);     // failure("index out of bounds")
-numbers |> get(10, 0);  // 0（デフォルト値）
+numbers |> get(10, 0);  // 0 (default value)
 ```
 
-配列操作は `array` 名前空間で提供される：
+Array operations are provided in the `array` namespace:
 
 ```calcium
 use array;
@@ -186,8 +186,8 @@ use array;
 numbers = [10, 20, 30, 40, 50];
 
 array.concat([1, 2], [3, 4]);    // [1, 2, 3, 4]
-array.slice(numbers, 1, 3);      // [20, 30]（インデックス1から3未満）
-array.slice(numbers, 2);         // [30, 40, 50]（インデックス2から末尾）
+array.slice(numbers, 1, 3);      // [20, 30] (index 1 to less than 3)
+array.slice(numbers, 2);         // [30, 40, 50] (index 2 to end)
 array.first(numbers);            // success(10)
 array.last(numbers);             // success(50)
 array.reverse(numbers);          // [50, 40, 30, 20, 10]
@@ -196,14 +196,14 @@ array.index_of(numbers, 30);     // success(2)
 array.unique([1, 2, 2, 3]);      // [1, 2, 3]
 ```
 
-`len` は標準で使用可能（配列と文字列の両方に対応）：
+`len` is available by default (works for both arrays and strings):
 
 ```calcium
 len([1, 2, 3]);    // 3
 len("hello");      // 5
 ```
 
-配列の分解（変数束縛でスプレッド）：
+Array destructuring (spread in variable binding):
 
 ```calcium
 [head | tail] = [1, 2, 3];
@@ -215,34 +215,34 @@ len("hello");      // 5
 [a, b, c] = [1, 2, 3];
 // a = 1, b = 2, c = 3
 
-// 空配列や要素不足はエラー
-[head | tail] = [];  // エラー
-[a, b, c] = [1, 2];  // エラー
+// Empty array or insufficient elements causes error
+[head | tail] = [];  // Error
+[a, b, c] = [1, 2];  // Error
 ```
 
-### ハッシュ（連想配列）
+### Hashes (Associative Arrays)
 
-ハッシュは「キー, 値, キー, 値, ...」という形式の配列として表現する。
+Hashes are represented as arrays in the form "key, value, key, value, ...".
 
 ```calcium
-person = ["name", "田中", "age", 25, "city", "東京"]
+person = ["name", "Tanaka", "age", 25, "city", "Tokyo"]
 ```
 
-アクセス：
+Access:
 
 ```calcium
-person.name   // "田中"
+person.name   // "Tanaka"
 person.age    // 25
 ```
 
-キーと値の分離：
+Separating keys and values:
 
 ```calcium
 keys(person)    // ["name", "age", "city"]
-values(person)  // ["田中", 25, "東京"]
+values(person)  // ["Tanaka", 25, "Tokyo"]
 ```
 
-ハッシュの構築：
+Building hashes:
 
 ```calcium
 k = ["a", "b", "c"]
@@ -250,105 +250,105 @@ v = [1, 2, 3]
 hash(k, v)  // ["a", 1, "b", 2, "c", 3]
 ```
 
-## 演算子
+## Operators
 
-### 算術演算子
+### Arithmetic Operators
 
 ```calcium
-+   // 加算（数値のみ）
--   // 減算
-*   // 乗算
-/   // 除算（常に浮動小数点）
-%   // 剰余
-**  // べき乗
++   // Addition (numbers only)
+-   // Subtraction
+*   // Multiplication
+/   // Division (always floating point)
+%   // Modulo
+**  // Exponentiation
 ```
 
-`+` は数値専用。文字列連結には `concat` 関数を使用する：
+`+` is for numbers only. Use the `concat` function for string concatenation:
 
 ```calcium
 10 + 11                      // 21
-"10" + "11"                  // エラー
+"10" + "11"                  // Error
 concat("Hello", " ", "World") // "Hello World"
 concat("value: ", 42)        // "value: 42"
 ```
 
-### 比較演算子
+### Comparison Operators
 
 ```calcium
-==  // 等価
-!=  // 非等価
-<   // 未満
->   // 超過
-<=  // 以下
->=  // 以上
+==  // Equal
+!=  // Not equal
+<   // Less than
+>   // Greater than
+<=  // Less than or equal
+>=  // Greater than or equal
 ```
 
-連鎖比較をサポートする：
+Chained comparisons are supported:
 
 ```calcium
-0 <= n <= 150   // 0 <= n && n <= 150 と等価
+0 <= n <= 150   // Equivalent to 0 <= n && n <= 150
 ```
 
-### 論理演算子
+### Logical Operators
 
 ```calcium
-&&  // 論理AND
-||  // 論理OR
-!   // 論理NOT
+&&  // Logical AND
+||  // Logical OR
+!   // Logical NOT
 ```
 
-論理演算子は短絡評価を行う：
-- `a && b`: `a` が偽なら `b` を評価せず偽を返す
-- `a || b`: `a` が真なら `b` を評価せず真を返す
+Logical operators use short-circuit evaluation:
+- `a && b`: If `a` is false, returns false without evaluating `b`
+- `a || b`: If `a` is true, returns true without evaluating `b`
 
-### スプレッド演算子
+### Spread Operator
 
-`...` は配列を引数列に展開する後置演算子。
+`...` is a postfix operator that expands an array into argument list.
 
 ```calcium
 func add(x, y) = x + y;
 
-// パイプラインでのスプレッド
-[2, 3]... |> add           // add(2, 3) → 5
+// Spread in pipeline
+[2, 3]... |> add           // add(2, 3) -> 5
 
-// 関数呼び出し内でのスプレッド
-add([2, 3]...)             // add(2, 3) → 5
+// Spread in function call
+add([2, 3]...)             // add(2, 3) -> 5
 
-// 通常の引数と混在
+// Mixed with regular arguments
 func foo(a, b, c) = a + b + c;
-foo(1, [2, 3]...)          // foo(1, 2, 3) → 6
+foo(1, [2, 3]...)          // foo(1, 2, 3) -> 6
 
-// 変数にも適用可能
+// Works with variables
 pair = [10, 20];
-pair... |> add             // add(10, 20) → 30
+pair... |> add             // add(10, 20) -> 30
 
-// 配列連結と組み合わせ
+// Combined with array concatenation
 [[1, 2] [3, 4]]... |> sum  // sum(1, 2, 3, 4)
 ```
 
-### 演算子の優先順位
+### Operator Precedence
 
-優先順位が高い順に以下の通り：
+From highest to lowest:
 
-| 優先順位 | 演算子 | 説明 |
-|---------|--------|------|
-| 1 | `f(x)`, `obj.key`, `...` | 関数呼び出し、メンバアクセス、スプレッド |
-| 2 | `-`, `!` | 単項演算子（負号、論理否定） |
-| 3 | `**` | べき乗 |
-| 4 | `*`, `/`, `%` | 乗算、除算、剰余 |
-| 5 | `+`, `-` | 加算、減算 |
-| 6 | `<`, `>`, `<=`, `>=` | 比較 |
-| 7 | `==`, `!=` | 等価、非等価 |
-| 8 | `&&` | 論理AND |
-| 9 | `||` | 論理OR |
-| 10 | `|>`, `!>` | パイプライン |
-| 11 | `=` | 代入 |
+| Precedence | Operators | Description |
+|------------|-----------|-------------|
+| 1 | `f(x)`, `obj.key`, `...` | Function call, member access, spread |
+| 2 | `-`, `!` | Unary operators (negation, logical not) |
+| 3 | `**` | Exponentiation |
+| 4 | `*`, `/`, `%` | Multiplication, division, modulo |
+| 5 | `+`, `-` | Addition, subtraction |
+| 6 | `<`, `>`, `<=`, `>=` | Comparison |
+| 7 | `==`, `!=` | Equality, inequality |
+| 8 | `&&` | Logical AND |
+| 9 | `||` | Logical OR |
+| 10 | `|>`, `!>` | Pipeline |
+| 11 | `=` | Assignment |
 
-## 制約
+## Constraints
 
-制約は値が満たすべき条件を定義する。型の代わりとして機能する。
+Constraints define conditions that values must satisfy. They function as an alternative to types.
 
-### 制約の定義
+### Defining Constraints
 
 ```calcium
 constraint Age(n) = 0 <= n <= 150;
@@ -358,30 +358,30 @@ constraint Positive(n) = n > 0;
 constraint NonZero(n) = n != 0;
 ```
 
-`:` は関数の引数に制約を付けるためにのみ使用する（後述）。
+`:` is used only to attach constraints to function parameters (described later).
 
-### 制約の評価タイミング
+### Constraint Evaluation Timing
 
-制約は可能な限りコンパイル時に検査される。静的に確定できない値は実行時に検査される。
+Constraints are checked at compile time whenever possible. Values that cannot be determined statically are checked at runtime.
 
 ```calcium
 func divide(a, b: NonZero?) = a / b;
 
-// リテラル値: コンパイル時に検査
-divide(10, 0);       // コンパイルエラー
+// Literal values: checked at compile time
+divide(10, 0);       // Compile error
 
-// 動的な値: 実行時に検査
+// Dynamic values: checked at runtime
 x = read_input();
-divide(10, x);       // x が 0 なら実行時エラー
+divide(10, x);       // Runtime error if x is 0
 ```
 
-実行時に制約違反が発生した場合の挙動：
-- 純粋関数 (`func`) 内: プログラム停止（panic）
-- 副作用関数 (`func!`) 内: `failure` を返す
+Behavior when constraint violation occurs at runtime:
+- In pure functions (`func`): Program halts (panic)
+- In effect functions (`func!`): Returns `failure`
 
-### 制約の検査
+### Checking Constraints
 
-制約名に `?` をつけて検査する。真偽値を返す。
+Add `?` to a constraint name to check it. Returns a boolean.
 
 ```calcium
 25 |> Age?        // true
@@ -389,7 +389,7 @@ divide(10, x);       // x が 0 なら実行時エラー
 "test@example.com" |> Email?  // true
 ```
 
-### 制約の組み合わせ
+### Combining Constraints
 
 ```calcium
 constraint PositiveInt(n) = n > 0
@@ -397,7 +397,7 @@ constraint Under100(n) = n < 100
 constraint Score(n) = n |> PositiveInt? && n |> Under100?
 ```
 
-### 構造の制約
+### Structural Constraints
 
 ```calcium
 constraint User(u) =
@@ -407,17 +407,17 @@ constraint User(u) =
   u.name |> len |> (n => n > 0)
 ```
 
-### 制約の内部実装
+### Constraint Implementation Details
 
-- 数値の制約: 比較演算で検証
-- 文字列の制約: 正規表現で検証
-- 列挙の制約: 含有チェック
+- Numeric constraints: Validated with comparison operations
+- String constraints: Validated with regular expressions
+- Enumeration constraints: Validated with containment check
 
-## 関数
+## Functions
 
-### 純粋関数
+### Pure Functions
 
-副作用を持たない関数は `func` で定義する。
+Functions without side effects are defined with `func`.
 
 ```calcium
 func add(a, b) = a + b
@@ -427,9 +427,9 @@ func double(x) = x * 2
 func greet(name) = "Hello, " + name
 ```
 
-### 副作用関数
+### Effect Functions
 
-副作用を持つ関数は `func!` で定義する。
+Functions with side effects are defined with `func!`.
 
 ```calcium
 func! save(data) = ...
@@ -437,7 +437,7 @@ func! notify(user, message) = ...
 func! fetch(url) = ...
 ```
 
-### 引数の制約
+### Parameter Constraints
 
 ```calcium
 func divide(a, b: NonZero?) = a / b
@@ -445,9 +445,9 @@ func divide(a, b: NonZero?) = a / b
 func register(name: NonEmpty?, age: Age?) = ...
 ```
 
-### 必須引数と残余引数
+### Required and Rest Parameters
 
-関数の引数は必須部分と残余部分に分けられる。
+Function parameters can be divided into required and rest parts.
 
 ```calcium
 func sum(| items) = items |> reduce(+)
@@ -455,18 +455,18 @@ func sum(| items) = items |> reduce(+)
 func process(first, second | rest) = ...
 ```
 
-呼び出し：
+Calling:
 
 ```calcium
 sum(1, 2, 3, 4, 5)       // items = [1, 2, 3, 4, 5]
 process(1, 2, 3, 4, 5)   // first = 1, second = 2, rest = [3, 4, 5]
 process(1, 2)            // first = 1, second = 2, rest = []
-process(1)               // エラー、必須引数が足りない
+process(1)               // Error, missing required argument
 ```
 
-### 第一級関数
+### First-class Functions
 
-関数は値として扱える。
+Functions can be treated as values.
 
 ```calcium
 double = (x) => x * 2;
@@ -476,47 +476,47 @@ items |> map(double);
 items |> map(triple);
 ```
 
-### 関数のスコープ制約
+### Function Scope Constraints
 
-関数は引数のみを参照できる。外部変数のキャプチャ（クロージャ）は禁止される。
+Functions can only reference their parameters. Capturing external variables (closures) is prohibited.
 
 ```calcium
-// OK: 引数のみを参照
+// OK: Only references parameters
 func add(a, b) = a + b;
 f = (x) => x * 2;
 
-// NG: 外部変数を参照
+// NG: References external variable
 n = 2;
-f = (x) => x * n;   // エラー: n は引数ではない
+f = (x) => x * n;   // Error: n is not a parameter
 ```
 
-すべての状態は引数として明示的に渡す：
+All state must be explicitly passed as arguments:
 
 ```calcium
-// NG: クロージャで n をキャプチャ
+// NG: Capturing n via closure
 n = 2;
 [1, 2, 3] |> map(x => x * n);
 
-// OK: 関数に必要な値を引数で渡す
+// OK: Pass required value as argument
 func multiply_by(n, x) = x * n;
 [1, 2, 3] |> map(x => multiply_by(2, x));
 ```
 
-### シャドーイング
+### Shadowing
 
-内側のスコープで同名の変数を定義することができる（シャドーイング）。
+You can define a variable with the same name in an inner scope (shadowing).
 
 ```calcium
 x = 10;
-func foo(x) = x * 2;  // 引数 x は外側の x を隠す
+func foo(x) = x * 2;  // Parameter x shadows outer x
 foo(5);               // 10
 ```
 
-関数は引数のみを参照できるため、シャドーイングによる混乱は起きない。
+Since functions can only reference their parameters, shadowing doesn't cause confusion.
 
-### 再帰
+### Recursion
 
-関数は自身を再帰的に呼び出すことができる。
+Functions can call themselves recursively.
 
 ```calcium
 func factorial(n) =
@@ -530,13 +530,13 @@ func sum_list(xs) =
     _ => xs[0] + sum_list(array.slice(xs, 1));
 ```
 
-末尾再帰最適化は実装の裁量とする（仕様では強制しない）。
+Tail recursion optimization is at the implementation's discretion (not mandated by the specification).
 
-## 分岐
+## Branching
 
 ### match
 
-値によるパターン分岐を行う。
+Performs pattern branching based on values.
 
 ```calcium
 func describe(x) =
@@ -546,7 +546,7 @@ func describe(x) =
     n: Negative? => "negative";
 ```
 
-条件式を直接書くこともできる：
+Conditions can be written directly:
 
 ```calcium
 func process(x) =
@@ -556,7 +556,7 @@ func process(x) =
     _ => 0;
 ```
 
-ワイルドカード `_` はその他すべてにマッチする：
+Wildcard `_` matches everything else:
 
 ```calcium
 func to_string(x) =
@@ -573,37 +573,37 @@ func handle(result) =
     failure(e) => e |> log
 ```
 
-### 網羅性チェック
+### Exhaustiveness Check
 
-match 式は網羅性がチェックされる：
+Match expressions are checked for exhaustiveness:
 
-- ワイルドカード `_` があれば網羅的
-- `success`/`failure` を両方カバーしていれば網羅的
-- それ以外はワイルドカードが必須（コンパイラが警告）
+- Having wildcard `_` makes it exhaustive
+- Covering both `success`/`failure` makes it exhaustive
+- Otherwise, wildcard is required (compiler warning)
 
 ```calcium
-// OK: ワイルドカードあり
+// OK: Has wildcard
 match x
   0 => "zero"
   _ => "other"
 
-// OK: success/failure を両方カバー
+// OK: Covers both success/failure
 match result
   success(v) => v
   failure(e) => default
 
-// 警告: 網羅的でない可能性
+// Warning: May not be exhaustive
 match x
   0 => "zero"
   1 => "one"
-  // _ がないため警告
+  // Warning because _ is missing
 ```
 
-## 繰り返し
+## Iteration
 
 ### map
 
-配列の各要素に関数を適用する。
+Applies a function to each element of an array.
 
 ```calcium
 numbers = [1, 2, 3, 4, 5]
@@ -612,7 +612,7 @@ doubled = numbers |> map(x => x * 2)  // [2, 4, 6, 8, 10]
 
 ### filter
 
-条件を満たす要素だけを残す。
+Keeps only elements that satisfy a condition.
 
 ```calcium
 numbers = [1, 2, 3, 4, 5]
@@ -621,32 +621,32 @@ evens = numbers |> filter(x => x % 2 == 0)  // [2, 4]
 
 ### reduce
 
-配列を単一の値に集約する。
+Aggregates an array into a single value.
 
 ```calcium
 numbers = [1, 2, 3, 4, 5];
 total = numbers |> reduce((a, b) => a + b);  // 15
 ```
 
-初期値を指定できる：
+Initial value can be specified:
 
 ```calcium
-[1, 2, 3] |> reduce((a, b) => a + b);        // 6（最初の要素が初期値）
-[1, 2, 3] |> reduce((a, b) => a + b, 0);     // 6（初期値指定）
+[1, 2, 3] |> reduce((a, b) => a + b);        // 6 (first element is initial)
+[1, 2, 3] |> reduce((a, b) => a + b, 0);     // 6 (initial specified)
 
-[] |> reduce((a, b) => a + b);               // エラー（空配列 + 初期値なし）
-[] |> reduce((a, b) => a + b, 0);            // 0（初期値を返す）
+[] |> reduce((a, b) => a + b);               // Error (empty array + no initial)
+[] |> reduce((a, b) => a + b, 0);            // 0 (returns initial)
 ```
 
-### 非同期処理: core.async!
+### Asynchronous Processing: core.async!
 
-`core.async!` モジュールは非同期処理のためのプリミティブを提供する。
-すべての非同期関連機能はこのモジュールの関数として提供される。
+The `core.async!` module provides primitives for asynchronous processing.
+All async-related functionality is provided as functions of this module.
 
 #### async.stay
 
-`async.stay` は状態を持つイベント待機のための関数。`func!` の中でのみ使用できる。
-Calcium で唯一、状態を扱える場所である。
+`async.stay` is a function for event waiting with state. Can only be used inside `func!`.
+This is the only place in Calcium where state can be handled.
 
 ```calcium
 use core.async!
@@ -689,31 +689,31 @@ func! main() =
 
 #### async.spawn
 
-`async.spawn` はバックグラウンドタスクを起動する副作用関数。`func!` 内でのみ使用可能。
+`async.spawn` is an effect function that starts a background task. Can only be used inside `func!`.
 
 ```calcium
-task = async.spawn(() => fetch(url))   // func! を spawn
-task = async.spawn(() => compute(data)) // func も spawn 可
+task = async.spawn(() => fetch(url))   // spawn func!
+task = async.spawn(() => compute(data)) // func can also be spawned
 ```
 
-- `async.spawn` 自体は副作用（`func!` 内のみ）
-- 引数の関数は pure (`func`) / impure (`func!`) どちらでも可
-- 戻り値は `Task<a>` 型
+- `async.spawn` itself is an effect (only in `func!`)
+- The argument function can be either pure (`func`) or impure (`func!`)
+- Return value is of type `Task<a>`
 
-#### async.expects と Handler<a>
+#### async.expects and Handler<a>
 
-`async.expects` はイベントハンドラを定義し、`Handler<a>` 型の値を返す。
-パイプライン演算子でイベントソースと組み合わせて使用する。
+`async.expects` defines an event handler and returns a value of type `Handler<a>`.
+Use with pipeline operator combined with an event source.
 
 ```calcium
-// イベントソース |> async.expects(ハンドラ関数) |> _.ready()
+// event_source |> async.expects(handler_function) |> _.ready()
 task.done
   |> async.expects((result) => {
     async.continue(results: [results [result]])
   })
   |> _.ready()
 
-// 変数に束縛して後から有効化
+// Bind to variable and activate later
 handler = task.done
   |> async.expects((result) => {
     async.continue(results: [results [result]])
@@ -721,30 +721,30 @@ handler = task.done
 handler.ready()
 ```
 
-Handler は以下の状態を持つ：
+Handler has the following states:
 
 ```
-dormant ──ready()──→ active ──async.cancel()──→ cancelled
-                        ↑                           │
+dormant ──ready()──> active ──async.cancel()──> cancelled
+                        ^                           |
                         └─────────ready()───────────┘
 
-active ──pause()──→ paused ──resume()──→ active
-       ←─reset()─┘
+active ──pause()──> paused ──resume()──> active
+       <─reset()─┘
 ```
 
-Handler のメソッド：
+Handler methods:
 
-| メソッド | 説明 |
-|---------|------|
-| `.ready()` | ハンドラを有効化。現在の `stay` に束縛される。戻り値は自身（チェーン可）。既に active なら no-op |
-| `.reset()` | cancel + 再有効化。タイマーリセットなどに使用 |
-| `.pause()` | 一時停止（イベントを無視） |
-| `.resume()` | 一時停止から再開 |
+| Method | Description |
+|--------|-------------|
+| `.ready()` | Activate handler. Bound to current `stay`. Returns self (chainable). No-op if already active |
+| `.reset()` | Cancel + reactivate. Used for timer reset etc. |
+| `.pause()` | Pause (ignore events) |
+| `.resume()` | Resume from pause |
 
-Handler は `stay` の外で定義可能（dormant 状態）。`.ready()` を呼ぶと、その時点の `stay` に束縛され、`async.leave`/`async.continue` はその `stay` に対して作用する。
+Handler can be defined outside `stay` (dormant state). When `.ready()` is called, it binds to the current `stay`, and `async.leave`/`async.continue` act on that `stay`.
 
 ```calcium
-// ファクトリ関数でハンドラを作成
+// Create handler with factory function
 make_timeout = (ms, msg) =>
   schedule.timeout(ms)
     |> async.expects(() => { async.leave(msg) })
@@ -766,7 +766,7 @@ func! main() =
 
 #### async.continue
 
-状態を更新して待機に戻る。
+Updates state and returns to waiting.
 
 ```calcium
 async.continue(count: count + 1)
@@ -775,25 +775,25 @@ async.continue(results: [results [r]], count: count + 1)
 
 #### async.leave
 
-`stay` ループを抜ける。デフォルトでは stay 内で spawn した全 Task が自動キャンセルされる。
+Exits the `stay` loop. By default, all Tasks spawned within stay are auto-cancelled.
 
 ```calcium
-async.leave(value)                      // 全 Task を自動キャンセル
-async.leave(value, keeping: [task1])    // 指定 Task のみ継続
+async.leave(value)                      // Auto-cancel all Tasks
+async.leave(value, keeping: [task1])    // Only specified Tasks continue
 
-// 全 Task を継続したい場合は自分で管理
+// To keep all Tasks, manage them yourself
 tasks = [task1, task2, task3]
 async.leave(value, keeping: tasks)
 ```
 
-| 呼び出し | 動作 |
-|---------|------|
-| `async.leave(value)` | stay 内の全 Task を自動キャンセル |
-| `async.leave(value, keeping: [tasks])` | 指定した Task のみ継続、残りはキャンセル |
+| Call | Behavior |
+|------|----------|
+| `async.leave(value)` | Auto-cancel all Tasks in stay |
+| `async.leave(value, keeping: [tasks])` | Only specified Tasks continue, rest cancelled |
 
 #### async.all
 
-複数のタスクの完了を待つ。
+Wait for completion of multiple tasks.
 
 ```calcium
 async.all([task1, task2]).done
@@ -805,24 +805,24 @@ async.all([task1, task2]).done
 
 #### async.cancel
 
-Task または Handler をキャンセルする。
+Cancel a Task or Handler.
 
 ```calcium
-async.cancel(handler)  // Handler のみ解除、紐づいた Task は継続
-async.cancel(task)     // Task を中断 + 配下の全 Handler を解除
+async.cancel(handler)  // Only release Handler, associated Task continues
+async.cancel(task)     // Interrupt Task + release all Handlers below
 ```
 
-キャンセルの階層関係：
+Cancel hierarchy:
 
 ```
-Task (async.spawn で生成)
-  └── Handler (async.expects で生成)
+Task (created by async.spawn)
+  └── Handler (created by async.expects)
         └── Handler
         └── Handler
 ```
 
-- `async.cancel(handler)`: Handler のみ解除。Task は継続する
-- `async.cancel(task)`: Task を中断し、その Task を待っている全 Handler も解除される
+- `async.cancel(handler)`: Only release Handler. Task continues
+- `async.cancel(task)`: Interrupt Task, all Handlers waiting for that Task are also released
 
 ```calcium
 task1 = async.spawn(() => fetch(url1))
@@ -838,60 +838,60 @@ async.stay(results: []) {
 
   schedule.timeout(100)
     |> async.expects(() => {
-      async.cancel(h1)  // h1 だけ解除、task1 と h2 は継続
+      async.cancel(h1)  // Only release h1, task1 and h2 continue
       async.continue(results: results)
     })
     |> _.ready()
 
   schedule.timeout(500)
     |> async.expects(() => {
-      async.cancel(task1)  // task1 中断 + h1, h2 両方解除
+      async.cancel(task1)  // Interrupt task1 + release both h1, h2
       async.leave("cancelled")
     })
     |> _.ready()
 }
 ```
 
-#### core.async! 関数一覧
+#### core.async! Function List
 
-| 関数 | 説明 |
-|-----|------|
-| `async.stay(state) { ... }` | イベントループ開始 |
-| `async.spawn(fn)` | バックグラウンドタスク起動 → `Task<a>` |
-| `async.expects(fn)` | イベントハンドラ生成 → `Handler<a>` |
-| `async.continue(state)` | 状態更新して待機に戻る |
-| `async.leave(value)` | ループ終了（全 Task キャンセル） |
-| `async.leave(value, keeping: [...])` | 指定 Task のみ継続 |
-| `async.cancel(target)` | Task/Handler をキャンセル |
-| `async.all(tasks)` | 複数タスクをまとめる |
+| Function | Description |
+|----------|-------------|
+| `async.stay(state) { ... }` | Start event loop |
+| `async.spawn(fn)` | Start background task -> `Task<a>` |
+| `async.expects(fn)` | Create event handler -> `Handler<a>` |
+| `async.continue(state)` | Update state and return to waiting |
+| `async.leave(value)` | Exit loop (cancel all Tasks) |
+| `async.leave(value, keeping: [...])` | Only specified Tasks continue |
+| `async.cancel(target)` | Cancel Task/Handler |
+| `async.all(tasks)` | Combine multiple tasks |
 
-#### 並行性モデル
+#### Concurrency Model
 
-- シングルスレッド・イベントループ
-- 複数の Handler は並行して待機するが、処理は逐次的
-- 複数が同時に発火した場合、最初にマッチしたものを実行
-- 1つのイベント処理が完了するまで次のイベントは処理しない
+- Single-threaded event loop
+- Multiple Handlers wait concurrently but processing is sequential
+- When multiple fire simultaneously, the first matched one executes
+- Next event is not processed until current event processing completes
 
 ### I/O: core.io!
 
-`core.io!` モジュールは入出力機能を提供する。
+The `core.io!` module provides input/output functionality.
 
 #### io.say / io.print
 
-標準出力への出力。
+Output to standard output.
 
 ```calcium
 use core.io!
 
-"Hello" |> io.say;    // Hello\n（改行あり）
-"Hello" |> io.print;  // Hello（改行なし）
+"Hello" |> io.say;    // Hello\n (with newline)
+"Hello" |> io.print;  // Hello (no newline)
 
-// 値は自動的に文字列に変換される
+// Values are automatically converted to strings
 42 |> io.say;         // 42\n
 [1, 2, 3] |> io.say;  // [1, 2, 3]\n
 ```
 
-#### io.stdin / io.eof（イベントソース）
+#### io.stdin / io.eof (Event Sources)
 
 ```calcium
 use core.io!
@@ -914,12 +914,12 @@ async.stay(lines: []) {
 
 #### io.stdin
 
-標準入力から1行読み込むイベントソース。
+Event source that reads one line from standard input.
 
 ```calcium
 io.stdin
   |> async.expects((line) => {
-    // line に読み込んだ1行が束縛される
+    // line is bound to the read line
     process(line);
     async.continue(state: state)
   })
@@ -928,7 +928,7 @@ io.stdin
 
 #### io.eof
 
-標準入力の終端（EOF）を検知するイベントソース。
+Event source that detects end of standard input (EOF).
 
 ```calcium
 io.eof
@@ -938,9 +938,9 @@ io.eof
   |> _.ready()
 ```
 
-### スケジュール: core.schedule!
+### Scheduling: core.schedule!
 
-`core.schedule!` モジュールは時間ベースのイベントを提供する。
+The `core.schedule!` module provides time-based events.
 
 ```calcium
 use core.schedule!
@@ -964,7 +964,7 @@ async.stay(count: 0) {
 
 #### schedule.timeout
 
-指定ミリ秒後に1回だけ発火するイベントソース。
+Event source that fires once after specified milliseconds.
 
 ```calcium
 schedule.timeout(5000)
@@ -974,7 +974,7 @@ schedule.timeout(5000)
   |> _.ready()
 ```
 
-`handler.reset()` でタイマーをリセットできる：
+Timer can be reset with `handler.reset()`:
 
 ```calcium
 timeout = schedule.timeout(5000)
@@ -983,7 +983,7 @@ timeout.ready()
 
 io.stdin
   |> async.expects((line) => {
-    timeout.reset()  // タイマーをリセット（再度5秒後に発火）
+    timeout.reset()  // Reset timer (fires again after 5 seconds)
     async.continue(state: state)
   })
   |> _.ready()
@@ -991,7 +991,7 @@ io.stdin
 
 #### schedule.interval
 
-指定ミリ秒ごとに繰り返し発火するイベントソース。
+Event source that fires repeatedly every specified milliseconds.
 
 ```calcium
 schedule.interval(1000)
@@ -1002,11 +1002,11 @@ schedule.interval(1000)
   |> _.ready()
 ```
 
-## パイプライン
+## Pipelines
 
-### 純粋パイプライン `|>`
+### Pure Pipeline `|>`
 
-値を左から右へ流し、関数を適用していく。
+Flows values from left to right, applying functions.
 
 ```calcium
 result = data
@@ -1015,9 +1015,9 @@ result = data
   |> format
 ```
 
-### 副作用パイプライン `!>`
+### Effect Pipeline `!>`
 
-副作用を伴う処理を連鎖させる。`func!` の中でのみ使用できる。
+Chains operations with side effects. Can only be used inside `func!`.
 
 ```calcium
 func! save_and_notify(data) =
@@ -1030,9 +1030,9 @@ func! save_and_notify(data) =
   }
 ```
 
-### エラー処理 `!?`
+### Error Handling `!?`
 
-副作用パイプラインの終端で、必ずエラー処理を行う。
+Must handle errors at the end of an effect pipeline.
 
 ```calcium
 data
@@ -1044,11 +1044,11 @@ data
 }
 ```
 
-`!>` を使ったら、必ず `!?` で終端しなければならない。
+When using `!>`, must always terminate with `!?`.
 
-## 名前空間
+## Namespaces
 
-### 定義
+### Definition
 
 ```calcium
 // math.ca
@@ -1059,7 +1059,7 @@ func multiply(a, b) = a * b;
 constraint Positive(n) = n > 0;
 ```
 
-### 使用
+### Usage
 
 ```calcium
 // main.ca
@@ -1068,7 +1068,7 @@ use math;
 result = 5 |> math.add(3) |> math.multiply(2);
 ```
 
-特定の要素だけ取り込む：
+Import only specific elements:
 
 ```calcium
 use math { add, Positive };
@@ -1077,7 +1077,7 @@ result = 5 |> add(3);
 x: Positive? = 10;
 ```
 
-ネストした名前空間：
+Nested namespaces:
 
 ```calcium
 namespace util.string;
@@ -1092,9 +1092,9 @@ use util.string { trim };
 " hello " |> trim;
 ```
 
-### モジュール解決
+### Module Resolution
 
-すべての `use` はエントリーポイントのディレクトリ（プロジェクトルート）からの相対パスで解決される。
+All `use` statements are resolved relative to the entry point directory (project root).
 
 ```
 project/
@@ -1102,34 +1102,34 @@ project/
     utils.ca
   features/
     auth/
-      login.ca    ← use common.utils; でOK
-  main.ca         ← エントリーポイント
+      login.ca    <- use common.utils; works
+  main.ca         <- Entry point
 ```
 
 ```calcium
 // features/auth/login.ca
-use common.utils;   // project/common/utils.ca を参照
+use common.utils;   // References project/common/utils.ca
 ```
 
-解決順序：
-1. プロジェクトルート（エントリーポイントのディレクトリ）からの相対パス
-2. 標準ライブラリ
+Resolution order:
+1. Relative path from project root (entry point directory)
+2. Standard library
 
-## エラーハンドリング
+## Error Handling
 
-### コンパイル時エラー
+### Compile-time Errors
 
-制約違反はコンパイル時に検出される。
+Constraint violations are detected at compile time.
 
 ```calcium
 func divide(a, b: NonZero?) = a / b
 
-divide(10, 0)  // コンパイルエラー: 0 は NonZero? を満たさない
+divide(10, 0)  // Compile error: 0 does not satisfy NonZero?
 ```
 
-### 実行時エラー（副作用）
+### Runtime Errors (Side Effects)
 
-副作用に伴うエラーは `!?` で処理する。
+Errors from side effects are handled with `!?`.
 
 ```calcium
 func! main() =
@@ -1142,7 +1142,7 @@ func! main() =
   }
 ```
 
-## 完全な例
+## Complete Example
 
 ```calcium
 // user.ca
@@ -1175,7 +1175,7 @@ use user
 use core.io!
 
 func! main() =
-  input = ["name", "田中", "age", 25, "email", "tanaka@example.com"]
+  input = ["name", "Tanaka", "age", 25, "email", "tanaka@example.com"]
 
   result = input
     |> user.validate
@@ -1192,71 +1192,71 @@ func! main() =
   }
 ```
 
-## 標準関数
+## Standard Functions
 
-### グローバル関数（use 不要）
+### Global Functions (no use required)
 
 ```calcium
-len(xs)                  // 配列または文字列の長さ
-get(collection, key)     // 安全なアクセス → success/failure
-get(collection, key, default)  // デフォルト値付き
-has(collection, key)     // キーまたはインデックスが存在するか → true/false
-                         // ハッシュ: has(person, "name")
-                         // 配列: has(numbers, 5)  // インデックス5が存在するか
-concat(s1, s2, ...)      // 文字列連結
-to_string(x)             // 任意の値を文字列に変換
-to_num(s)                // 文字列を数値に変換 → success/failure
-matches(s, regex)        // 正規表現マッチ → true/false
-keys(hash)               // ハッシュのキー配列
-values(hash)             // ハッシュの値配列
-hash(keys, values)       // キー配列と値配列からハッシュを作成
+len(xs)                  // Length of array or string
+get(collection, key)     // Safe access -> success/failure
+get(collection, key, default)  // With default value
+has(collection, key)     // Whether key or index exists -> true/false
+                         // Hash: has(person, "name")
+                         // Array: has(numbers, 5)  // Whether index 5 exists
+concat(s1, s2, ...)      // String concatenation
+to_string(x)             // Convert any value to string
+to_num(s)                // Convert string to number -> success/failure
+matches(s, regex)        // Regex match -> true/false
+keys(hash)               // Array of hash keys
+values(hash)             // Array of hash values
+hash(keys, values)       // Create hash from key array and value array
 ```
 
-### string 名前空間
+### string Namespace
 
 ```calcium
 use string;
 
-string.trim(s)           // 前後の空白を除去
-string.upper(s)          // 大文字に変換
-string.lower(s)          // 小文字に変換
-string.split(s, sep)     // 分割 → 配列
-string.join(xs, sep)     // 結合 → 文字列
+string.trim(s)           // Remove leading/trailing whitespace
+string.upper(s)          // Convert to uppercase
+string.lower(s)          // Convert to lowercase
+string.split(s, sep)     // Split -> array
+string.join(xs, sep)     // Join -> string
 ```
 
-### math 名前空間
+### math Namespace
 
 ```calcium
 use math;
 
-math.floor(n)            // 切り捨て
-math.ceil(n)             // 切り上げ
-math.round(n)            // 四捨五入
-math.abs(n)              // 絶対値
-math.max(a, b)           // 大きい方
-math.min(a, b)           // 小さい方
+math.floor(n)            // Floor
+math.ceil(n)             // Ceiling
+math.round(n)            // Round
+math.abs(n)              // Absolute value
+math.max(a, b)           // Maximum
+math.min(a, b)           // Minimum
 ```
 
-### array 名前空間
+### array Namespace
 
-配列操作の項を参照。
+See the array operations section.
 
-## 標準I/O
+## Standard I/O
 
-### 出力
+### Output
 
-出力は `core.io!` モジュールで提供される：
+Output is provided by the `core.io!` module:
 
 ```calcium
 use core.io!
 
-"Hello" |> io.say;    // Hello\n（改行あり）
-"Hello" |> io.print;  // Hello（改行なし）
+"Hello" |> io.say;    // Hello\n (with newline)
+"Hello" |> io.print;  // Hello (no newline)
 ```
 
-### 入力
+### Input
 
-入力は `core.io!` モジュールの `io.stdin` イベントで取得する：
+Input is obtained via the `io.stdin` event in the `core.io!` module:
 
 ```calcium
 use core.async!
@@ -1281,46 +1281,46 @@ async.stay(lines: []) {
 };
 ```
 
-詳細は「I/O: core.io!」セクションを参照。
+See the "I/O: core.io!" section for details.
 
-## エントリーポイント
+## Entry Point
 
-トップレベルのコードがそのまま実行される。`main` 関数は不要。
+Top-level code is executed directly. No `main` function is required.
 
 ```calcium
 use core.io!
 
-// ファイルの内容がそのまま実行される
+// File contents are executed directly
 x = 10;
 y = 20;
 x + y |> io.say;
 ```
 
-コマンドライン引数はグローバル変数 `args` で取得（プログラム名を含まない）：
+Command-line arguments are obtained via the global variable `args` (program name not included):
 
 ```calcium
 use core.io!
 
-args[0];              // 最初の引数
-len(args);            // 引数の数
+args[0];              // First argument
+len(args);            // Number of arguments
 
-// すべての引数を出力
+// Output all arguments
 args |> map(arg => arg |> io.say);
 ```
 
-プログラム名は `program_name` で取得：
+Program name is obtained via `program_name`:
 
 ```calcium
 use core.io!
 
-program_name |> io.say;  // 実行中のプログラム名
+program_name |> io.say;  // Name of the running program
 ```
 
-## ファイル拡張子
+## File Extension
 
-`.ca` または `.calcium`
+`.ca` or `.calcium`
 
-## 予約語
+## Reserved Words
 
 ```
 func func! constraint namespace use
@@ -1331,4 +1331,4 @@ success failure
 return
 ```
 
-注: 非同期処理関連の機能（`stay`, `spawn`, `expects`, `continue`, `leave`, `cancel` など）は言語キーワードではなく、`core.async!` モジュールの関数として提供される。同様に `timeout`, `interval` は `core.schedule!`、`stdin` は `core.io!` モジュールで提供される。
+Note: Async-related features (`stay`, `spawn`, `expects`, `continue`, `leave`, `cancel`, etc.) are not language keywords but functions provided by the `core.async!` module. Similarly, `timeout` and `interval` are provided by `core.schedule!`, and `stdin` is provided by the `core.io!` module.

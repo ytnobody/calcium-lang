@@ -1,111 +1,111 @@
-# Calcium リモートモジュール取り込み仕様 (Draft)
+# Calcium Remote Module Import Specification (Draft)
 
-## 概要
+## Overview
 
-Deno のモジュールシステムを参考に、URL ベースのモジュール取り込みを実現する。
+Implement URL-based module imports, inspired by Deno's module system.
 
-## 設計方針
+## Design Principles
 
-1. **URL ベース** - リモートモジュールは HTTPS URL で直接指定
-2. **設定ファイル不要** - コード内で完結（必要なら import map で管理）
-3. **グローバルキャッシュ** - 一度取得したモジュールは再利用
-4. **バージョンは URL に含める** - `@1.0.0` のような形式
+1. **URL-based** - Remote modules specified directly via HTTPS URL
+2. **No config file required** - Self-contained in code (use import map if needed)
+3. **Global cache** - Once fetched, modules are reused
+4. **Version in URL** - Format like `@1.0.0`
 
 ---
 
-## 基本構文
+## Basic Syntax
 
-### URL による直接インポート
+### Direct Import via URL
 
 ```calcium
-// HTTPS URL から直接インポート（作者スコープ）
+// Direct import from HTTPS URL (author scope)
 use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"!;
 use "https://ca.land/SARAHDEV/json@2.0.0/mod.ca";
 
-// GitHub raw URL（直接）
+// GitHub raw URL (direct)
 use "https://raw.githubusercontent.com/johndoe/calcium-http/v1.0.0/client.ca"!;
 ```
 
-### URL 構造
+### URL Structure
 
 ```
 https://ca.land/JOHNDOE/http@1.0.0/client.ca
          │       │       │   │       │
-         │       │       │   │       └── ファイルパス
-         │       │       │   └── バージョン
-         │       │       └── モジュール名
-         │       └── 作者名（大文字）
-         └── ホスト（仮）
+         │       │       │   │       └── File path
+         │       │       │   └── Version
+         │       │       └── Module name
+         │       └── Author name (uppercase)
+         └── Host (placeholder)
 ```
 
-### 解決フロー
+### Resolution Flow
 
 ```
 use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"!;
 ```
 
 ```
-1. メタデータ取得
+1. Get metadata
    GET https://ca.land/JOHNDOE/http/1.0.0.toml
 
-2. ファイル情報を検索
-   1.0.0.toml の [files] から "client.ca" を探す
-   → ハッシュ値 を取得
-   → base_url + "client.ca" で実体URL を構築
+2. Search file info
+   Find "client.ca" in 1.0.0.toml's [files]
+   → Get hash value
+   → Build actual URL from base_url + "client.ca"
 
-3. 実体ファイル取得
+3. Get actual file
    GET https://raw.githubusercontent.com/johndoe/calcium-http/v1.0.0/client.ca
 
-4. ハッシュ検証
-   SHA256(取得内容) == 1.0.0.toml のハッシュ値?
-   → 一致: キャッシュに保存、ロード
-   → 不一致: エラー（改ざんの可能性）
+4. Hash verification
+   SHA256(content) == hash value in 1.0.0.toml?
+   → Match: Save to cache, load
+   → Mismatch: Error (possible tampering)
 ```
 
-### ローカルモジュールとの使い分け
+### Distinguishing Local and Remote Modules
 
 ```calcium
-// リモート（URL）- 作者/モジュール@バージョン
+// Remote (URL) - author/module@version
 use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"!;
 
-// ローカル（従来通り）
-use core.io!;             // 標準ライブラリ
-use utils.helper;         // プロジェクト内 (src/utils/helper.ca)
+// Local (as before)
+use core.io!;             // Standard library
+use utils.helper;         // In project (src/utils/helper.ca)
 ```
 
-**判定ルール**: `"` で始まる → URL、それ以外 → ローカル
+**Decision rule**: Starts with `"` → URL, otherwise → local
 
 ---
 
-## deps.ca パターン
+## deps.ca Pattern
 
-依存を一箇所で管理する推奨パターン。
+Recommended pattern for managing dependencies in one place.
 
 ```calcium
-// deps.ca - 依存の集約ファイル
+// deps.ca - Dependency aggregation file
 pub use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"! as http;
 pub use "https://ca.land/JOHNDOE/json@2.0.0/mod.ca" as json;
 pub use "https://ca.land/CALCIUM/std@1.0.0/async.ca"! as async;
 ```
 
 ```calcium
-// main.ca - deps.ca 経由で使用
+// main.ca - Use via deps.ca
 use deps { http, json };
 
 result = http.get("https://api.example.com")
     |> json.parse;
 ```
 
-**利点:**
-- バージョン管理が一箇所で完結
-- 更新時の変更箇所が最小限
-- URL が散らばらない
+**Benefits:**
+- Version management in one place
+- Minimal changes when updating
+- URLs don't scatter
 
 ---
 
 ## Import Map (calcium.imports.toml)
 
-URL エイリアスを定義するオプション機能。
+Optional feature for defining URL aliases.
 
 ```toml
 [imports]
@@ -115,13 +115,13 @@ URL エイリアスを定義するオプション機能。
 ```
 
 ```calcium
-// import map 使用時
+// With import map
 use "http/client.ca"!;   // → https://ca.land/JOHNDOE/http@1.0.0/client.ca
 use "json";              // → https://ca.land/JOHNDOE/json@2.0.0/mod.ca
 use "std/async.ca"!;     // → https://ca.land/CALCIUM/std@1.0.0/async.ca
 ```
 
-### 実行時の指定
+### Runtime Specification
 
 ```bash
 calcium run --import-map=calcium.imports.toml src/main.ca
@@ -129,9 +129,9 @@ calcium run --import-map=calcium.imports.toml src/main.ca
 
 ---
 
-## キャッシュ
+## Cache
 
-### グローバルキャッシュ
+### Global Cache
 
 ```
 ~/.calcium/
@@ -148,25 +148,25 @@ calcium run --import-map=calcium.imports.toml src/main.ca
                     └── async.ca
 ```
 
-### キャッシュ操作
+### Cache Operations
 
 ```bash
-# 依存を事前キャッシュ
+# Pre-cache dependencies
 calcium cache src/main.ca
 calcium cache deps.ca
 
-# キャッシュ情報表示
+# Show cache info
 calcium cache --info
 
-# キャッシュクリア
+# Clear cache
 calcium cache --clear
 ```
 
 ---
 
-## Lock ファイル (calcium.lock)
+## Lock File (calcium.lock)
 
-整合性検証用。`calcium cache` または初回実行時に自動生成。TOML 形式。
+For integrity verification. Auto-generated by `calcium cache` or first run. TOML format.
 
 ```toml
 version = "1"
@@ -187,84 +187,84 @@ meta_sha256 = "eee111..."
 "mod.ca" = { url = "https://raw.githubusercontent.com/johndoe/calcium-json/v2.0.0/mod.ca", sha256 = "b2c3d4..." }
 ```
 
-**Lock ファイルの役割:**
-- メタデータ自体のハッシュも記録（改ざん防止）
-- 実際に使用したファイルのみ記録
-- CI 環境で完全な再現性を保証
+**Lock file role:**
+- Records hash of metadata itself (tampering prevention)
+- Records only actually used files
+- Guarantees complete reproducibility in CI environment
 
 ```bash
-# lock ファイルで整合性チェック
+# Integrity check with lock file
 calcium run --lock=calcium.lock src/main.ca
 
-# lock ファイルを更新
+# Update lock file
 calcium cache --lock=calcium.lock --lock-write src/main.ca
 ```
 
 ---
 
-## モジュール解決順序
+## Module Resolution Order
 
 ```calcium
-use foo.bar;              // ローカル
-use "https://.../mod.ca"; // リモート
+use foo.bar;              // Local
+use "https://.../mod.ca"; // Remote
 ```
 
-**ローカル (`use foo.bar;`)**
-1. プロジェクト内: `src/foo/bar.ca`
-2. 標準ライブラリ: `core.*`
+**Local (`use foo.bar;`)**
+1. In project: `src/foo/bar.ca`
+2. Standard library: `core.*`
 
-**リモート (`use "https://...";`)**
-1. Import Map でマッピング（あれば）
-2. キャッシュを確認
-3. なければネットワークから取得
+**Remote (`use "https://...";`)**
+1. Map with Import Map (if exists)
+2. Check cache
+3. Fetch from network if not cached
 
 ---
 
-## CLI コマンド
+## CLI Commands
 
 ### calcium run
 
 ```bash
-# 基本実行（必要なモジュールを自動取得）
+# Basic execution (auto-fetch required modules)
 calcium run src/main.ca
 
-# import map 指定
+# Specify import map
 calcium run --import-map=calcium.imports.json src/main.ca
 
-# lock ファイルで整合性チェック
+# Integrity check with lock file
 calcium run --lock=calcium.lock src/main.ca
 
-# ネットワークアクセス禁止（キャッシュのみ使用）
+# Disable network access (cache only)
 calcium run --cached-only src/main.ca
 ```
 
 ### calcium cache
 
 ```bash
-# 依存を事前キャッシュ
+# Pre-cache dependencies
 calcium cache src/main.ca
 
-# キャッシュ情報
+# Cache info
 calcium cache --info
 
-# キャッシュクリア
+# Clear cache
 calcium cache --clear
 
-# lock ファイル生成
+# Generate lock file
 calcium cache --lock=calcium.lock --lock-write src/main.ca
 ```
 
 ---
 
-## 完全な例
+## Complete Example
 
-### プロジェクト構成
+### Project Structure
 
 ```
 my-project/
-├── calcium.imports.toml   # (オプション) import map
-├── calcium.lock           # (自動生成) TOML形式
-├── deps.ca                # 依存集約
+├── calcium.imports.toml   # (Optional) import map
+├── calcium.lock           # (Auto-generated) TOML format
+├── deps.ca                # Dependency aggregation
 └── src/
     └── main.ca
 ```
@@ -290,36 +290,36 @@ data = http.get("https://api.example.com/users")
 io.println(data);
 ```
 
-### 実行
+### Execution
 
 ```bash
-# 初回実行（依存を自動取得してキャッシュ）
+# First run (auto-fetch and cache dependencies)
 calcium run src/main.ca
 
-# lock ファイル生成（CI 用）
+# Generate lock file (for CI)
 calcium cache --lock=calcium.lock --lock-write src/main.ca
 
-# CI 環境
+# CI environment
 calcium run --lock=calcium.lock --cached-only src/main.ca
 ```
 
 ---
 
-## 実装ステップ
+## Implementation Steps
 
-1. **パーサー拡張**: `use "https://..."` 構文の対応
-2. **TOML パーサー**: メタデータ・Lock・Import Map の読み書き
-3. **HTTP クライアント**: URL からファイル取得
-4. **SHA256**: ハッシュ計算・検証
-5. **キャッシュ管理**: `~/.calcium/cache/` への保存・読み込み
-6. **モジュール解決**: URL → メタデータ → 実体URL → キャッシュ
+1. **Parser extension**: Support `use "https://..."` syntax
+2. **TOML parser**: Read/write metadata, lock, import map
+3. **HTTP client**: Fetch files from URL
+4. **SHA256**: Hash calculation and verification
+5. **Cache management**: Save/load to `~/.calcium/cache/`
+6. **Module resolution**: URL → metadata → actual URL → cache
 
 ---
 
-## 未決定事項
+## Undecided Items
 
-- [ ] `pub use ... as` 構文のパーサー対応
-- [ ] キャッシュディレクトリの環境変数 (`CALCIUM_DIR`)
-- [ ] リダイレクト対応（何回まで追跡するか）
-- [ ] タイムアウト設定
-- [ ] プライベート URL の認証（Authorization ヘッダ）
+- [ ] Parser support for `pub use ... as` syntax
+- [ ] Cache directory environment variable (`CALCIUM_DIR`)
+- [ ] Redirect handling (how many hops to follow)
+- [ ] Timeout settings
+- [ ] Private URL authentication (Authorization header)

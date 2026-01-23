@@ -90,21 +90,21 @@ const (
 	OpFalse // Push false
 
 	// Async operations
-	OpStayBegin      // stay ループ開始 (状態ハッシュを初期化)
-	OpStayEnd        // stay ループ実行 (イベントループ開始)
-	OpStayGetState   // stay の状態取得
-	OpContinue       // async.continue (状態更新して継続)
-	OpLeave          // async.leave (stay から抜ける)
-	OpSpawn          // async.spawn (タスク生成)
-	OpExpects        // async.expects (ハンドラ生成)
-	OpHandlerReady   // handler.ready() - ハンドラをアクティブ化
+	OpStayBegin      // stay loop start (initialize state hash)
+	OpStayEnd        // stay loop execution (start event loop)
+	OpStayGetState   // Get stay state
+	OpContinue       // async.continue (update state and continue)
+	OpLeave          // async.leave (exit from stay)
+	OpSpawn          // async.spawn (create task)
+	OpExpects        // async.expects (create handler)
+	OpHandlerReady   // handler.ready() - activate handler
 	OpHandlerReset   // handler.reset()
 	OpHandlerPause   // handler.pause()
 	OpHandlerResume  // handler.resume()
-	OpCancel         // async.cancel (タスク/ハンドラをキャンセル)
-	OpAll            // async.all (全タスク待機)
-	OpTimeout        // schedule.timeout (タイムアウトイベントソース)
-	OpInterval       // schedule.interval (インターバルイベントソース)
+	OpCancel         // async.cancel (cancel task/handler)
+	OpAll            // async.all (wait for all tasks)
+	OpTimeout        // schedule.timeout (timeout event source)
+	OpInterval       // schedule.interval (interval event source)
 )
 
 // Definition describes an opcode

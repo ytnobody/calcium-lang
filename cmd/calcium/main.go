@@ -47,13 +47,34 @@ func formatParseErrors(filename string, errors []string, useColor bool) string {
 	var sb strings.Builder
 	for i, e := range errors {
 		if i > 0 {
-			sb.WriteString("\n")
+			sb.WriteString("\n\n")
 		}
 		if useColor {
 			sb.WriteString(fmt.Sprintf("%s%s%s:%s error%s\n%s",
 				colorBold, colorCyan, filename, colorRed, colorReset, e))
 		} else {
 			sb.WriteString(fmt.Sprintf("%s: error\n%s", filename, e))
+		}
+	}
+	return sb.String()
+}
+
+// formatCompileErrors formats compiler errors (which may be single or multiple) for display
+func formatCompileErrors(filename string, err error, useColor bool) string {
+	errStr := err.Error()
+	// Split on double newlines which separate multiple errors
+	parts := strings.Split(errStr, "\n\n")
+
+	var sb strings.Builder
+	for i, part := range parts {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		if useColor {
+			sb.WriteString(fmt.Sprintf("%s%s%s:%s error%s\n%s",
+				colorBold, colorCyan, filename, colorRed, colorReset, part))
+		} else {
+			sb.WriteString(fmt.Sprintf("%s: error\n%s", filename, part))
 		}
 	}
 	return sb.String()
@@ -195,7 +216,7 @@ func compileFile(inputFile, outputFile string) {
 	comp.SetInput(input)
 	err = comp.Compile(program)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, formatError(inputFile, err.Error(), useColor))
+		fmt.Fprintln(os.Stderr, formatCompileErrors(inputFile, err, useColor))
 		os.Exit(1)
 	}
 
@@ -329,7 +350,7 @@ func executeWithFilename(input, filename string) (string, error) {
 	comp.SetInput(input)
 	err := comp.Compile(program)
 	if err != nil {
-		return "", fmt.Errorf("%s", formatError(filename, err.Error(), useColor))
+		return "", fmt.Errorf("%s", formatCompileErrors(filename, err, useColor))
 	}
 
 	machine := vm.New(comp.Constants())
@@ -359,7 +380,7 @@ func executeInREPL(input string, comp *compiler.Compiler, machine *vm.VM) (strin
 
 	err := comp.Compile(program)
 	if err != nil {
-		return "", fmt.Errorf("%s", formatError("<repl>", err.Error(), useColor))
+		return "", fmt.Errorf("%s", formatCompileErrors("<repl>", err, useColor))
 	}
 
 	instructions := comp.Bytecode().Instructions
@@ -479,7 +500,7 @@ func buildExecutable(inputFile, outputFile string) {
 		comp.SetInput(input)
 		err = comp.Compile(program)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, formatError(inputFile, err.Error(), useColor))
+			fmt.Fprintln(os.Stderr, formatCompileErrors(inputFile, err, useColor))
 			os.Exit(1)
 		}
 

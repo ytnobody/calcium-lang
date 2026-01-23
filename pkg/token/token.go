@@ -132,3 +132,75 @@ func LookupIdent(ident string) TokenType {
 func (t TokenType) String() string {
 	return string(t)
 }
+
+// GetAllKeywords returns all keyword strings for spelling suggestions
+func GetAllKeywords() []string {
+	result := make([]string, 0, len(keywords))
+	for k := range keywords {
+		result = append(result, k)
+	}
+	return result
+}
+
+// levenshteinDistance calculates the edit distance between two strings
+func levenshteinDistance(a, b string) int {
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+
+	matrix := make([][]int, len(a)+1)
+	for i := range matrix {
+		matrix[i] = make([]int, len(b)+1)
+		matrix[i][0] = i
+	}
+	for j := 0; j <= len(b); j++ {
+		matrix[0][j] = j
+	}
+
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			del := matrix[i-1][j] + 1
+			ins := matrix[i][j-1] + 1
+			sub := matrix[i-1][j-1] + cost
+			if del < ins {
+				if del < sub {
+					matrix[i][j] = del
+				} else {
+					matrix[i][j] = sub
+				}
+			} else {
+				if ins < sub {
+					matrix[i][j] = ins
+				} else {
+					matrix[i][j] = sub
+				}
+			}
+		}
+	}
+
+	return matrix[len(a)][len(b)]
+}
+
+// SuggestKeyword finds a similar keyword for a misspelled identifier
+// Returns empty string if no similar keyword found
+func SuggestKeyword(ident string, maxDistance int) string {
+	bestMatch := ""
+	bestDistance := maxDistance + 1
+
+	for keyword := range keywords {
+		distance := levenshteinDistance(ident, keyword)
+		if distance <= maxDistance && distance < bestDistance {
+			bestDistance = distance
+			bestMatch = keyword
+		}
+	}
+
+	return bestMatch
+}

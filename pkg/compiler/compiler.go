@@ -27,6 +27,26 @@ func (e *CompileError) Error() string {
 	return fmt.Sprintf("line %d, column %d:\n  %s\n  %s\n%s", e.Line, e.Column, e.Source, caretLine, e.Message)
 }
 
+// CompileErrors represents multiple compilation errors
+type CompileErrors struct {
+	Errors []error
+}
+
+func (e *CompileErrors) Error() string {
+	if len(e.Errors) == 1 {
+		return e.Errors[0].Error()
+	}
+
+	var sb strings.Builder
+	for i, err := range e.Errors {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(err.Error())
+	}
+	return sb.String()
+}
+
 // Compiler compiles AST to bytecode
 type Compiler struct {
 	instructions bytecode.Instructions
@@ -41,6 +61,9 @@ type Compiler struct {
 
 	// Source input for error messages
 	input string
+
+	// Collected errors for multi-error reporting
+	errors []error
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -177,6 +200,27 @@ func (c *Compiler) SetInput(input string) {
 	c.input = input
 }
 
+// addError adds an error to the collection
+func (c *Compiler) addError(err error) {
+	c.errors = append(c.errors, err)
+}
+
+// hasErrors returns true if there are any collected errors
+func (c *Compiler) hasErrors() bool {
+	return len(c.errors) > 0
+}
+
+// getErrors returns all collected errors as a single error
+func (c *Compiler) getErrors() error {
+	if len(c.errors) == 0 {
+		return nil
+	}
+	if len(c.errors) == 1 {
+		return c.errors[0]
+	}
+	return &CompileErrors{Errors: c.errors}
+}
+
 // getSourceLine returns the source line at the given line number (1-indexed)
 func (c *Compiler) getSourceLine(line int) string {
 	if c.input == "" {
@@ -209,6 +253,90 @@ func (c *Compiler) newCompileErrorAt(line, column int, message string) *CompileE
 	}
 }
 
+// levenshteinDistance calculates the edit distance between two strings
+func levenshteinDistance(a, b string) int {
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+
+	// Create matrix
+	matrix := make([][]int, len(a)+1)
+	for i := range matrix {
+		matrix[i] = make([]int, len(b)+1)
+		matrix[i][0] = i
+	}
+	for j := 0; j <= len(b); j++ {
+		matrix[0][j] = j
+	}
+
+	// Fill matrix
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			matrix[i][j] = min(
+				matrix[i-1][j]+1,      // deletion
+				matrix[i][j-1]+1,      // insertion
+				matrix[i-1][j-1]+cost, // substitution
+			)
+		}
+	}
+
+	return matrix[len(a)][len(b)]
+}
+
+func min(a, b, c int) int {
+	if a < b {
+		if a < c {
+			return a
+		}
+		return c
+	}
+	if b < c {
+		return b
+	}
+	return c
+}
+
+// findSimilarName finds the most similar name from a list of candidates
+func findSimilarName(name string, candidates []string, maxDistance int) string {
+	bestMatch := ""
+	bestDistance := maxDistance + 1
+
+	for _, candidate := range candidates {
+		distance := levenshteinDistance(name, candidate)
+		if distance <= maxDistance && distance < bestDistance {
+			bestDistance = distance
+			bestMatch = candidate
+		}
+	}
+
+	return bestMatch
+}
+
+// getAllDefinedNames returns all defined names in the current scope chain
+func (c *Compiler) getAllDefinedNames() []string {
+	names := []string{}
+	seen := make(map[string]bool)
+
+	// Walk up the symbol table chain
+	for st := c.symbolTable; st != nil; st = st.Outer {
+		for name := range st.store {
+			if !seen[name] {
+				names = append(names, name)
+				seen[name] = true
+			}
+		}
+	}
+
+	return names
+}
+
 // NewWithState creates a compiler with existing state
 func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 	mainScope := CompilationScope{
@@ -232,9 +360,15 @@ func (c *Compiler) Compile(node ast.Node) error {
 		for _, s := range node.Statements {
 			err := c.Compile(s)
 			if err != nil {
-				return err
+				c.addError(err)
+				// Continue to find more errors at statement level
 			}
 		}
+		// Return collected errors if any
+		if c.hasErrors() {
+			return c.getErrors()
+		}
+		return nil
 
 	case *ast.ExpressionStatement:
 		err := c.Compile(node.Expression)
@@ -363,7 +497,12 @@ func (c *Compiler) Compile(node ast.Node) error {
 				// Load constraint function (from outer scope)
 				constraintSymbol, ok := c.symbolTable.Resolve(constraint.Value)
 				if !ok {
-					return c.newCompileError(constraint.Token, fmt.Sprintf("undefined constraint '%s'", constraint.Value))
+					msg := fmt.Sprintf("undefined constraint '%s'", constraint.Value)
+					candidates := c.getAllDefinedNames()
+					if similar := findSimilarName(constraint.Value, candidates, 2); similar != "" {
+						msg += fmt.Sprintf(" (did you mean '%s'?)", similar)
+					}
+					return c.newCompileError(constraint.Token, msg)
 				}
 				c.loadSymbol(constraintSymbol)
 
@@ -520,7 +659,16 @@ func (c *Compiler) Compile(node ast.Node) error {
 	case *ast.Identifier:
 		symbol, ok := c.symbolTable.Resolve(node.Value)
 		if !ok {
-			return c.newCompileError(node.Token, fmt.Sprintf("undefined variable '%s'", node.Value))
+			msg := fmt.Sprintf("undefined variable '%s'", node.Value)
+			// Try to find a similar name for suggestion
+			candidates := c.getAllDefinedNames()
+			if similar := findSimilarName(node.Value, candidates, 2); similar != "" {
+				msg += fmt.Sprintf(" (did you mean '%s'?)", similar)
+			} else if similar := token.SuggestKeyword(node.Value, 2); similar != "" {
+				// Also check for keyword typos
+				msg += fmt.Sprintf(" (did you mean '%s'?)", similar)
+			}
+			return c.newCompileError(node.Token, msg)
 		}
 		c.loadSymbol(symbol)
 

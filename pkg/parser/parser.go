@@ -198,10 +198,19 @@ func (p *Parser) peekError(t token.TokenType) {
 }
 
 func (p *Parser) noPrefixParseFnError(t token.TokenType) {
+	errMsg := fmt.Sprintf("unexpected token '%s'", t)
+
+	// If it's an identifier, check for keyword typo
+	if t == token.IDENT {
+		if suggestion := token.SuggestKeyword(p.curToken.Literal, 2); suggestion != "" {
+			errMsg += fmt.Sprintf(" (did you mean '%s'?)", suggestion)
+		}
+	}
+
 	msg := p.formatErrorWithContext(
 		p.curToken.Line,
 		p.curToken.Column,
-		fmt.Sprintf("unexpected token '%s'", t),
+		errMsg,
 	)
 	p.errors = append(p.errors, msg)
 }

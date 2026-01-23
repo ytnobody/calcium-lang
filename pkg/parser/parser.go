@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/example/calcium/pkg/ast"
 	"github.com/example/calcium/pkg/lexer"
@@ -62,6 +63,7 @@ type (
 // Parser parses tokens into an AST
 type Parser struct {
 	l      *lexer.Lexer
+	input  string // Source input for error messages
 	errors []string
 
 	curToken  token.Token
@@ -77,6 +79,7 @@ type Parser struct {
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
 		l:      l,
+		input:  l.Input(),
 		errors: []string{},
 	}
 
@@ -163,15 +166,43 @@ func (p *Parser) Errors() []string {
 	return p.errors
 }
 
+// getSourceLine returns the source line at the given line number (1-indexed)
+func (p *Parser) getSourceLine(line int) string {
+	lines := strings.Split(p.input, "\n")
+	if line < 1 || line > len(lines) {
+		return ""
+	}
+	return lines[line-1]
+}
+
+// formatErrorWithContext creates a detailed error message with source context
+func (p *Parser) formatErrorWithContext(line, column int, message string) string {
+	sourceLine := p.getSourceLine(line)
+	if sourceLine == "" {
+		return fmt.Sprintf("line %d, column %d: %s", line, column, message)
+	}
+
+	// Build caret indicator
+	caretLine := strings.Repeat(" ", column-1) + "^"
+
+	return fmt.Sprintf("line %d, column %d:\n  %s\n  %s\n%s", line, column, sourceLine, caretLine, message)
+}
+
 func (p *Parser) peekError(t token.TokenType) {
-	msg := fmt.Sprintf("line %d: expected next token to be %s, got %s instead",
-		p.peekToken.Line, t, p.peekToken.Type)
+	msg := p.formatErrorWithContext(
+		p.peekToken.Line,
+		p.peekToken.Column,
+		fmt.Sprintf("expected '%s' but found '%s'", t, p.peekToken.Type),
+	)
 	p.errors = append(p.errors, msg)
 }
 
 func (p *Parser) noPrefixParseFnError(t token.TokenType) {
-	msg := fmt.Sprintf("line %d: no prefix parse function for %s found",
-		p.curToken.Line, t)
+	msg := p.formatErrorWithContext(
+		p.curToken.Line,
+		p.curToken.Column,
+		fmt.Sprintf("unexpected token '%s'", t),
+	)
 	p.errors = append(p.errors, msg)
 }
 
@@ -317,7 +348,9 @@ func (p *Parser) parseDestructuringStatement() ast.Statement {
 	// First identifier
 	if !p.curTokenIs(token.IDENT) {
 		// Not actually destructuring, this shouldn't happen if isDestructuringPattern was correct
-		p.errors = append(p.errors, fmt.Sprintf("line %d: expected identifier in destructuring pattern", p.curToken.Line))
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"expected identifier in destructuring pattern"))
 		return nil
 	}
 
@@ -329,7 +362,9 @@ func (p *Parser) parseDestructuringStatement() ast.Statement {
 		p.nextToken() // consume '|'
 
 		if !p.curTokenIs(token.IDENT) {
-			p.errors = append(p.errors, fmt.Sprintf("line %d: expected identifier after '|' in destructuring", p.curToken.Line))
+			p.errors = append(p.errors, p.formatErrorWithContext(
+				p.curToken.Line, p.curToken.Column,
+				"expected identifier after '|' in destructuring"))
 			return nil
 		}
 
@@ -366,7 +401,9 @@ func (p *Parser) parseDestructuringStatement() ast.Statement {
 		p.nextToken() // consume ','
 
 		if !p.curTokenIs(token.IDENT) {
-			p.errors = append(p.errors, fmt.Sprintf("line %d: expected identifier in destructuring pattern", p.curToken.Line))
+			p.errors = append(p.errors, p.formatErrorWithContext(
+				p.curToken.Line, p.curToken.Column,
+				"expected identifier in destructuring pattern"))
 			return nil
 		}
 
@@ -381,7 +418,9 @@ func (p *Parser) parseDestructuringStatement() ast.Statement {
 		// This wasn't a destructuring pattern after all
 		// This is an edge case - the pattern looked like destructuring but isn't
 		// For now, report an error
-		p.errors = append(p.errors, fmt.Sprintf("line %d: expected '=' after destructuring pattern", p.curToken.Line))
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"expected '=' after destructuring pattern"))
 		return nil
 	}
 
@@ -652,8 +691,9 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 	}
 
 	if err != nil {
-		msg := fmt.Sprintf("line %d: could not parse %q as integer", p.curToken.Line, literal)
-		p.errors = append(p.errors, msg)
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			fmt.Sprintf("could not parse %q as integer", literal)))
 		return nil
 	}
 
@@ -666,8 +706,9 @@ func (p *Parser) parseFloatLiteral() ast.Expression {
 
 	value, err := strconv.ParseFloat(p.curToken.Literal, 64)
 	if err != nil {
-		msg := fmt.Sprintf("line %d: could not parse %q as float", p.curToken.Line, p.curToken.Literal)
-		p.errors = append(p.errors, msg)
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			fmt.Sprintf("could not parse %q as float", p.curToken.Literal)))
 		return nil
 	}
 
@@ -686,7 +727,9 @@ func (p *Parser) parseRegexLiteral() ast.Expression {
 	// Parse pattern and flags from literal
 	// Format: /pattern/flags
 	if len(literal) < 2 || literal[0] != '/' {
-		p.errors = append(p.errors, fmt.Sprintf("line %d: invalid regex literal %q", p.curToken.Line, literal))
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			fmt.Sprintf("invalid regex literal %q", literal)))
 		return nil
 	}
 
@@ -834,7 +877,9 @@ func (p *Parser) parseGroupedOrLambda() ast.Expression {
 			return p.parseLambdaBody(tok, []*ast.Identifier{})
 		}
 		// Empty parentheses are invalid as expression
-		p.errors = append(p.errors, fmt.Sprintf("line %d: unexpected empty parentheses", tok.Line))
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			tok.Line, tok.Column,
+			"unexpected empty parentheses"))
 		return nil
 	}
 
@@ -914,7 +959,9 @@ func (p *Parser) parseLambdaFromIdent(left ast.Expression) ast.Expression {
 
 	ident, ok := left.(*ast.Identifier)
 	if !ok {
-		p.errors = append(p.errors, fmt.Sprintf("line %d: expected identifier before =>", tok.Line))
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			tok.Line, tok.Column,
+			"expected identifier before '=>'"))
 		return nil
 	}
 
@@ -934,7 +981,9 @@ func (p *Parser) exprToIdentifiers(expr ast.Expression) []*ast.Identifier {
 	case *ast.Identifier:
 		return []*ast.Identifier{e}
 	default:
-		p.errors = append(p.errors, fmt.Sprintf("line %d: expected identifier in lambda parameters", p.curToken.Line))
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"expected identifier in lambda parameters"))
 		return nil
 	}
 }
@@ -1100,7 +1149,9 @@ func (p *Parser) parseStayExpression(tok token.Token) ast.Expression {
 // parseStayStatePair parses a state initialization pair: name: value
 func (p *Parser) parseStayStatePair() *ast.StayStatePair {
 	if !p.curTokenIs(token.IDENT) {
-		p.errors = append(p.errors, fmt.Sprintf("line %d: expected identifier in stay state, got %s", p.curToken.Line, p.curToken.Type))
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			fmt.Sprintf("expected identifier in stay state, got '%s'", p.curToken.Type)))
 		return nil
 	}
 

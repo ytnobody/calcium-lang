@@ -7,8 +7,25 @@ import (
 
 	"github.com/example/calcium/pkg/ast"
 	"github.com/example/calcium/pkg/bytecode"
+	"github.com/example/calcium/pkg/token"
 	"github.com/example/calcium/pkg/value"
 )
+
+// CompileError represents a compilation error with position information
+type CompileError struct {
+	Line    int
+	Column  int
+	Message string
+	Source  string // The source line where the error occurred
+}
+
+func (e *CompileError) Error() string {
+	if e.Source == "" {
+		return fmt.Sprintf("line %d, column %d: %s", e.Line, e.Column, e.Message)
+	}
+	caretLine := strings.Repeat(" ", e.Column-1) + "^"
+	return fmt.Sprintf("line %d, column %d:\n  %s\n  %s\n%s", e.Line, e.Column, e.Source, caretLine, e.Message)
+}
 
 // Compiler compiles AST to bytecode
 type Compiler struct {
@@ -21,6 +38,9 @@ type Compiler struct {
 	// Scope management
 	scopes     []CompilationScope
 	scopeIndex int
+
+	// Source input for error messages
+	input string
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -150,6 +170,43 @@ func New() *Compiler {
 	}
 
 	return c
+}
+
+// SetInput sets the source input for error messages
+func (c *Compiler) SetInput(input string) {
+	c.input = input
+}
+
+// getSourceLine returns the source line at the given line number (1-indexed)
+func (c *Compiler) getSourceLine(line int) string {
+	if c.input == "" {
+		return ""
+	}
+	lines := strings.Split(c.input, "\n")
+	if line < 1 || line > len(lines) {
+		return ""
+	}
+	return lines[line-1]
+}
+
+// newCompileError creates a CompileError with source context
+func (c *Compiler) newCompileError(tok token.Token, message string) *CompileError {
+	return &CompileError{
+		Line:    tok.Line,
+		Column:  tok.Column,
+		Message: message,
+		Source:  c.getSourceLine(tok.Line),
+	}
+}
+
+// newCompileErrorAt creates a CompileError at a specific position
+func (c *Compiler) newCompileErrorAt(line, column int, message string) *CompileError {
+	return &CompileError{
+		Line:    line,
+		Column:  column,
+		Message: message,
+		Source:  c.getSourceLine(line),
+	}
 }
 
 // NewWithState creates a compiler with existing state
@@ -306,7 +363,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 				// Load constraint function (from outer scope)
 				constraintSymbol, ok := c.symbolTable.Resolve(constraint.Value)
 				if !ok {
-					return fmt.Errorf("undefined constraint %s", constraint.Value)
+					return c.newCompileError(constraint.Token, fmt.Sprintf("undefined constraint '%s'", constraint.Value))
 				}
 				c.loadSymbol(constraintSymbol)
 
@@ -442,7 +499,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		// Compile regex at compile time
 		re, err := regexp.Compile(goPattern)
 		if err != nil {
-			return fmt.Errorf("invalid regex /%s/: %s", node.Pattern, err)
+			return c.newCompileError(node.Token, fmt.Sprintf("invalid regex /%s/: %s", node.Pattern, err))
 		}
 
 		// Store compiled regex in constants
@@ -463,7 +520,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 	case *ast.Identifier:
 		symbol, ok := c.symbolTable.Resolve(node.Value)
 		if !ok {
-			return fmt.Errorf("undefined variable %s", node.Value)
+			return c.newCompileError(node.Token, fmt.Sprintf("undefined variable '%s'", node.Value))
 		}
 		c.loadSymbol(symbol)
 
@@ -479,7 +536,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		case "!":
 			c.emit(bytecode.OpNot)
 		default:
-			return fmt.Errorf("unknown prefix operator: %s", node.Operator)
+			return c.newCompileError(node.Token, fmt.Sprintf("unknown prefix operator '%s'", node.Operator))
 		}
 
 	case *ast.InfixExpression:
@@ -527,7 +584,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		case ">=":
 			c.emit(bytecode.OpGreaterEqual)
 		default:
-			return fmt.Errorf("unknown infix operator: %s", node.Operator)
+			return c.newCompileError(node.Token, fmt.Sprintf("unknown infix operator '%s'", node.Operator))
 		}
 
 	case *ast.ArrayLiteral:
@@ -833,6 +890,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 
 	default:
+		// For unknown node types, we don't have a token, so use a basic error
 		return fmt.Errorf("unknown node type: %T", node)
 	}
 

@@ -18,6 +18,47 @@ import (
 	"github.com/example/calcium/pkg/vm"
 )
 
+// ANSI color codes
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorYellow = "\033[33m"
+	colorCyan   = "\033[36m"
+	colorBold   = "\033[1m"
+)
+
+// isTerminal checks if stdout is a terminal (for color support)
+func isTerminal() bool {
+	fileInfo, _ := os.Stdout.Stat()
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+}
+
+// formatError formats an error message with optional colors
+func formatError(filename string, errMsg string, useColor bool) string {
+	if useColor {
+		return fmt.Sprintf("%s%s%s:%s error%s\n%s",
+			colorBold, colorCyan, filename, colorRed, colorReset, errMsg)
+	}
+	return fmt.Sprintf("%s: error\n%s", filename, errMsg)
+}
+
+// formatParseErrors formats multiple parse errors for display
+func formatParseErrors(filename string, errors []string, useColor bool) string {
+	var sb strings.Builder
+	for i, e := range errors {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		if useColor {
+			sb.WriteString(fmt.Sprintf("%s%s%s:%s error%s\n%s",
+				colorBold, colorCyan, filename, colorRed, colorReset, e))
+		} else {
+			sb.WriteString(fmt.Sprintf("%s: error\n%s", filename, e))
+		}
+	}
+	return sb.String()
+}
+
 const version = "0.2.0"
 const packMagic = "BONEPACK"
 
@@ -117,17 +158,19 @@ func runFile(filename string) {
 	if strings.HasSuffix(filename, ".bone") {
 		err = executeBytecode(content)
 	} else {
-		_, err = execute(string(content))
+		_, err = executeWithFilename(string(content), filename)
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	// File execution: don't print the final result (use io.say for output)
 }
 
 func compileFile(inputFile, outputFile string) {
+	useColor := isTerminal()
+
 	// Read source file
 	content, err := os.ReadFile(inputFile)
 	if err != nil {
@@ -135,24 +178,24 @@ func compileFile(inputFile, outputFile string) {
 		os.Exit(1)
 	}
 
+	input := string(content)
+
 	// Parse
-	l := lexer.New(string(content))
+	l := lexer.New(input)
 	p := parser.New(l)
 	program := p.ParseProgram()
 
 	if len(p.Errors()) > 0 {
-		fmt.Fprintf(os.Stderr, "Parse errors:\n")
-		for _, e := range p.Errors() {
-			fmt.Fprintf(os.Stderr, "  %s\n", e)
-		}
+		fmt.Fprintln(os.Stderr, formatParseErrors(inputFile, p.Errors(), useColor))
 		os.Exit(1)
 	}
 
 	// Compile
 	comp := compiler.New()
+	comp.SetInput(input)
 	err = comp.Compile(program)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Compilation error: %v\n", err)
+		fmt.Fprintln(os.Stderr, formatError(inputFile, err.Error(), useColor))
 		os.Exit(1)
 	}
 
@@ -268,24 +311,31 @@ Examples:
 }
 
 func execute(input string) (string, error) {
+	return executeWithFilename(input, "<stdin>")
+}
+
+func executeWithFilename(input, filename string) (string, error) {
+	useColor := isTerminal()
+
 	l := lexer.New(input)
 	p := parser.New(l)
 	program := p.ParseProgram()
 
 	if len(p.Errors()) > 0 {
-		return "", fmt.Errorf("parse errors:\n  %s", strings.Join(p.Errors(), "\n  "))
+		return "", fmt.Errorf("%s", formatParseErrors(filename, p.Errors(), useColor))
 	}
 
 	comp := compiler.New()
+	comp.SetInput(input)
 	err := comp.Compile(program)
 	if err != nil {
-		return "", fmt.Errorf("compilation error: %v", err)
+		return "", fmt.Errorf("%s", formatError(filename, err.Error(), useColor))
 	}
 
 	machine := vm.New(comp.Constants())
 	err = machine.Run(comp.Bytecode().Instructions)
 	if err != nil {
-		return "", fmt.Errorf("runtime error: %v", err)
+		return "", fmt.Errorf("%s", formatError(filename, fmt.Sprintf("runtime error: %v", err), useColor))
 	}
 
 	result := machine.LastPoppedStackElem()
@@ -293,20 +343,23 @@ func execute(input string) (string, error) {
 }
 
 func executeInREPL(input string, comp *compiler.Compiler, machine *vm.VM) (string, error) {
+	useColor := isTerminal()
+
 	l := lexer.New(input)
 	p := parser.New(l)
 	program := p.ParseProgram()
 
 	if len(p.Errors()) > 0 {
-		return "", fmt.Errorf("parse errors:\n  %s", strings.Join(p.Errors(), "\n  "))
+		return "", fmt.Errorf("%s", formatParseErrors("<repl>", p.Errors(), useColor))
 	}
 
 	// Reset instructions before compiling new input (keep constants and symbols)
 	comp.ResetInstructions()
+	comp.SetInput(input)
 
 	err := comp.Compile(program)
 	if err != nil {
-		return "", fmt.Errorf("compilation error: %v", err)
+		return "", fmt.Errorf("%s", formatError("<repl>", err.Error(), useColor))
 	}
 
 	instructions := comp.Bytecode().Instructions
@@ -405,28 +458,28 @@ func buildExecutable(inputFile, outputFile string) {
 		}
 	} else {
 		// Compile .ca to .bone
+		useColor := isTerminal()
 		content, err := os.ReadFile(inputFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
 			os.Exit(1)
 		}
 
-		l := lexer.New(string(content))
+		input := string(content)
+		l := lexer.New(input)
 		p := parser.New(l)
 		program := p.ParseProgram()
 
 		if len(p.Errors()) > 0 {
-			fmt.Fprintf(os.Stderr, "Parse errors:\n")
-			for _, e := range p.Errors() {
-				fmt.Fprintf(os.Stderr, "  %s\n", e)
-			}
+			fmt.Fprintln(os.Stderr, formatParseErrors(inputFile, p.Errors(), useColor))
 			os.Exit(1)
 		}
 
 		comp := compiler.New()
+		comp.SetInput(input)
 		err = comp.Compile(program)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Compilation error: %v\n", err)
+			fmt.Fprintln(os.Stderr, formatError(inputFile, err.Error(), useColor))
 			os.Exit(1)
 		}
 

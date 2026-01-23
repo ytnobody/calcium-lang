@@ -399,3 +399,8 @@ func isDigit(ch byte) bool {
 func isHexDigit(ch byte) bool {
 	return isDigit(ch) || 'a' <= ch && ch <= 'f' || 'A' <= ch && ch <= 'F'
 }
+
+// Input returns the source input string
+func (l *Lexer) Input() string {
+	return l.input
+}

@@ -1,4 +1,4 @@
-# Calcium
+# Calcium-lang
 
 > **Note:** This project is currently under active development. APIs and syntax may change without notice.
 

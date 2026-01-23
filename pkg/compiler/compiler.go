@@ -680,7 +680,35 @@ func (c *Compiler) Compile(node ast.Node) error {
 			return nil
 		}
 
-		// Normal pipe: compile func first, then arg
+		// Check if right side is a call expression: x |> f(y) -> f(x, y)
+		// The pipe input becomes the FIRST argument
+		if call, ok := node.Right.(*ast.CallExpression); ok {
+			// Compile the function
+			err := c.Compile(call.Function)
+			if err != nil {
+				return err
+			}
+
+			// Compile the pipe input as first argument
+			err = c.Compile(node.Left)
+			if err != nil {
+				return err
+			}
+
+			// Compile the rest of the arguments
+			for _, arg := range call.Arguments {
+				err = c.Compile(arg)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Call with 1 + len(args) arguments
+			c.emit(bytecode.OpCall, 1+len(call.Arguments))
+			return nil
+		}
+
+		// Simple pipe: x |> f -> f(x)
 		err := c.Compile(node.Right)
 		if err != nil {
 			return err

@@ -1266,31 +1266,24 @@ func (vm *VM) callPartialBuiltin(partial *value.PartialBuiltin, numArgs int) err
 	return vm.push(result)
 }
 
-// executeMap implements map(fn, arr) - applies fn to each element
-// Supports partial application: map(fn) returns a function that takes arr
+// executeMap implements map(arr, fn) - applies fn to each element
+// For pipeline: arr |> map(fn) -> map(arr, fn)
 func (vm *VM) executeMap(args []value.Value) error {
-	if len(args) == 0 || len(args) > 2 {
+	if len(args) != 2 {
 		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("map: expected 1 or 2 arguments (fn) or (fn, array)")))
+		return vm.push(value.Failure(value.String("map: expected 2 arguments (array, fn)")))
 	}
 
-	fn := args[0]
-	if fn.Type != value.TYPE_FUNCTION && fn.Type != value.TYPE_CLOSURE && fn.Type != value.TYPE_BUILTIN {
-		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("map: first argument must be function")))
-	}
-
-	// Partial application: map(fn) returns arr => map(fn, arr)
-	if len(args) == 1 {
-		vm.sp = vm.sp - len(args) - 1
-		partial := &value.PartialBuiltin{Name: "map", Args: []value.Value{fn}}
-		return vm.push(value.PartialBuiltinVal(partial))
-	}
-
-	arr := args[1]
+	arr := args[0]
 	if arr.Type != value.TYPE_ARRAY {
 		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("map: second argument must be array")))
+		return vm.push(value.Failure(value.String("map: first argument must be array")))
+	}
+
+	fn := args[1]
+	if fn.Type != value.TYPE_FUNCTION && fn.Type != value.TYPE_CLOSURE && fn.Type != value.TYPE_BUILTIN {
+		vm.sp = vm.sp - len(args) - 1
+		return vm.push(value.Failure(value.String("map: second argument must be function")))
 	}
 
 	elements := arr.AsArray()
@@ -1308,31 +1301,24 @@ func (vm *VM) executeMap(args []value.Value) error {
 	return vm.push(value.Array(results))
 }
 
-// executeFilter implements filter(pred, arr) - keeps elements where predicate returns true
-// Supports partial application: filter(pred) returns a function that takes arr
+// executeFilter implements filter(arr, pred) - keeps elements where predicate returns true
+// For pipeline: arr |> filter(pred) -> filter(arr, pred)
 func (vm *VM) executeFilter(args []value.Value) error {
-	if len(args) == 0 || len(args) > 2 {
+	if len(args) != 2 {
 		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("filter: expected 1 or 2 arguments (pred) or (pred, array)")))
+		return vm.push(value.Failure(value.String("filter: expected 2 arguments (array, pred)")))
 	}
 
-	fn := args[0]
-	if fn.Type != value.TYPE_FUNCTION && fn.Type != value.TYPE_CLOSURE && fn.Type != value.TYPE_BUILTIN {
-		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("filter: first argument must be function")))
-	}
-
-	// Partial application: filter(pred) returns arr => filter(pred, arr)
-	if len(args) == 1 {
-		vm.sp = vm.sp - len(args) - 1
-		partial := &value.PartialBuiltin{Name: "filter", Args: []value.Value{fn}}
-		return vm.push(value.PartialBuiltinVal(partial))
-	}
-
-	arr := args[1]
+	arr := args[0]
 	if arr.Type != value.TYPE_ARRAY {
 		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("filter: second argument must be array")))
+		return vm.push(value.Failure(value.String("filter: first argument must be array")))
+	}
+
+	fn := args[1]
+	if fn.Type != value.TYPE_FUNCTION && fn.Type != value.TYPE_CLOSURE && fn.Type != value.TYPE_BUILTIN {
+		vm.sp = vm.sp - len(args) - 1
+		return vm.push(value.Failure(value.String("filter: second argument must be function")))
 	}
 
 	elements := arr.AsArray()
@@ -1352,34 +1338,27 @@ func (vm *VM) executeFilter(args []value.Value) error {
 	return vm.push(value.Array(results))
 }
 
-// executeReduce implements reduce(fn, init, arr) - reduces array to single value
-// Supports partial application: reduce(fn, init) returns a function that takes arr
+// executeReduce implements reduce(arr, fn, init) - reduces array to single value
+// For pipeline: arr |> reduce(fn, init) -> reduce(arr, fn, init)
 func (vm *VM) executeReduce(args []value.Value) error {
-	if len(args) < 2 || len(args) > 3 {
+	if len(args) != 3 {
 		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("reduce: expected 2 or 3 arguments (fn, init) or (fn, init, array)")))
+		return vm.push(value.Failure(value.String("reduce: expected 3 arguments (array, fn, init)")))
 	}
 
-	fn := args[0]
-	if fn.Type != value.TYPE_FUNCTION && fn.Type != value.TYPE_CLOSURE && fn.Type != value.TYPE_BUILTIN {
-		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("reduce: first argument must be function")))
-	}
-
-	init := args[1]
-
-	// Partial application: reduce(fn, init) returns arr => reduce(fn, init, arr)
-	if len(args) == 2 {
-		vm.sp = vm.sp - len(args) - 1
-		partial := &value.PartialBuiltin{Name: "reduce", Args: []value.Value{fn, init}}
-		return vm.push(value.PartialBuiltinVal(partial))
-	}
-
-	arr := args[2]
+	arr := args[0]
 	if arr.Type != value.TYPE_ARRAY {
 		vm.sp = vm.sp - len(args) - 1
-		return vm.push(value.Failure(value.String("reduce: third argument must be array")))
+		return vm.push(value.Failure(value.String("reduce: first argument must be array")))
 	}
+
+	fn := args[1]
+	if fn.Type != value.TYPE_FUNCTION && fn.Type != value.TYPE_CLOSURE && fn.Type != value.TYPE_BUILTIN {
+		vm.sp = vm.sp - len(args) - 1
+		return vm.push(value.Failure(value.String("reduce: second argument must be function")))
+	}
+
+	init := args[2]
 
 	elements := arr.AsArray()
 	accumulator := init

@@ -12,6 +12,10 @@ type Lexer struct {
 	line         int             // current line number
 	column       int             // current column number
 	prevToken    token.TokenType // previous token type for regex/division disambiguation
+
+	// String interpolation state
+	inStringInterp   bool // true when inside a string interpolation
+	interpBraceDepth int  // track nested braces inside ${...}
 }
 
 // New creates a new Lexer
@@ -172,10 +176,32 @@ func (l *Lexer) NextToken() token.Token {
 	case ']':
 		tok = newToken(token.RBRACKET, l.ch, tok.Line, tok.Column)
 	case '{':
+		if l.inStringInterp {
+			l.interpBraceDepth++
+		}
 		tok = newToken(token.LBRACE, l.ch, tok.Line, tok.Column)
 	case '?':
 		tok = newToken(token.QUESTION, l.ch, tok.Line, tok.Column)
 	case '}':
+		if l.inStringInterp && l.interpBraceDepth == 0 {
+			// End of interpolation expression, continue reading string
+			l.readChar() // consume '}'
+			// Check what comes next
+			stringPart, hasMore := l.readStringInterpolationPart()
+			if hasMore {
+				tok.Type = token.STRING_TEMPLATE_MIDDLE
+				tok.Literal = stringPart
+			} else {
+				tok.Type = token.STRING_TEMPLATE_END
+				tok.Literal = stringPart
+				l.inStringInterp = false
+			}
+			l.prevToken = tok.Type
+			return tok
+		}
+		if l.inStringInterp {
+			l.interpBraceDepth--
+		}
 		tok = newToken(token.RBRACE, l.ch, tok.Line, tok.Column)
 	case '_':
 		if isLetter(l.peekChar()) || isDigit(l.peekChar()) {
@@ -186,11 +212,23 @@ func (l *Lexer) NextToken() token.Token {
 		}
 		tok = newToken(token.UNDERSCORE, l.ch, tok.Line, tok.Column)
 	case '"':
+		// Check if this is an interpolated string or regular string
+		stringContent, hasInterpolation := l.peekStringContent()
+		if hasInterpolation {
+			// Start of interpolated string: read until first ${
+			tok.Type = token.STRING_TEMPLATE_START
+			tok.Literal = l.readStringUntilInterpolation()
+			l.prevToken = tok.Type
+			l.inStringInterp = true
+			l.interpBraceDepth = 0
+			return tok
+		}
 		tok.Type = token.STRING
 		tok.Literal = l.readString()
 		tok.Line = tok.Line
 		tok.Column = tok.Column
 		l.prevToken = tok.Type
+		_ = stringContent // unused, just for peeking
 		return tok
 	case 0:
 		tok.Literal = ""
@@ -347,6 +385,84 @@ func (l *Lexer) readString() string {
 	result := l.input[position:l.position]
 	l.readChar() // consume closing quote
 	return result
+}
+
+// peekStringContent checks if a string contains interpolation markers
+func (l *Lexer) peekStringContent() (string, bool) {
+	pos := l.position + 1 // skip opening quote
+	hasInterpolation := false
+	for pos < len(l.input) {
+		if l.input[pos] == '"' {
+			break
+		}
+		if l.input[pos] == '\\' {
+			pos += 2 // skip escape sequence
+			continue
+		}
+		if l.input[pos] == '$' && pos+1 < len(l.input) && l.input[pos+1] == '{' {
+			hasInterpolation = true
+			break
+		}
+		pos++
+	}
+	return l.input[l.position+1 : pos], hasInterpolation
+}
+
+// readStringUntilInterpolation reads a string until the first ${
+func (l *Lexer) readStringUntilInterpolation() string {
+	l.readChar() // skip opening quote
+	position := l.position
+	for {
+		if l.ch == 0 || l.ch == '"' {
+			break
+		}
+		if l.ch == '\\' {
+			l.readChar() // skip escape char
+			l.readChar() // skip escaped char
+			continue
+		}
+		if l.ch == '$' && l.peekChar() == '{' {
+			// Found ${, stop here
+			result := l.input[position:l.position]
+			l.readChar() // consume '$'
+			l.readChar() // consume '{'
+			return result
+		}
+		l.readChar()
+	}
+	// Should not reach here in normal cases
+	return l.input[position:l.position]
+}
+
+// readStringInterpolationPart reads the string part after } in an interpolation
+// Returns the string content and whether there are more interpolations
+func (l *Lexer) readStringInterpolationPart() (string, bool) {
+	position := l.position
+	for {
+		if l.ch == 0 {
+			break
+		}
+		if l.ch == '"' {
+			// End of string
+			result := l.input[position:l.position]
+			l.readChar() // consume closing quote
+			return result, false
+		}
+		if l.ch == '\\' {
+			l.readChar() // skip escape char
+			l.readChar() // skip escaped char
+			continue
+		}
+		if l.ch == '$' && l.peekChar() == '{' {
+			// Another interpolation
+			result := l.input[position:l.position]
+			l.readChar() // consume '$'
+			l.readChar() // consume '{'
+			return result, true
+		}
+		l.readChar()
+	}
+	return l.input[position:l.position], false
 }
 
 func (l *Lexer) skipWhitespaceAndComments() {

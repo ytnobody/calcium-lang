@@ -683,6 +683,27 @@ func (c *Compiler) Compile(node ast.Node) error {
 		str := value.String(node.Value)
 		c.emit(bytecode.OpConstant, c.addConstant(str))
 
+	case *ast.InterpolatedString:
+		// Compile interpolated string as concatenation of parts
+		// VM auto-converts non-strings to strings during concatenation
+		if len(node.Parts) == 0 {
+			// Empty interpolated string
+			c.emit(bytecode.OpConstant, c.addConstant(value.String("")))
+		} else {
+			// Compile each part
+			for i, part := range node.Parts {
+				err := c.Compile(part)
+				if err != nil {
+					return err
+				}
+
+				// Concatenate with previous parts
+				if i > 0 {
+					c.emit(bytecode.OpAdd) // String concatenation (auto-converts)
+				}
+			}
+		}
+
 	case *ast.RegexLiteral:
 		// Convert Calcium flags to Go regex flags
 		goPattern := convertRegexFlags(node.Pattern, node.Flags)

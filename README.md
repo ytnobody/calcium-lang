@@ -13,6 +13,7 @@ A functional programming language with pipelines, pattern matching, and effect h
 - **Partial Application** - Built-in support for curried functions like `map`, `filter`, `reduce`
 - **Array Destructuring** - Unpack arrays into variables with `[a, b, c] = arr` or `[head | tail] = arr`
 - **Hashes** - Associative arrays with dot and bracket access
+- **String Interpolation** - Embed expressions in strings with `"Hello, ${name}!"`
 - **Constraints** - Define and enforce value constraints with `constraint` and `?` operator
 - **Chained Comparisons** - Write `0 <= x <= 100` instead of `x >= 0 && x <= 100`
 - **Effect Functions** - Distinguish pure functions from side-effecting ones with `func!`
@@ -91,6 +92,25 @@ add = (a, b) => a + b;
 func factorial(n) = match n
     0 => 1
     _ => n * factorial(n - 1);
+```
+
+### String Interpolation
+
+Embed expressions in strings using `${...}`:
+
+```calcium
+use core.io!
+
+name = "World";
+"Hello, ${name}!" !> io.println;  // Hello, World!
+
+x = 10;
+y = 20;
+"${x} + ${y} = ${x + y}" !> io.println;  // 10 + 20 = 30
+
+arr = [1, 2, 3];
+"Array: ${arr}, length: ${len(arr)}" !> io.println;
+// Array: [1, 2, 3], length: 3
 ```
 
 ### Effect Functions

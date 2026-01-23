@@ -991,9 +991,9 @@ func (vm *VM) executeBinaryOp(op bytecode.OpCode) error {
 	leftType := left.Type
 	rightType := right.Type
 
-	// Handle string concatenation
-	if op == bytecode.OpAdd && leftType == value.TYPE_STRING && rightType == value.TYPE_STRING {
-		return vm.push(value.String(left.AsString() + right.AsString()))
+	// Handle string concatenation (auto-convert non-strings)
+	if op == bytecode.OpAdd && (leftType == value.TYPE_STRING || rightType == value.TYPE_STRING) {
+		return vm.push(value.String(left.String() + right.String()))
 	}
 
 	// Numeric operations

@@ -88,6 +88,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.INT, p.parseIntegerLiteral)
 	p.registerPrefix(token.FLOAT, p.parseFloatLiteral)
 	p.registerPrefix(token.STRING, p.parseStringLiteral)
+	p.registerPrefix(token.STRING_TEMPLATE_START, p.parseInterpolatedString)
 	p.registerPrefix(token.TRUE, p.parseBooleanLiteral)
 	p.registerPrefix(token.FALSE, p.parseBooleanLiteral)
 	p.registerPrefix(token.BANG, p.parsePrefixExpression)
@@ -727,6 +728,55 @@ func (p *Parser) parseFloatLiteral() ast.Expression {
 
 func (p *Parser) parseStringLiteral() ast.Expression {
 	return &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
+}
+
+func (p *Parser) parseInterpolatedString() ast.Expression {
+	is := &ast.InterpolatedString{Token: p.curToken}
+	is.Parts = []ast.Expression{}
+
+	// Always add the first string part (even if empty) to ensure string concatenation
+	is.Parts = append(is.Parts, &ast.StringLiteral{
+		Token: p.curToken,
+		Value: p.curToken.Literal,
+	})
+
+	// Now we're after the first ${, parse expressions and string parts
+	for {
+		p.nextToken()
+
+		// Parse the expression inside ${...}
+		expr := p.parseExpression(LOWEST)
+		if expr != nil {
+			is.Parts = append(is.Parts, expr)
+		}
+
+		// After expression, we should have STRING_TEMPLATE_MIDDLE or STRING_TEMPLATE_END
+		if p.peekTokenIs(token.STRING_TEMPLATE_MIDDLE) {
+			p.nextToken()
+			// Add the string part between } and ${
+			is.Parts = append(is.Parts, &ast.StringLiteral{
+				Token: p.curToken,
+				Value: p.curToken.Literal,
+			})
+			// Continue to parse next expression
+		} else if p.peekTokenIs(token.STRING_TEMPLATE_END) {
+			p.nextToken()
+			// Add the final string part
+			is.Parts = append(is.Parts, &ast.StringLiteral{
+				Token: p.curToken,
+				Value: p.curToken.Literal,
+			})
+			break
+		} else {
+			// Unexpected token
+			p.errors = append(p.errors, p.formatErrorWithContext(
+				p.peekToken.Line, p.peekToken.Column,
+				fmt.Sprintf("expected '}' in string interpolation, got '%s'", p.peekToken.Type)))
+			return nil
+		}
+	}
+
+	return is
 }
 
 func (p *Parser) parseRegexLiteral() ast.Expression {

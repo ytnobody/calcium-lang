@@ -167,6 +167,15 @@ type StringLiteral struct {
 func (sl *StringLiteral) expressionNode()      {}
 func (sl *StringLiteral) TokenLiteral() string { return sl.Token.Literal }
 
+// InterpolatedString represents a string with embedded expressions: "Hello, ${name}!"
+type InterpolatedString struct {
+	Token token.Token  // the STRING_TEMPLATE_START token
+	Parts []Expression // alternating StringLiteral and expressions
+}
+
+func (is *InterpolatedString) expressionNode()      {}
+func (is *InterpolatedString) TokenLiteral() string { return is.Token.Literal }
+
 // RegexLiteral represents /pattern/flags
 type RegexLiteral struct {
 	Token   token.Token

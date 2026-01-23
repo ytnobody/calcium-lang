@@ -21,6 +21,11 @@ const (
 	STRING TokenType = "STRING" // "hello"
 	REGEX  TokenType = "REGEX"  // /pattern/flags
 
+	// String interpolation tokens
+	STRING_TEMPLATE_START  TokenType = "STRING_TEMPLATE_START"  // "...${
+	STRING_TEMPLATE_MIDDLE TokenType = "STRING_TEMPLATE_MIDDLE" // }...${
+	STRING_TEMPLATE_END    TokenType = "STRING_TEMPLATE_END"    // }..."
+
 	// Operators
 	ASSIGN   TokenType = "="
 	PLUS     TokenType = "+"

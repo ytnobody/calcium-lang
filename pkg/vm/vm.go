@@ -152,6 +152,51 @@ func NewWithGlobals(constants []value.Value, globals []value.Value) *VM {
 	return vm
 }
 
+// NewForREPL creates a VM for REPL use (doesn't capture stdin)
+func NewForREPL(constants []value.Value, globals []value.Value) *VM {
+	mainFn := &value.Function{
+		Name:      "<main>",
+		Body:      bytecode.Instructions{},
+		NumLocals: 0,
+	}
+	mainClosure := &value.Closure{Fn: mainFn}
+	mainFrame := NewFrame(mainClosure, 0)
+
+	frames := make([]*Frame, MaxFrames)
+	frames[0] = mainFrame
+
+	vm := &VM{
+		constants:   constants,
+		globals:     globals,
+		stack:       make([]value.Value, StackSize),
+		sp:          0,
+		frames:      frames,
+		framesIndex: 1,
+		modules:     make(map[string]*value.Module),
+	}
+
+	vm.initBuiltins()
+	vm.initModulesNoStdin() // Don't capture stdin in REPL mode
+	return vm
+}
+
+// initModulesNoStdin initializes modules without capturing stdin
+func (vm *VM) initModulesNoStdin() {
+	// core.io! module - provides I/O effect functions (without stdin capture)
+	ioModule := &value.Module{
+		Name:    "core.io",
+		Exports: make(map[string]value.Value),
+	}
+	ioModule.Exports["print"] = value.BuiltinFunc(&value.Builtin{Name: "print", Fn: vm.builtinPrint})
+	ioModule.Exports["println"] = value.BuiltinFunc(&value.Builtin{Name: "println", Fn: vm.builtinPrintln})
+	ioModule.Exports["say"] = value.BuiltinFunc(&value.Builtin{Name: "say", Fn: vm.builtinPrintln})
+	ioModule.Exports["read_file"] = value.BuiltinFunc(&value.Builtin{Name: "read_file", Fn: builtinReadFile})
+	ioModule.Exports["write_file"] = value.BuiltinFunc(&value.Builtin{Name: "write_file", Fn: builtinWriteFile})
+	ioModule.Exports["format"] = value.BuiltinFunc(&value.Builtin{Name: "format", Fn: builtinFormat})
+	// stdin/eof not available in REPL mode
+	vm.modules["core.io"] = ioModule
+}
+
 func (vm *VM) initBuiltins() {
 	vm.builtins = []*value.Builtin{
 		{Name: "len", Fn: builtinLen},

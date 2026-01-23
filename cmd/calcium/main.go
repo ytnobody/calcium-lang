@@ -14,6 +14,7 @@ import (
 	"github.com/example/calcium/pkg/compiler"
 	"github.com/example/calcium/pkg/lexer"
 	"github.com/example/calcium/pkg/parser"
+	"github.com/example/calcium/pkg/value"
 	"github.com/example/calcium/pkg/vm"
 )
 
@@ -210,7 +211,7 @@ func runREPL() {
 
 	// Keep state across REPL sessions
 	comp := compiler.New()
-	machine := vm.New(nil)
+	machine := vm.NewForREPL(nil, make([]value.Value, 65536)) // Don't capture stdin
 
 	for {
 		fmt.Print("ca> ")
@@ -300,14 +301,20 @@ func executeInREPL(input string, comp *compiler.Compiler, machine *vm.VM) (strin
 		return "", fmt.Errorf("parse errors:\n  %s", strings.Join(p.Errors(), "\n  "))
 	}
 
+	// Reset instructions before compiling new input (keep constants and symbols)
+	comp.ResetInstructions()
+
 	err := comp.Compile(program)
 	if err != nil {
 		return "", fmt.Errorf("compilation error: %v", err)
 	}
 
-	// Update VM with new constants
-	newMachine := vm.NewWithGlobals(comp.Constants(), machine.Globals())
-	err = newMachine.Run(comp.Bytecode().Instructions)
+	instructions := comp.Bytecode().Instructions
+	constants := comp.Constants()
+
+	// Update VM with new constants (use REPL mode to avoid stdin capture)
+	newMachine := vm.NewForREPL(constants, machine.Globals())
+	err = newMachine.Run(instructions)
 	if err != nil {
 		return "", fmt.Errorf("runtime error: %v", err)
 	}

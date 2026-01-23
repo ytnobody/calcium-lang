@@ -1156,6 +1156,14 @@ func (c *Compiler) Constants() []value.Value {
 	return c.constants
 }
 
+// ResetInstructions clears the instructions for REPL use
+// This keeps constants and symbol table but resets the instruction buffer
+func (c *Compiler) ResetInstructions() {
+	c.scopes[c.scopeIndex].instructions = bytecode.Instructions{}
+	c.scopes[c.scopeIndex].lastInstruction = EmittedInstruction{}
+	c.scopes[c.scopeIndex].previousInstruction = EmittedInstruction{}
+}
+
 // SymbolTable returns the symbol table
 func (c *Compiler) SymbolTable() *SymbolTable {
 	return c.symbolTable

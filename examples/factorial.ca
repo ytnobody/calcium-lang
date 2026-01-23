@@ -1,5 +1,5 @@
 // Factorial example in Calcium
-use core.io;
+use core.io!;
 
 func factorial(n) = match n
     0 => 1
@@ -10,9 +10,9 @@ func build_factorial_message(n) = n
     |> (r => concat(to_string(n), "! = ", to_string(r)));
 
 // Factorial calculation and output using pipeline
-"Factorial calculations:" |> io.say;
+"Factorial calculations:" !> io.say;
 
 // Process array with map and output each element
 result = [0, 1, 2, 3, 4, 5, 10] |> map(
-    n => build_factorial_message(n) |> io.say
+    n => build_factorial_message(n) !> io.say
 );

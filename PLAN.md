@@ -362,23 +362,23 @@ go test -cover ./...
 use core.io!
 
 // Hello World
-"Hello, Calcium!" |> io.say;
+"Hello, Calcium!" !> io.say;
 
 // Variables and operations
 x = 10;
 y = 20;
-concat("x + y = ", to_string(x + y)) |> io.say;
+concat("x + y = ", to_string(x + y)) !> io.say;
 
 // Pure function definition
 func double(n) = n * 2;
-double(21) |> io.say;
+double(21) !> io.say;
 
 // Pipeline
 result = [1, 2, 3, 4, 5]
   |> map(x => x * 2)
   |> filter(x => x > 5)
   |> reduce((a, b) => a + b, 0);
-result |> io.say;
+result !> io.say;
 
 // match
 func fizzbuzz(n) =
@@ -388,7 +388,7 @@ func fizzbuzz(n) =
     n % 5 == 0 => "Buzz"
     _ => to_string(n);
 
-fizzbuzz(15) |> io.say;
+fizzbuzz(15) !> io.say;
 
 // Effect functions and !> pipeline
 func! save_data(data) = /* Save data */;
@@ -400,8 +400,8 @@ func! process_and_save(input) =
   !> save_data
   !> notify_user
   !? {
-    success(r) => "Complete" |> io.say
-    failure(e) => concat("Error: ", e) |> io.say
+    success(r) => "Complete" !> io.say
+    failure(e) => concat("Error: ", e) !> io.say
   };
 ```
 

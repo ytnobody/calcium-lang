@@ -81,9 +81,10 @@ type EmittedInstruction struct {
 
 // Symbol represents a variable binding
 type Symbol struct {
-	Name  string
-	Scope SymbolScope
-	Index int
+	Name     string
+	Scope    SymbolScope
+	Index    int
+	IsEffect bool // true for func! or effect module members
 }
 
 // SymbolScope represents where a symbol is defined
@@ -120,7 +121,20 @@ func NewEnclosedSymbolTable(outer *SymbolTable) *SymbolTable {
 
 // Define defines a new symbol
 func (s *SymbolTable) Define(name string) Symbol {
-	symbol := Symbol{Name: name, Index: s.count}
+	symbol := Symbol{Name: name, Index: s.count, IsEffect: false}
+	if s.Outer == nil {
+		symbol.Scope = GlobalScope
+	} else {
+		symbol.Scope = LocalScope
+	}
+	s.store[name] = symbol
+	s.count++
+	return symbol
+}
+
+// DefineEffect defines a new effect symbol (for func! or effect module members)
+func (s *SymbolTable) DefineEffect(name string) Symbol {
+	symbol := Symbol{Name: name, Index: s.count, IsEffect: true}
 	if s.Outer == nil {
 		symbol.Scope = GlobalScope
 	} else {
@@ -337,6 +351,38 @@ func (c *Compiler) getAllDefinedNames() []string {
 	return names
 }
 
+// isEffectExpression checks if an expression refers to an effect function
+// Returns: (isEffect bool, canDetermine bool)
+// canDetermine is false if we can't statically determine the effect status
+func (c *Compiler) isEffectExpression(expr ast.Expression) (bool, bool) {
+	switch e := expr.(type) {
+	case *ast.Identifier:
+		// Direct identifier - check symbol table
+		if symbol, ok := c.symbolTable.Resolve(e.Value); ok {
+			return symbol.IsEffect, true
+		}
+		return false, false
+
+	case *ast.MemberExpression:
+		// Member access like io.say - check if the object is an effect module
+		if ident, ok := e.Object.(*ast.Identifier); ok {
+			if symbol, ok := c.symbolTable.Resolve(ident.Value); ok {
+				// If the module is an effect module, its members are effect functions
+				return symbol.IsEffect, true
+			}
+		}
+		return false, false
+
+	case *ast.CallExpression:
+		// For call expressions in pipe, check the function
+		return c.isEffectExpression(e.Function)
+
+	default:
+		// Lambda, etc. - can't determine statically
+		return false, false
+	}
+}
+
 // NewWithState creates a compiler with existing state
 func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 	mainScope := CompilationScope{
@@ -471,7 +517,13 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 	case *ast.FunctionDeclaration:
 		// Define the function name FIRST (for recursion support)
-		symbol := c.symbolTable.Define(node.Name.Value)
+		// Use DefineEffect for func! functions
+		var symbol Symbol
+		if node.IsEffect {
+			symbol = c.symbolTable.DefineEffect(node.Name.Value)
+		} else {
+			symbol = c.symbolTable.Define(node.Name.Value)
+		}
 
 		c.enterScope()
 
@@ -829,6 +881,16 @@ func (c *Compiler) Compile(node ast.Node) error {
 		// expr |> func is equivalent to func(expr)
 		// Stack order for call: [func, arg1, arg2, ...]
 
+		// Check if right side is an effect function - should use !> instead
+		funcExpr := node.Right
+		if call, ok := node.Right.(*ast.CallExpression); ok {
+			funcExpr = call.Function
+		}
+		if isEffect, canDetermine := c.isEffectExpression(funcExpr); canDetermine && isEffect {
+			return c.newCompileError(node.Token,
+				"cannot use '|>' with effect function; use '!>' instead")
+		}
+
 		// Check if left side is a spread expression
 		if spread, ok := node.Left.(*ast.SpreadExpression); ok {
 			// arr... |> func -> call func with spread array elements
@@ -932,6 +994,16 @@ func (c *Compiler) Compile(node ast.Node) error {
 		// Effect functions automatically wrap their return in success
 		// Stack order for call: [func, arg1, arg2, ...]
 
+		// Check if right side is NOT an effect function - should use |> instead
+		funcExpr := node.Right
+		if call, ok := node.Right.(*ast.CallExpression); ok {
+			funcExpr = call.Function
+		}
+		if isEffect, canDetermine := c.isEffectExpression(funcExpr); canDetermine && !isEffect {
+			return c.newCompileError(node.Token,
+				"cannot use '!>' with pure function; use '|>' instead")
+		}
+
 		// Compile the right side (effect function) first
 		err := c.Compile(node.Right)
 		if err != nil {
@@ -1020,7 +1092,13 @@ func (c *Compiler) Compile(node ast.Node) error {
 		// The module is stored with the last part of the path as its name
 		// e.g., "use core.io!" -> variable "io"
 		moduleName := node.Path.Parts[len(node.Path.Parts)-1]
-		symbol := c.symbolTable.Define(moduleName)
+		var symbol Symbol
+		if node.IsEffect {
+			// Effect modules (use xxx!) - members are effect functions
+			symbol = c.symbolTable.DefineEffect(moduleName)
+		} else {
+			symbol = c.symbolTable.Define(moduleName)
+		}
 		if symbol.Scope == GlobalScope {
 			c.emit(bytecode.OpSetGlobal, symbol.Index)
 		} else {

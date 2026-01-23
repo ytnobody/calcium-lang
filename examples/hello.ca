@@ -1,6 +1,6 @@
 // Hello World in Calcium
-use core.io;
+use core.io!;
 
 // Output using pipeline
-"Hello, Calcium!" |> io.say;
-"Welcome to the functional world." |> io.say;
+"Hello, Calcium!" !> io.say;
+"Welcome to the functional world." !> io.say;

@@ -154,7 +154,7 @@ calcium app.bone
 use core.regex;
 pattern = /^[a-z]+@[a-z]+\.[a-z]{2,}$/i;
 email = "test@example.com";
-regex.matches(email, pattern) |> io.println;
+regex.matches(email, pattern) !> io.println;
 ```
 
 Regex is compiled at compile time and saved in `.bone` file.

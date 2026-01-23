@@ -883,12 +883,12 @@ Output to standard output.
 ```calcium
 use core.io!
 
-"Hello" |> io.say;    // Hello\n (with newline)
-"Hello" |> io.print;  // Hello (no newline)
+"Hello" !> io.say;    // Hello\n (with newline)
+"Hello" !> io.print;  // Hello (no newline)
 
 // Values are automatically converted to strings
-42 |> io.say;         // 42\n
-[1, 2, 3] |> io.say;  // [1, 2, 3]\n
+42 !> io.say;         // 42\n
+[1, 2, 3] !> io.say;  // [1, 2, 3]\n
 ```
 
 #### io.stdin / io.eof (Event Sources)
@@ -1187,8 +1187,8 @@ func! main() =
   !> save
   !> notify
   !? {
-    success(_) => "Done!" |> io.say
-    failure(e) => concat("Error: ", e) |> io.say
+    success(_) => "Done!" !> io.say
+    failure(e) => concat("Error: ", e) !> io.say
   }
 ```
 
@@ -1250,8 +1250,8 @@ Output is provided by the `core.io!` module:
 ```calcium
 use core.io!
 
-"Hello" |> io.say;    // Hello\n (with newline)
-"Hello" |> io.print;  // Hello (no newline)
+"Hello" !> io.say;    // Hello\n (with newline)
+"Hello" !> io.print;  // Hello (no newline)
 ```
 
 ### Input
@@ -1276,8 +1276,8 @@ async.stay(lines: []) {
     })
     |> _.ready()
 } !? {
-  success(result) => result |> map(line => line |> io.say)
-  failure(e) => e |> io.say
+  success(result) => result |> map(line => line !> io.say)
+  failure(e) => e !> io.say
 };
 ```
 
@@ -1293,7 +1293,7 @@ use core.io!
 // File contents are executed directly
 x = 10;
 y = 20;
-x + y |> io.say;
+x + y !> io.say;
 ```
 
 Command-line arguments are obtained via the global variable `args` (program name not included):
@@ -1305,7 +1305,7 @@ args[0];              // First argument
 len(args);            // Number of arguments
 
 // Output all arguments
-args |> map(arg => arg |> io.say);
+args |> map(arg => arg !> io.say);
 ```
 
 Program name is obtained via `program_name`:
@@ -1313,7 +1313,7 @@ Program name is obtained via `program_name`:
 ```calcium
 use core.io!
 
-program_name |> io.say;  // Name of the running program
+program_name !> io.say;  // Name of the running program
 ```
 
 ## File Extension

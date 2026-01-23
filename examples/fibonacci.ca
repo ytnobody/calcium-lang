@@ -1,5 +1,5 @@
 // Fibonacci example in Calcium
-use core.io;
+use core.io!;
 
 // Recursive Fibonacci
 func fib(n) = match n
@@ -12,19 +12,19 @@ func build_fib_message(n) = n
     |> (r => concat("fib(", to_string(n), ") = ", to_string(r)));
 
 // Output Fibonacci sequence
-"Fibonacci sequence:" |> io.say;
+"Fibonacci sequence:" !> io.say;
 
 result = range(0, 15) |> map(
-    n => build_fib_message(n) |> io.say
+    n => build_fib_message(n) !> io.say
 );
 
 // Check how it approaches the golden ratio
-"" |> io.say;
-"Ratio fib(n)/fib(n-1) approaches golden ratio:" |> io.say;
+"" !> io.say;
+"Ratio fib(n)/fib(n-1) approaches golden ratio:" !> io.say;
 
 result = range(2, 15) |> map(n =>
     concat(
         "fib(", to_string(n), ")/fib(", to_string(n - 1), ") = ",
         to_string(fib(n)), "/", to_string(fib(n - 1))
-    ) |> io.say
+    ) !> io.say
 );

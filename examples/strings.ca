@@ -1,45 +1,45 @@
 // String manipulation in Calcium
-use core.io;
+use core.io!;
 use core.string;
 
 message = "  Hello, Calcium World!  ";
 
-"Original (with spaces):" |> io.say;
-message |> (s => concat("'", s, "'")) |> io.say;
+"Original (with spaces):" !> io.say;
+message |> (s => concat("'", s, "'")) !> io.say;
 
 // String transformation chain using pipeline
-"Trimmed:" |> io.say;
-message |> string.trim |> io.say;
+"Trimmed:" !> io.say;
+message |> string.trim !> io.say;
 
-"Upper case:" |> io.say;
-message |> string.upper |> io.say;
+"Upper case:" !> io.say;
+message |> string.upper !> io.say;
 
-"Lower case:" |> io.say;
-message |> string.lower |> io.say;
+"Lower case:" !> io.say;
+message |> string.lower !> io.say;
 
 // Chaining trim → upper
-"Trimmed and uppercased:" |> io.say;
-message |> string.trim |> string.upper |> io.say;
+"Trimmed and uppercased:" !> io.say;
+message |> string.trim |> string.upper !> io.say;
 
 // Pipeline: Split → process → Join
-"Split by comma:" |> io.say;
+"Split by comma:" !> io.say;
 fruits = "apple,banana,cherry" |> (s => string.split(s, ","));
-fruits |> io.say;
+fruits !> io.say;
 
-"Joined with ' - ':" |> io.say;
-fruits |> (arr => string.join(arr, " - ")) |> io.say;
+"Joined with ' - ':" !> io.say;
+fruits |> (arr => string.join(arr, " - ")) !> io.say;
 
 // String inspection using pipeline
-"Contains 'Calcium'?" |> io.say;
-message |> (s => string.contains(s, "Calcium")) |> io.say;
+"Contains 'Calcium'?" !> io.say;
+message |> (s => string.contains(s, "Calcium")) !> io.say;
 
-"Starts with '  Hello'?" |> io.say;
-message |> (s => string.starts_with(s, "  Hello")) |> io.say;
+"Starts with '  Hello'?" !> io.say;
+message |> (s => string.starts_with(s, "  Hello")) !> io.say;
 
 // Compound pipeline: trim → replace → upper
-"Transform pipeline (trim → replace → upper):" |> io.say;
+"Transform pipeline (trim → replace → upper):" !> io.say;
 message
     |> string.trim
     |> (s => string.replace(s, "World", "Universe"))
     |> string.upper
-    |> io.say;
+    !> io.say;

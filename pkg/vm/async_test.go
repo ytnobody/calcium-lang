@@ -185,7 +185,7 @@ func TestAsyncExpects(t *testing.T) {
 	input := `
 use core.schedule!
 use core.async!
-h = schedule.timeout(100) |> async.expects(() => 1)
+h = schedule.timeout(100) !> async.expects(() => 1)
 h
 `
 	result := testEval(t, input)

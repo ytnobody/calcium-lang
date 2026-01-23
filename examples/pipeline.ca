@@ -1,12 +1,12 @@
 // Pipeline demonstration in Calcium
-use core.io;
+use core.io!;
 use core.array;
 
 // Data generation
 numbers = range(1, 11);
 
-"Original numbers:" |> io.say;
-numbers |> io.say;
+"Original numbers:" !> io.say;
+numbers !> io.say;
 
 // Pipeline chain: filter even numbers → double → sum
 result = numbers
@@ -14,26 +14,26 @@ result = numbers
     |> map(x => x * 2)
     |> reduce((a, b) => a + b, 0);
 
-"Sum of doubled even numbers:" |> io.say;
-result |> io.say;
+"Sum of doubled even numbers:" !> io.say;
+result !> io.say;
 
 // Array operations using pipeline
-"Reversed:" |> io.say;
-numbers |> array.reverse |> io.say;
+"Reversed:" !> io.say;
+numbers |> array.reverse !> io.say;
 
-"First 5:" |> io.say;
-numbers |> (arr => array.take(arr, 5)) |> io.say;
+"First 5:" !> io.say;
+numbers |> (arr => array.take(arr, 5)) !> io.say;
 
-"Sum:" |> io.say;
-numbers |> array.sum |> io.say;
+"Sum:" !> io.say;
+numbers |> array.sum !> io.say;
 
 // Compound pipeline: filter odd numbers, cube them, and sum
-"Sum of cubes of odd numbers (1³+3³+5³+7³+9³):" |> io.say;
+"Sum of cubes of odd numbers (1³+3³+5³+7³+9³):" !> io.say;
 numbers
     |> filter(x => x % 2 == 1)
     |> map(x => x * x * x)
     |> array.sum
-    |> io.say;
+    !> io.say;
 
 // Define FizzBuzz functions
 func fizz(n) = match n % 3  0 => "Fizz"  _ => "";
@@ -46,5 +46,5 @@ func fizzbuzz_or(result, n) = match result
 func fizzbuzz(n) = fizz(n) + buzz(n) |> fizzbuzz_or(n);
 
 // FizzBuzz pipeline
-"FizzBuzz (1-15):" |> io.say;
-range(1, 16) |> map(fizzbuzz) |> io.say;
+"FizzBuzz (1-15):" !> io.say;
+range(1, 16) |> map(fizzbuzz) !> io.say;

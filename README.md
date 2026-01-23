@@ -53,7 +53,7 @@ calcium version
 ```calcium
 use core.io!
 
-"Hello, Calcium!" |> io.println;
+"Hello, Calcium!" !> io.println;
 ```
 
 ### Pipeline Operator
@@ -65,14 +65,14 @@ use core.io!
 
 // These are equivalent:
 io.println("Hello");
-"Hello" |> io.println;
+"Hello" !> io.println;
 
 // Chain multiple operations
 [1, 2, 3, 4, 5]
     |> filter(x => x % 2 == 1)
     |> map(x => x * x)
     |> reduce((a, b) => a + b, 0)
-    |> io.println;  // Output: 35
+    !> io.println;  // Output: 35
 ```
 
 ### Functions
@@ -142,7 +142,7 @@ map([1, 2, 3], x => x * 2);  // [2, 4, 6]
 [1, 2, 3, 4, 5]
     |> filter(x => x > 2)
     |> map(x => x * 10)
-    |> io.println;  // [30, 40, 50]
+    !> io.println;  // [30, 40, 50]
 ```
 
 ### Closures

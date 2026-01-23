@@ -508,6 +508,36 @@ func primitiveRegexReplace(args ...value.Value) value.Value {
 	return value.String(re.Re.ReplaceAllString(str, repl))
 }
 
+// __regex_replace_first replaces only the first match with a replacement string
+func primitiveRegexReplaceFirst(args ...value.Value) value.Value {
+	if len(args) != 3 {
+		return value.Failure(value.String("__regex_replace_first: expected 3 arguments (string, regex, replacement)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__regex_replace_first: first argument must be string"))
+	}
+	if args[1].Type != value.TYPE_REGEX {
+		return value.Failure(value.String("__regex_replace_first: second argument must be regex"))
+	}
+	if args[2].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__regex_replace_first: third argument must be string"))
+	}
+	str := args[0].AsString()
+	re := args[1].AsRegex()
+	repl := args[2].AsString()
+
+	// Find the first match
+	loc := re.Re.FindStringIndex(str)
+	if loc == nil {
+		// No match, return original string
+		return value.String(str)
+	}
+
+	// Replace only the first match
+	result := str[:loc[0]] + repl + str[loc[1]:]
+	return value.String(result)
+}
+
 // __regex_split splits a string by a regex pattern
 func primitiveRegexSplit(args ...value.Value) value.Value {
 	if len(args) != 2 {
@@ -1062,7 +1092,8 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__regex_test":     {Name: "__regex_test", Fn: primitiveRegexTest},
 		"__regex_find":     {Name: "__regex_find", Fn: primitiveRegexFind},
 		"__regex_find_all": {Name: "__regex_find_all", Fn: primitiveRegexFindAll},
-		"__regex_replace":  {Name: "__regex_replace", Fn: primitiveRegexReplace},
+		"__regex_replace":       {Name: "__regex_replace", Fn: primitiveRegexReplace},
+		"__regex_replace_first": {Name: "__regex_replace_first", Fn: primitiveRegexReplaceFirst},
 		"__regex_split":    {Name: "__regex_split", Fn: primitiveRegexSplit},
 		"__regex_capture":  {Name: "__regex_capture", Fn: primitiveRegexCapture},
 		"__regex_compile":  {Name: "__regex_compile", Fn: primitiveRegexCompile},

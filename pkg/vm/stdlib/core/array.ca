@@ -108,7 +108,36 @@ func count(arr, pred) = filter(arr, pred) |> len;
 // partition splits array into two based on predicate
 func partition(arr, pred) = [filter(arr, pred), filter(arr, x => !pred(x))];
 
-// Note: sort and sort_by not implemented due to parser limitations with mutual recursion
+// sort sorts an array in ascending order using quicksort
+// Helper: partition into less than pivot
+func _sort_less(arr, pivot) = filter(arr, x => x < pivot);
+
+// Helper: partition into greater or equal to pivot
+func _sort_geq(arr, pivot) = filter(arr, x => x >= pivot);
+
+// Main sort function (quicksort)
+func sort(arr) = match len(arr) <= 1
+    true => arr
+    false => concat(
+        sort(_sort_less(tail(arr), head(arr))),
+        concat([head(arr)], sort(_sort_geq(tail(arr), head(arr))))
+    );
+
+// sort_by sorts an array using a custom comparison function
+// cmp(a, b) should return true if a should come before b
+// Helper: partition into elements that should come before pivot
+func _sort_by_less(arr, pivot, cmp) = filter(arr, x => cmp(x, pivot));
+
+// Helper: partition into elements that should come after or equal to pivot
+func _sort_by_geq(arr, pivot, cmp) = filter(arr, x => !cmp(x, pivot));
+
+// Main sort_by function
+func sort_by(arr, cmp) = match len(arr) <= 1
+    true => arr
+    false => concat(
+        sort_by(_sort_by_less(tail(arr), head(arr), cmp), cmp),
+        concat([head(arr)], sort_by(_sort_by_geq(tail(arr), head(arr), cmp), cmp))
+    );
 
 // Helper for chunk
 func _chunk_final(arr) = match len(arr) == 0

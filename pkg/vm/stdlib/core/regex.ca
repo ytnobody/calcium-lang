@@ -40,8 +40,9 @@ func is_match(s, pattern) = matches(s, pattern);
 // extract extracts named groups (if supported) or returns capture groups
 func extract(s, pattern) = capture(s, pattern);
 
-// replace_first is not implemented due to parser limitations
-// Use replace() which replaces all occurrences
+// replace_first replaces only the first match with a replacement string
+// replace_first("hello", /l/, "L") -> "heLlo"
+func replace_first(s, pattern, replacement) = __regex_replace_first(s, pattern, replacement)
 
 // escape escapes special regex characters in a string
 func escape(s) =

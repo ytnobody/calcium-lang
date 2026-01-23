@@ -380,6 +380,8 @@ toml.stringify(data);
 | `array.count(arr, pred)` | Count matching elements |
 | `array.partition(arr, pred)` | Split by predicate |
 | `array.chunk(arr, n)` | Split into chunks of size n |
+| `array.sort(arr)` | Sort array in ascending order |
+| `array.sort_by(arr, cmp)` | Sort with custom comparison function |
 
 ### core.regex
 
@@ -388,7 +390,8 @@ toml.stringify(data);
 | `regex.matches(s, pattern)` | Test if pattern matches |
 | `regex.find(s, pattern)` | Find first match |
 | `regex.find_all(s, pattern)` | Find all matches |
-| `regex.replace(s, pattern, replacement)` | Replace matches |
+| `regex.replace(s, pattern, replacement)` | Replace all matches |
+| `regex.replace_first(s, pattern, replacement)` | Replace first match only |
 | `regex.split(s, pattern)` | Split by pattern |
 | `regex.capture(s, pattern)` | Extract capture groups |
 

@@ -99,6 +99,10 @@ Calcium has the following value types:
 
 ### Strings
 
+Calcium supports three string syntaxes:
+
+#### Double-quoted strings
+
 ```calcium
 "Hello, World!"
 "Line 1\nLine 2"    // Newline
@@ -108,6 +112,53 @@ Calcium has the following value types:
 ```
 
 Escape sequences: `\\`, `\"`, `\n`, `\t`, `\r`
+
+Double-quoted strings support interpolation with `${...}`:
+
+```calcium
+name = "Alice";
+"Hello, ${name}!";           // "Hello, Alice!"
+"Sum: ${1 + 2}";             // "Sum: 3"
+```
+
+#### Single-quoted strings
+
+Single-quoted strings are useful when the content contains double quotes:
+
+```calcium
+'Hello, World!'
+'Say "hello"'               // No escaping needed for double quotes
+'It\'s easy'                // Escape single quotes with \'
+```
+
+Escape sequences: `\\`, `\'`, `\n`, `\t`, `\r`
+
+Note: Single-quoted strings do not support interpolation.
+
+#### Heredoc (triple-quoted strings)
+
+Heredocs allow multi-line strings without escaping:
+
+```calcium
+text = """
+This is a multi-line string.
+No escaping needed for "quotes" or 'apostrophes'.
+Newlines are preserved.
+""";
+
+// Useful for JSON, HTML, SQL, etc.
+json = """
+{
+    "name": "Alice",
+    "age": 30
+}
+""";
+```
+
+- Leading newline after opening `"""` is stripped
+- Trailing newline before closing `"""` is stripped
+- Content is taken literally (no escape processing)
+- No interpolation support
 
 ### Arrays
 
@@ -637,6 +688,33 @@ src = schedule.interval(100);  // Fires every 100ms
 | `array.take(arr, n)` | First n elements |
 | `array.drop(arr, n)` | Remove first n elements |
 
+### core.assert!
+
+Testing and assertion module. All functions require a label as the first argument.
+
+| Function | Description |
+|----------|-------------|
+| `assert.eq(label, actual, expected)` | Assert equality |
+| `assert.neq(label, actual, expected)` | Assert inequality |
+| `assert.is_true(label, value)` | Assert value is true |
+| `assert.is_false(label, value)` | Assert value is false |
+| `assert.is_null(label, value)` | Assert value is null |
+| `assert.is_type(label, value, type)` | Assert value has type |
+| `assert.len_eq(label, collection, length)` | Assert collection length |
+| `assert.throws(label, result)` | Assert result is failure |
+| `assert.fail(message)` | Force test failure |
+| `assert.section(name)` | Print section header |
+
+Example:
+
+```calcium
+use core.assert!;
+
+assert.section("Math tests");
+assert.eq("addition", 1 + 1, 2);
+assert.is_true("comparison", 5 > 3);
+```
+
 ### core.async!
 
 | Function | Description |
@@ -679,6 +757,50 @@ These functions are available without imports:
 | `map(fn, arr)` | Transform elements |
 | `filter(pred, arr)` | Filter elements |
 | `reduce(fn, init, arr)` | Fold array |
+
+---
+
+## Testing
+
+### Test Files
+
+Test files use the `.test.ca` extension. They are regular Calcium source files that use the `core.assert!` module.
+
+```calcium
+// math.test.ca
+use core.io!;
+use core.assert!;
+
+io.println("Math Tests");
+io.println("==========");
+
+assert.section("Addition");
+assert.eq("1 + 1", 1 + 1, 2);
+assert.eq("negative", -5 + 3, -2);
+
+assert.section("Multiplication");
+assert.eq("2 * 3", 2 * 3, 6);
+
+io.println("==========");
+io.println("Tests complete!");
+```
+
+### Running Tests
+
+Use the `calcium test` command to run all test files in a directory:
+
+```bash
+# Run all .test.ca files in ./tests
+calcium test ./tests
+
+# Run tests in current directory
+calcium test .
+```
+
+The test runner will:
+- Find all `.test.ca` files in the specified directory
+- Execute each test file
+- Display pass/fail summary
 
 ---
 

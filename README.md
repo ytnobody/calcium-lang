@@ -40,6 +40,9 @@ calcium compile program.ca -o program.bone
 # Run compiled bytecode
 calcium run program.bone
 
+# Run tests
+calcium test ./tests     # Run all .test.ca files in directory
+
 # Start interactive REPL
 calcium repl
 
@@ -94,9 +97,29 @@ func factorial(n) = match n
     _ => n * factorial(n - 1);
 ```
 
+### Strings
+
+Calcium supports three string syntaxes:
+
+```calcium
+// Double-quoted strings (with interpolation)
+name = "World";
+"Hello, ${name}!"              // Hello, World!
+
+// Single-quoted strings (simpler escaping for JSON, etc.)
+json = '{"name": "Alice", "age": 30}';
+
+// Heredoc (triple-quoted) for multi-line strings
+html = """
+<html>
+    <body>Hello, World!</body>
+</html>
+""";
+```
+
 ### String Interpolation
 
-Embed expressions in strings using `${...}`:
+Embed expressions in double-quoted strings using `${...}`:
 
 ```calcium
 use core.io!
@@ -112,6 +135,8 @@ arr = [1, 2, 3];
 "Array: ${arr}, length: ${len(arr)}" !> io.println;
 // Array: [1, 2, 3], length: 3
 ```
+
+Note: Single-quoted strings and heredocs do not support interpolation.
 
 ### Effect Functions
 

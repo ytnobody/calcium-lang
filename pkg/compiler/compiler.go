@@ -91,10 +91,11 @@ type Symbol struct {
 type SymbolScope string
 
 const (
-	GlobalScope  SymbolScope = "GLOBAL"
-	LocalScope   SymbolScope = "LOCAL"
-	BuiltinScope SymbolScope = "BUILTIN"
-	FreeScope    SymbolScope = "FREE"
+	GlobalScope      SymbolScope = "GLOBAL"
+	LocalScope       SymbolScope = "LOCAL"
+	BuiltinScope     SymbolScope = "BUILTIN"
+	FreeScope        SymbolScope = "FREE"
+	StayStateScope   SymbolScope = "STAY_STATE"
 )
 
 // SymbolTable manages variable bindings
@@ -152,6 +153,14 @@ func (s *SymbolTable) DefineBuiltin(index int, name string) Symbol {
 	return symbol
 }
 
+// DefineStayState defines a stay state variable
+// The Index field stores the constant index of the key name
+func (s *SymbolTable) DefineStayState(name string, keyConstIndex int) Symbol {
+	symbol := Symbol{Name: name, Scope: StayStateScope, Index: keyConstIndex}
+	s.store[name] = symbol
+	return symbol
+}
+
 // Resolve looks up a symbol
 func (s *SymbolTable) Resolve(name string) (Symbol, bool) {
 	obj, ok := s.store[name]
@@ -160,8 +169,9 @@ func (s *SymbolTable) Resolve(name string) (Symbol, bool) {
 		if !ok {
 			return obj, ok
 		}
-		// Global and builtin symbols don't need to be captured as free variables
-		if obj.Scope == GlobalScope || obj.Scope == BuiltinScope {
+		// Global, builtin, and stay state symbols don't need to be captured as free variables
+		// Stay state variables are always accessed via OpStayGetState from the current stay loop
+		if obj.Scope == GlobalScope || obj.Scope == BuiltinScope || obj.Scope == StayStateScope {
 			return obj, ok
 		}
 		// This is a free variable - capture it
@@ -1384,9 +1394,12 @@ func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression) error {
 func (c *Compiler) compileStayExpression(node *ast.StayExpression) error {
 	// Compile state initialization values and keys
 	// Stack will have: [key1, val1, key2, val2, ...]
-	for _, pair := range node.StateInit {
+	// Also collect key constant indices for later symbol definition
+	keyIndices := make([]int, len(node.StateInit))
+	for i, pair := range node.StateInit {
 		// Push key as string
 		keyIndex := c.addConstant(value.String(pair.Name.Value))
+		keyIndices[i] = keyIndex
 		c.emit(bytecode.OpConstant, keyIndex)
 
 		// Push value
@@ -1399,10 +1412,10 @@ func (c *Compiler) compileStayExpression(node *ast.StayExpression) error {
 	// Emit OpStayBegin with number of state pairs
 	c.emit(bytecode.OpStayBegin, len(node.StateInit))
 
-	// Define state variables as locals for use in body
-	// They will be accessed via OpStayGetState
-	for _, pair := range node.StateInit {
-		c.symbolTable.Define(pair.Name.Value)
+	// Define state variables with StayStateScope
+	// They will be accessed via OpStayGetState using the key constant index
+	for i, pair := range node.StateInit {
+		c.symbolTable.DefineStayState(pair.Name.Value, keyIndices[i])
 	}
 
 	// Compile body statements
@@ -1429,6 +1442,9 @@ func (c *Compiler) loadSymbol(s Symbol) {
 		c.emit(bytecode.OpBuiltin, s.Index)
 	case FreeScope:
 		c.emit(bytecode.OpGetFree, s.Index)
+	case StayStateScope:
+		// Index contains the constant index of the key name
+		c.emit(bytecode.OpStayGetState, s.Index)
 	}
 }
 

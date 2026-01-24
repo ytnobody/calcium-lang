@@ -78,9 +78,9 @@ func Update(moduleSpec string) error {
 
 		fmt.Printf("  %s/%s: %s -> %s\n", m.Author, m.Name, m.Version, newVersion)
 
-		// Re-add the module (this will update it)
+		// Re-add the module locally (this will update it)
 		spec := fmt.Sprintf("%s/%s", m.Author, m.Name)
-		if err := Add(spec); err != nil {
+		if err := Add(spec, false); err != nil {
 			fmt.Printf("    failed to update: %v\n", err)
 			continue
 		}

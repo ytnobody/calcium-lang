@@ -325,33 +325,74 @@ func (vm *VM) LoadExternalModule(moduleName string) (*value.Module, error) {
 
 // LoadRemoteModule loads a module from remote sources (author/module format)
 // It tries:
-// 1. Global cache (stdlibCache)
-// 2. Local cache directory (~/.calcium/cache/author/module)
-// 3. Direct GitHub fetch
+// 1. In-memory cache (stdlibCache)
+// 2. Local project directory (calcium_modules/author/module)
+// 3. Global cache directory (~/.calcium/cache/author/module)
+// 4. Direct GitHub fetch (saves to global cache)
 func (vm *VM) LoadRemoteModule(author, name string) (*value.Module, error) {
 	cacheKey := author + "/" + name
 
-	// 1. Check global cache
+	// 1. Check in-memory cache
 	if mod, ok := stdlibCache[cacheKey]; ok {
 		return mod, nil
 	}
 
-	// 2. Check local cache directory
-	cacheDir := getModuleCachePath(author, name)
-	content := readCachedModule(cacheDir)
+	var content []byte
+	var moduleDir string
 
-	// 3. If not in cache, fetch from GitHub
+	// 2. Check local project's calcium_modules/
+	localDirs := vm.getLocalModuleDirs()
+	for _, dir := range localDirs {
+		localPath := filepath.Join(dir, "calcium_modules", author, name)
+		if c := readCachedModule(localPath); c != nil {
+			content = c
+			moduleDir = localPath
+			break
+		}
+	}
+
+	// 3. Check global cache directory
+	if content == nil {
+		globalDir := getModuleCachePath(author, name)
+		if c := readCachedModule(globalDir); c != nil {
+			content = c
+			moduleDir = globalDir
+		}
+	}
+
+	// 4. If not found, fetch from GitHub (save to global cache)
 	if content == nil {
 		content = fetchFromGitHubDirect(author, name)
 		if content == nil {
 			return nil, fmt.Errorf("remote module not found: %s/%s", author, name)
 		}
-		// Save to cache
-		saveToCacheDir(cacheDir, "mod.ca", content)
+		// Save to global cache
+		globalDir := getModuleCachePath(author, name)
+		saveToCacheDir(globalDir, "mod.ca", content)
+		moduleDir = globalDir
 	}
 
 	// Compile and cache the module
-	return vm.compileAndCacheRemoteModule(cacheKey, content, cacheDir)
+	return vm.compileAndCacheRemoteModule(cacheKey, content, moduleDir)
+}
+
+// getLocalModuleDirs returns directories to search for local modules
+func (vm *VM) getLocalModuleDirs() []string {
+	var dirs []string
+
+	// Add source file directory and parents
+	if vm.sourcePath != "" {
+		for dir := filepath.Dir(vm.sourcePath); dir != "/" && dir != "."; dir = filepath.Dir(dir) {
+			dirs = append(dirs, dir)
+		}
+	}
+
+	// Add current working directory
+	if cwd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, cwd)
+	}
+
+	return dirs
 }
 
 // LoadGitHubURLModule loads a module from a GitHub URL

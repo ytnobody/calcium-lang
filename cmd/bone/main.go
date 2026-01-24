@@ -49,8 +49,11 @@ Commands:
   init [name]              Initialize a new Calcium module
                            If name is provided, creates a new directory
   add <module>[@version]   Add a module from Boneyard
+                           Options:
+                             --global, -g  Install to global cache (~/.calcium/cache/)
                            Examples: bone add AUTHOR/module
                                      bone add AUTHOR/module@1.0.0
+                                     bone add --global AUTHOR/module
   remove <module>          Remove an installed module
   list                     List installed modules
   update [module]          Update modules to latest versions
@@ -60,8 +63,8 @@ Commands:
 Examples:
   bone init                Initialize module in current directory
   bone init my-lib         Create new module 'my-lib'
-  bone add JOHNDOE/utils   Install latest version of utils
-  bone add ALICE/http@2.0  Install specific version`)
+  bone add JOHNDOE/utils   Install latest version of utils (local)
+  bone add -g ALICE/http   Install to global cache`)
 }
 
 func handleInit(args []string) {
@@ -79,12 +82,29 @@ func handleInit(args []string) {
 func handleAdd(args []string) {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "Error: module name required")
-		fmt.Fprintln(os.Stderr, "Usage: bone add <AUTHOR/module>[@version]")
+		fmt.Fprintln(os.Stderr, "Usage: bone add [--global|-g] <AUTHOR/module>[@version]")
 		os.Exit(1)
 	}
 
-	for _, module := range args {
-		if err := bone.Add(module); err != nil {
+	global := false
+	modules := []string{}
+
+	for _, arg := range args {
+		if arg == "--global" || arg == "-g" {
+			global = true
+		} else {
+			modules = append(modules, arg)
+		}
+	}
+
+	if len(modules) == 0 {
+		fmt.Fprintln(os.Stderr, "Error: module name required")
+		fmt.Fprintln(os.Stderr, "Usage: bone add [--global|-g] <AUTHOR/module>[@version]")
+		os.Exit(1)
+	}
+
+	for _, module := range modules {
+		if err := bone.Add(module, global); err != nil {
 			fmt.Fprintf(os.Stderr, "Error adding %s: %v\n", module, err)
 			os.Exit(1)
 		}

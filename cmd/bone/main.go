@@ -28,6 +28,8 @@ func main() {
 		handleList(args[1:])
 	case "update":
 		handleUpdate(args[1:])
+	case "config":
+		handleConfig(args[1:])
 	case "version", "-v", "--version":
 		fmt.Printf("bone version %s\n", version)
 	case "help", "-h", "--help":
@@ -57,14 +59,21 @@ Commands:
   remove <module>          Remove an installed module
   list                     List installed modules
   update [module]          Update modules to latest versions
+  config                   Show all configuration
+  config get <key>         Get a configuration value
+  config set <key> <value> Set a configuration value
   version                  Show bone version
   help                     Show this help message
+
+Configuration keys:
+  registry_url             URL of the module registry
 
 Examples:
   bone init                Initialize module in current directory
   bone init my-lib         Create new module 'my-lib'
   bone add JOHNDOE/utils   Install latest version of utils (local)
-  bone add -g ALICE/http   Install to global cache`)
+  bone add -g ALICE/http   Install to global cache
+  bone config set registry_url https://example.com/registry`)
 }
 
 func handleInit(args []string) {
@@ -141,6 +150,49 @@ func handleUpdate(args []string) {
 
 	if err := bone.Update(module); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func handleConfig(args []string) {
+	if len(args) == 0 {
+		// Show all config
+		if err := bone.ShowConfig(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	switch args[0] {
+	case "get":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Error: key required")
+			fmt.Fprintln(os.Stderr, "Usage: bone config get <key>")
+			os.Exit(1)
+		}
+		value, err := bone.GetConfig(args[1])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(value)
+
+	case "set":
+		if len(args) < 3 {
+			fmt.Fprintln(os.Stderr, "Error: key and value required")
+			fmt.Fprintln(os.Stderr, "Usage: bone config set <key> <value>")
+			os.Exit(1)
+		}
+		if err := bone.SetConfig(args[1], args[2]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Set %s = %s\n", args[1], args[2])
+
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown config command: %s\n", args[0])
+		fmt.Fprintln(os.Stderr, "Usage: bone config [get|set] ...")
 		os.Exit(1)
 	}
 }

@@ -38,10 +38,11 @@ func GetIndexPath(author, name string) string {
 	return fmt.Sprintf("%s/%s/%s/%s", prefix1, prefix2, author, name)
 }
 
-// FetchMeta fetches meta.toml from Boneyard
+// FetchMeta fetches meta.toml from the registry
 func FetchMeta(author, name string) (*Meta, error) {
 	indexPath := GetIndexPath(author, name)
-	url := fmt.Sprintf("%s/%s/meta.toml", BoneyardRawURL, indexPath)
+	registryURL := GetRegistryURL()
+	url := fmt.Sprintf("%s/%s/meta.toml", registryURL, indexPath)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -64,7 +65,7 @@ func FetchMeta(author, name string) (*Meta, error) {
 	return &meta, nil
 }
 
-// FetchVersion fetches version info from Boneyard
+// FetchVersion fetches version info from the registry
 func FetchVersion(author, name, version string) (*VersionInfo, error) {
 	indexPath := GetIndexPath(author, name)
 
@@ -75,7 +76,8 @@ func FetchVersion(author, name, version string) (*VersionInfo, error) {
 		filename = version + ".toml"
 	}
 
-	url := fmt.Sprintf("%s/%s/%s", BoneyardRawURL, indexPath, filename)
+	registryURL := GetRegistryURL()
+	url := fmt.Sprintf("%s/%s/%s", registryURL, indexPath, filename)
 
 	resp, err := http.Get(url)
 	if err != nil {

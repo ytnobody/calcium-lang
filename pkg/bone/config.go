@@ -1,8 +1,10 @@
 package bone
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -11,9 +13,129 @@ const (
 	MetaFileName   = "meta.toml"
 	LockFileName   = "calcium.lock"
 	ModulesDir     = "calcium_modules"
-	BoneyardURL    = "https://boneyard.ca.land"
-	BoneyardRawURL = "https://raw.githubusercontent.com/ytnobody/boneyard/main/index"
+	ConfigFileName = "config.toml"
+
+	// Default registry URL
+	DefaultRegistryURL = "https://raw.githubusercontent.com/ytnobody/boneyard/main/index"
 )
+
+// BoneConfig represents the bone configuration file (~/.calcium/config.toml)
+type BoneConfig struct {
+	RegistryURL string `toml:"registry_url,omitempty"`
+}
+
+// getConfigDir returns the config directory path (~/.calcium)
+func getConfigDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".", ".calcium")
+	}
+	return filepath.Join(home, ".calcium")
+}
+
+// getConfigPath returns the config file path (~/.calcium/config.toml)
+func getConfigPath() string {
+	return filepath.Join(getConfigDir(), ConfigFileName)
+}
+
+// LoadBoneConfig loads the bone configuration from ~/.calcium/config.toml
+func LoadBoneConfig() (*BoneConfig, error) {
+	configPath := getConfigPath()
+
+	// Return default config if file doesn't exist
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return &BoneConfig{}, nil
+	}
+
+	var config BoneConfig
+	if _, err := toml.DecodeFile(configPath, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+	return &config, nil
+}
+
+// SaveBoneConfig saves the bone configuration to ~/.calcium/config.toml
+func SaveBoneConfig(config *BoneConfig) error {
+	configDir := getConfigDir()
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	configPath := getConfigPath()
+	f, err := os.Create(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to create config file: %w", err)
+	}
+	defer f.Close()
+
+	encoder := toml.NewEncoder(f)
+	return encoder.Encode(config)
+}
+
+// GetRegistryURL returns the registry URL from config or the default
+func GetRegistryURL() string {
+	config, err := LoadBoneConfig()
+	if err != nil || config.RegistryURL == "" {
+		return DefaultRegistryURL
+	}
+	return config.RegistryURL
+}
+
+// SetConfig sets a configuration value
+func SetConfig(key, value string) error {
+	config, err := LoadBoneConfig()
+	if err != nil {
+		config = &BoneConfig{}
+	}
+
+	switch strings.ToLower(key) {
+	case "registry_url", "registry":
+		config.RegistryURL = value
+	default:
+		return fmt.Errorf("unknown config key: %s", key)
+	}
+
+	return SaveBoneConfig(config)
+}
+
+// GetConfig gets a configuration value
+func GetConfig(key string) (string, error) {
+	config, err := LoadBoneConfig()
+	if err != nil {
+		return "", err
+	}
+
+	switch strings.ToLower(key) {
+	case "registry_url", "registry":
+		if config.RegistryURL == "" {
+			return DefaultRegistryURL + " (default)", nil
+		}
+		return config.RegistryURL, nil
+	default:
+		return "", fmt.Errorf("unknown config key: %s", key)
+	}
+}
+
+// ShowConfig displays all configuration values
+func ShowConfig() error {
+	config, err := LoadBoneConfig()
+	if err != nil {
+		config = &BoneConfig{}
+	}
+
+	fmt.Println("Bone configuration:")
+	fmt.Println()
+
+	registryURL := config.RegistryURL
+	if registryURL == "" {
+		registryURL = DefaultRegistryURL + " (default)"
+	}
+	fmt.Printf("  registry_url = %s\n", registryURL)
+	fmt.Println()
+	fmt.Printf("Config file: %s\n", getConfigPath())
+
+	return nil
+}
 
 // Dependency represents a module dependency with version constraint
 // Supports both simple string format and detailed object format:

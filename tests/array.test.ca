@@ -1,0 +1,78 @@
+// Array Operations Test
+use core.io!;
+use core.assert!;
+
+io.println("Array Tests");
+io.println("===========");
+
+// === Basic Operations ===
+assert.section("Basic operations");
+arr = [1, 2, 3, 4, 5];
+assert.len_eq("array length", arr, 5);
+assert.eq("head", head(arr), 1);
+assert.len_eq("tail length", tail(arr), 4);
+assert.eq("head of tail", head(tail(arr)), 2);
+
+// === Index Access ===
+assert.section("Index access");
+assert.eq("index 0", arr[0], 1);
+assert.eq("index 2", arr[2], 3);
+assert.eq("index 4", arr[4], 5);
+
+// === Push ===
+assert.section("Push");
+arr2 = push([1, 2], 3);
+assert.len_eq("after push", arr2, 3);
+assert.eq("pushed element", arr2[2], 3);
+
+// === Empty Array ===
+assert.section("Empty array");
+empty = [];
+assert.len_eq("empty array", empty, 0);
+
+// === Nested Arrays ===
+assert.section("Nested arrays");
+nested = [[1, 2], [3, 4]];
+assert.len_eq("nested length", nested, 2);
+assert.eq("nested[0][0]", nested[0][0], 1);
+assert.eq("nested[1][1]", nested[1][1], 4);
+
+// === Map ===
+assert.section("Map");
+doubled = map([1, 2, 3], x => x * 2);
+assert.eq("map first", doubled[0], 2);
+assert.eq("map second", doubled[1], 4);
+assert.eq("map third", doubled[2], 6);
+
+// === Filter ===
+assert.section("Filter");
+evens = filter([1, 2, 3, 4, 5], x => x % 2 == 0);
+assert.len_eq("filter count", evens, 2);
+assert.eq("filter first", evens[0], 2);
+assert.eq("filter second", evens[1], 4);
+
+// === Reduce ===
+assert.section("Reduce");
+sum = reduce([1, 2, 3, 4, 5], (acc, x) => acc + x, 0);
+assert.eq("reduce sum", sum, 15);
+
+product = reduce([1, 2, 3, 4], (acc, x) => acc * x, 1);
+assert.eq("reduce product", product, 24);
+
+// === Range ===
+assert.section("Range");
+r = range(1, 5);
+assert.len_eq("range length", r, 4);
+assert.eq("range first", r[0], 1);
+assert.eq("range last", r[3], 4);
+
+// === Combination ===
+assert.section("Combination (map + filter + reduce)");
+result = range(1, 11)
+    |> filter(x => x % 2 == 0)
+    |> map(x => x * x)
+    |> reduce((acc, x) => acc + x, 0);
+assert.eq("sum of squared evens", result, 220);
+
+io.println("\n===========");
+io.println("Array tests complete!");

@@ -1,0 +1,58 @@
+// String Operations Test
+use core.io!;
+use core.assert!;
+use core.string;
+
+io.println("String Tests");
+io.println("============");
+
+// === Basic Operations ===
+assert.section("Basic operations");
+assert.eq("len hello", len("hello"), 5);
+assert.eq("len empty", len(""), 0);
+assert.eq("concat", concat("hello", " world"), "hello world");
+
+// === Character Access ===
+assert.section("Character access");
+assert.eq("char_at first", string.char_at("hello", 0), "h");
+assert.eq("char_at last", string.char_at("hello", 4), "o");
+
+// === Substring ===
+assert.section("Substring");
+assert.eq("substring first word", string.substring("hello world", 0, 5), "hello");
+assert.eq("substring second word", string.substring("hello world", 6, 11), "world");
+
+// === Search ===
+assert.section("Search");
+assert.eq("index_of found", string.index_of("hello", "l"), 2);
+assert.eq("index_of not found", string.index_of("hello", "x"), -1);
+assert.is_true("contains positive", string.contains("hello world", "world"));
+assert.is_false("contains negative", string.contains("hello", "x"));
+assert.is_true("starts_with positive", string.starts_with("hello", "he"));
+assert.is_false("starts_with negative", string.starts_with("hello", "lo"));
+assert.is_true("ends_with positive", string.ends_with("hello", "lo"));
+assert.is_false("ends_with negative", string.ends_with("hello", "he"));
+
+// === Transformation ===
+assert.section("Transformation");
+assert.eq("to_upper", string.to_upper("hello"), "HELLO");
+assert.eq("to_lower", string.to_lower("HELLO"), "hello");
+assert.eq("trim", string.trim("  hello  "), "hello");
+assert.eq("replace", string.replace("hello world", "world", "calcium"), "hello calcium");
+
+// === Split and Join ===
+assert.section("Split and Join");
+parts = string.split("a,b,c", ",");
+assert.len_eq("split length", parts, 3);
+assert.eq("split first", head(parts), "a");
+assert.eq("join", string.join(["a", "b", "c"], "-"), "a-b-c");
+
+// === Escape Sequences ===
+assert.section("Escape sequences");
+assert.eq("newline length", len("\n"), 1);
+assert.eq("tab length", len("\t"), 1);
+assert.eq("quote length", len("\""), 1);
+assert.eq("backslash length", len("\\"), 1);
+
+io.println("\n============");
+io.println("String tests complete!");

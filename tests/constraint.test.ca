@@ -1,0 +1,74 @@
+// Constraint Test
+use core.io!;
+use core.assert!;
+use core.string;
+
+io.println("Constraint Tests");
+io.println("================");
+
+// === Basic Constraint ===
+assert.section("Basic constraint");
+constraint Positive(x) = x > 0;
+assert.is_true("Positive(5)", Positive(5));
+assert.is_false("Positive(-3)", Positive(-3));
+assert.is_false("Positive(0)", Positive(0));
+
+// === String Constraint ===
+assert.section("String constraint");
+constraint NonEmpty(s) = len(s) > 0;
+assert.is_true("NonEmpty hello", NonEmpty("hello"));
+assert.is_false("NonEmpty empty", NonEmpty(""));
+
+// === Compound Constraint ===
+assert.section("Compound constraint");
+constraint InRange(x) = x >= 0 && x <= 100;
+assert.is_true("InRange(50)", InRange(50));
+assert.is_true("InRange(0)", InRange(0));
+assert.is_true("InRange(100)", InRange(100));
+assert.is_false("InRange(-1)", InRange(-1));
+assert.is_false("InRange(101)", InRange(101));
+
+// === Constraint with Contains ===
+assert.section("Constraint with string.contains");
+constraint Digit(c) = string.contains("0123456789", c);
+assert.is_true("Digit 5", Digit("5"));
+assert.is_false("Digit a", Digit("a"));
+
+constraint Letter(c) = string.contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", c);
+assert.is_true("Letter a", Letter("a"));
+assert.is_true("Letter Z", Letter("Z"));
+assert.is_false("Letter 5", Letter("5"));
+
+// === Constraint in Match ===
+assert.section("Constraint in match");
+func classify_char(c) = match Digit(c)
+    true => "digit"
+    false => match Letter(c)
+        true => "letter"
+        false => "other";
+
+assert.eq("classify 5", classify_char("5"), "digit");
+assert.eq("classify a", classify_char("a"), "letter");
+assert.eq("classify @", classify_char("@"), "other");
+
+// === Multiple Constraints ===
+assert.section("Multiple constraints");
+constraint Even(n) = n % 2 == 0;
+constraint Odd(n) = n % 2 == 1;
+
+func describe_parity(n) = match Even(n)
+    true => "even"
+    false => "odd";
+
+assert.eq("parity 4", describe_parity(4), "even");
+assert.eq("parity 7", describe_parity(7), "odd");
+
+// === Constraint Composition ===
+assert.section("Constraint composition");
+constraint PositiveEven(x) = Positive(x) && Even(x);
+assert.is_true("PositiveEven(4)", PositiveEven(4));
+assert.is_false("PositiveEven(3)", PositiveEven(3));
+assert.is_false("PositiveEven(-4)", PositiveEven(-4));
+
+io.println("\n================");
+io.println("Constraint tests complete!");

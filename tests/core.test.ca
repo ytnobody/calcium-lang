@@ -1,0 +1,65 @@
+// Core Language Features Test
+use core.io!;
+use core.assert!;
+
+io.println("Core Language Tests");
+io.println("===================");
+
+// === Variables ===
+assert.section("Variables");
+x = 42;
+assert.eq("simple assignment", x, 42);
+y = x + 8;
+assert.eq("expression assignment", y, 50);
+
+// === Arithmetic ===
+assert.section("Arithmetic");
+assert.eq("addition", 1 + 2, 3);
+assert.eq("subtraction", 10 - 3, 7);
+assert.eq("multiplication", 4 * 5, 20);
+assert.eq("division", 15 / 3, 5);
+assert.eq("modulo", 17 % 5, 2);
+assert.eq("negation", -5, 0 - 5);
+
+// === Comparison ===
+assert.section("Comparison");
+assert.is_true("less than", 1 < 2);
+assert.is_true("less or equal", 2 <= 2);
+assert.is_true("greater than", 3 > 2);
+assert.is_true("greater or equal", 3 >= 3);
+assert.is_true("equal", 5 == 5);
+assert.is_true("not equal", 5 != 6);
+
+// === Boolean Logic ===
+assert.section("Boolean Logic");
+assert.is_true("and true", true && true);
+assert.is_false("and false", true && false);
+assert.is_true("or true", true || false);
+assert.is_false("or false", false || false);
+
+// === Functions ===
+assert.section("Functions");
+func add(a, b) = a + b;
+assert.eq("function call", add(2, 3), 5);
+
+func factorial(n) = match n
+    0 => 1
+    _ => n * factorial(n - 1);
+assert.eq("recursive factorial", factorial(5), 120);
+
+// === Closures ===
+assert.section("Closures");
+func make_adder(x) = y => x + y;
+add5 = make_adder(5);
+assert.eq("closure call", add5(10), 15);
+
+// === Recursion ===
+assert.section("Recursion");
+func fib(n) = match n
+    0 => 0
+    1 => 1
+    _ => fib(n - 1) + fib(n - 2);
+assert.eq("fibonacci(10)", fib(10), 55);
+
+io.println("\n===================");
+io.println("Core tests complete!");

@@ -4,6 +4,8 @@
 
 A functional programming language with pipelines, pattern matching, and effect handling.
 
+**Documentation:** [https://ytnobody.github.io/calcium-pages](https://ytnobody.github.io/calcium-pages)
+
 ## Features
 
 - **Pipeline Operator** (`|>`) - Chain function calls in a readable left-to-right style

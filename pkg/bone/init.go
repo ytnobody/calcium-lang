@@ -153,8 +153,9 @@ calcium_modules/
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Edit mod.ca to add your code")
 	fmt.Println("  2. Test with: calcium mod.ca")
-	fmt.Println("  3. Create a git tag: git tag v0.1.0 && git push --tags")
-	fmt.Println("  4. Register at Boneyard: https://github.com/calcium-lang/boneyard/issues/new")
+	fmt.Println("  3. Push to GitHub and create a tag: git tag v0.1.0 && git push --tags")
+	fmt.Println("  4. Register at Boneyard:")
+	fmt.Println("     https://github.com/calcium-lang/boneyard/issues/new?template=register-module.md")
 
 	return nil
 }

@@ -1,7 +1,7 @@
 package lexer
 
 import (
-	"github.com/example/calcium/pkg/token"
+	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
 type Lexer struct {
@@ -384,7 +384,45 @@ func (l *Lexer) readString() string {
 	}
 	result := l.input[position:l.position]
 	l.readChar() // consume closing quote
-	return result
+	return processEscapeSequences(result)
+}
+
+// processEscapeSequences converts escape sequences in a string to their actual characters
+func processEscapeSequences(s string) string {
+	var result []byte
+	i := 0
+	for i < len(s) {
+		if s[i] == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case 'n':
+				result = append(result, '\n')
+				i += 2
+			case 'r':
+				result = append(result, '\r')
+				i += 2
+			case 't':
+				result = append(result, '\t')
+				i += 2
+			case '\\':
+				result = append(result, '\\')
+				i += 2
+			case '"':
+				result = append(result, '"')
+				i += 2
+			case '\'':
+				result = append(result, '\'')
+				i += 2
+			default:
+				// Unknown escape, keep as-is
+				result = append(result, s[i])
+				i++
+			}
+		} else {
+			result = append(result, s[i])
+			i++
+		}
+	}
+	return string(result)
 }
 
 // peekStringContent checks if a string contains interpolation markers
@@ -426,12 +464,12 @@ func (l *Lexer) readStringUntilInterpolation() string {
 			result := l.input[position:l.position]
 			l.readChar() // consume '$'
 			l.readChar() // consume '{'
-			return result
+			return processEscapeSequences(result)
 		}
 		l.readChar()
 	}
 	// Should not reach here in normal cases
-	return l.input[position:l.position]
+	return processEscapeSequences(l.input[position:l.position])
 }
 
 // readStringInterpolationPart reads the string part after } in an interpolation
@@ -446,7 +484,7 @@ func (l *Lexer) readStringInterpolationPart() (string, bool) {
 			// End of string
 			result := l.input[position:l.position]
 			l.readChar() // consume closing quote
-			return result, false
+			return processEscapeSequences(result), false
 		}
 		if l.ch == '\\' {
 			l.readChar() // skip escape char
@@ -458,11 +496,11 @@ func (l *Lexer) readStringInterpolationPart() (string, bool) {
 			result := l.input[position:l.position]
 			l.readChar() // consume '$'
 			l.readChar() // consume '{'
-			return result, true
+			return processEscapeSequences(result), true
 		}
 		l.readChar()
 	}
-	return l.input[position:l.position], false
+	return processEscapeSequences(l.input[position:l.position]), false
 }
 
 func (l *Lexer) skipWhitespaceAndComments() {

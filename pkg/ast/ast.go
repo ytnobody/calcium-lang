@@ -1,6 +1,10 @@
 package ast
 
-import "github.com/ytnobody/calcium-lang/pkg/token"
+import (
+	"strings"
+
+	"github.com/ytnobody/calcium-lang/pkg/token"
+)
 
 // Node is the base interface for all AST nodes
 type Node interface {
@@ -132,9 +136,27 @@ func (i *Identifier) expressionNode()      {}
 func (i *Identifier) TokenLiteral() string { return i.Token.Literal }
 
 // ModulePath represents a dotted module path: core.io
+// Also supports remote module formats:
+// - author/module (e.g., ytnobody/json)
+// - "github.com/author/repo" (URL format)
 type ModulePath struct {
-	Token token.Token // the first IDENT token
-	Parts []string
+	Token    token.Token // the first IDENT token
+	Parts    []string
+	IsRemote bool   // true for author/module or URL format
+	Author   string // "ytnobody" for remote modules (author/module format)
+	Name     string // "json" for remote modules (author/module format)
+	RawURL   string // "github.com/author/repo" for URL format
+}
+
+// String returns the string representation of the module path
+func (mp *ModulePath) String() string {
+	if mp.RawURL != "" {
+		return mp.RawURL
+	}
+	if mp.IsRemote {
+		return mp.Author + "/" + mp.Name
+	}
+	return strings.Join(mp.Parts, ".")
 }
 
 func (mp *ModulePath) expressionNode()      {}

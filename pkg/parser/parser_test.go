@@ -180,6 +180,106 @@ func TestUseStatement(t *testing.T) {
 	}
 }
 
+func TestRemoteUseStatement(t *testing.T) {
+	// Test author/module format
+	t.Run("author/module format", func(t *testing.T) {
+		tests := []struct {
+			input       string
+			author      string
+			name        string
+			isEffect    bool
+		}{
+			{`use ytnobody/json;`, "ytnobody", "json", false},
+			{`use ytnobody/json!;`, "ytnobody", "json", true},
+			{`use author/module_name;`, "author", "module_name", false},
+		}
+
+		for _, tt := range tests {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			stmt, ok := program.Statements[0].(*ast.UseStatement)
+			if !ok {
+				t.Fatalf("statement is not *ast.UseStatement. got=%T",
+					program.Statements[0])
+			}
+
+			if !stmt.Path.IsRemote {
+				t.Errorf("path should be remote")
+			}
+
+			if stmt.Path.Author != tt.author {
+				t.Errorf("author wrong. expected=%s, got=%s",
+					tt.author, stmt.Path.Author)
+			}
+
+			if stmt.Path.Name != tt.name {
+				t.Errorf("name wrong. expected=%s, got=%s",
+					tt.name, stmt.Path.Name)
+			}
+
+			if stmt.IsEffect != tt.isEffect {
+				t.Errorf("isEffect wrong. expected=%v, got=%v",
+					tt.isEffect, stmt.IsEffect)
+			}
+
+			// Check String() method
+			expected := tt.author + "/" + tt.name
+			if stmt.Path.String() != expected {
+				t.Errorf("String() wrong. expected=%s, got=%s",
+					expected, stmt.Path.String())
+			}
+		}
+	})
+
+	// Test URL format
+	t.Run("URL format", func(t *testing.T) {
+		tests := []struct {
+			input    string
+			url      string
+			isEffect bool
+		}{
+			{`use "github.com/ytnobody/json-calcium";`, "github.com/ytnobody/json-calcium", false},
+			{`use "github.com/ytnobody/json-calcium"!;`, "github.com/ytnobody/json-calcium", true},
+		}
+
+		for _, tt := range tests {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			stmt, ok := program.Statements[0].(*ast.UseStatement)
+			if !ok {
+				t.Fatalf("statement is not *ast.UseStatement. got=%T",
+					program.Statements[0])
+			}
+
+			if !stmt.Path.IsRemote {
+				t.Errorf("path should be remote")
+			}
+
+			if stmt.Path.RawURL != tt.url {
+				t.Errorf("RawURL wrong. expected=%s, got=%s",
+					tt.url, stmt.Path.RawURL)
+			}
+
+			if stmt.IsEffect != tt.isEffect {
+				t.Errorf("isEffect wrong. expected=%v, got=%v",
+					tt.isEffect, stmt.IsEffect)
+			}
+
+			// Check String() method
+			if stmt.Path.String() != tt.url {
+				t.Errorf("String() wrong. expected=%s, got=%s",
+					tt.url, stmt.Path.String())
+			}
+		}
+	})
+}
+
 func TestIntegerLiteralExpression(t *testing.T) {
 	tests := []struct {
 		input    string

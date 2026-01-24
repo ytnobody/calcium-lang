@@ -629,7 +629,25 @@ func (p *Parser) parseUseStatement() *ast.UseStatement {
 	stmt := &ast.UseStatement{Token: p.curToken}
 
 	p.nextToken()
-	stmt.Path = p.parseModulePath()
+
+	// Case 1: String literal -> URL format
+	// use "github.com/author/repo";
+	if p.curTokenIs(token.STRING) {
+		stmt.Path = &ast.ModulePath{
+			Token:    p.curToken,
+			Parts:    []string{p.curToken.Literal},
+			IsRemote: true,
+			RawURL:   p.curToken.Literal,
+		}
+	} else if p.curTokenIs(token.IDENT) && p.peekTokenIs(token.SLASH) {
+		// Case 2: IDENT/IDENT -> author/module format
+		// use ytnobody/json;
+		stmt.Path = p.parseRemoteModulePath()
+	} else {
+		// Case 3: IDENT.IDENT -> local/stdlib format
+		// use core.io;
+		stmt.Path = p.parseModulePath()
+	}
 
 	// Check for trailing ! (effect module)
 	if p.peekTokenIs(token.BANG) {
@@ -642,6 +660,19 @@ func (p *Parser) parseUseStatement() *ast.UseStatement {
 	}
 
 	return stmt
+}
+
+// parseRemoteModulePath parses author/module format
+func (p *Parser) parseRemoteModulePath() *ast.ModulePath {
+	path := &ast.ModulePath{Token: p.curToken, IsRemote: true}
+	path.Author = p.curToken.Literal // "ytnobody"
+
+	p.nextToken() // consume '/'
+	p.nextToken() // move to module name
+	path.Name = p.curToken.Literal // "json"
+	path.Parts = []string{path.Author, path.Name}
+
+	return path
 }
 
 func (p *Parser) parseModulePath() *ast.ModulePath {

@@ -1279,3 +1279,54 @@ func TestRegexSplit(t *testing.T) {
 	}
 	runVmTests(t, tests)
 }
+
+// Test parseGitHubURL helper function
+func TestParseGitHubURL(t *testing.T) {
+	tests := []struct {
+		url      string
+		author   string
+		repo     string
+	}{
+		{"github.com/ytnobody/json-calcium", "ytnobody", "json-calcium"},
+		{"github.com/author/repo", "author", "repo"},
+		{"https://github.com/user/project", "user", "project"},
+		{"http://github.com/foo/bar", "foo", "bar"},
+	}
+
+	for _, tt := range tests {
+		author, repo := parseGitHubURL(tt.url)
+		if author != tt.author {
+			t.Errorf("parseGitHubURL(%q) author = %q, want %q", tt.url, author, tt.author)
+		}
+		if repo != tt.repo {
+			t.Errorf("parseGitHubURL(%q) repo = %q, want %q", tt.url, repo, tt.repo)
+		}
+	}
+}
+
+// Test cache directory path generation
+func TestCachePaths(t *testing.T) {
+	// Test getModuleCachePath
+	path := getModuleCachePath("ytnobody", "json")
+	if path == "" {
+		t.Error("getModuleCachePath returned empty path")
+	}
+
+	// Should contain author and module name
+	if !contains(path, "ytnobody") || !contains(path, "json") {
+		t.Errorf("getModuleCachePath(%q, %q) = %q, should contain author and module", "ytnobody", "json", path)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

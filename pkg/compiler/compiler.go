@@ -1121,16 +1121,37 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpReturn)
 
 	case *ast.UseStatement:
-		// Build the module path string (e.g., "core.io")
-		modulePath := strings.Join(node.Path.Parts, ".")
+		// Build the module path string based on the format
+		var modulePath string
+		var moduleName string
+
+		if node.Path.IsRemote {
+			if node.Path.RawURL != "" {
+				// URL format: "github.com/author/repo"
+				modulePath = node.Path.RawURL
+				// Extract module name from URL (last path component)
+				parts := strings.Split(node.Path.RawURL, "/")
+				moduleName = parts[len(parts)-1]
+				// Remove -calcium suffix if present
+				if strings.HasSuffix(moduleName, "-calcium") {
+					moduleName = strings.TrimSuffix(moduleName, "-calcium")
+				}
+			} else {
+				// author/module format: "ytnobody/json"
+				modulePath = node.Path.Author + "/" + node.Path.Name
+				moduleName = node.Path.Name
+			}
+		} else {
+			// Standard dotted format: "core.io"
+			modulePath = strings.Join(node.Path.Parts, ".")
+			moduleName = node.Path.Parts[len(node.Path.Parts)-1]
+		}
 
 		// Emit OpLoadModule with the module path
 		pathIndex := c.addConstant(value.String(modulePath))
 		c.emit(bytecode.OpLoadModule, pathIndex)
 
-		// The module is stored with the last part of the path as its name
-		// e.g., "use core.io!" -> variable "io"
-		moduleName := node.Path.Parts[len(node.Path.Parts)-1]
+		// The module is stored with the extracted module name
 		var symbol Symbol
 		if node.IsEffect {
 			// Effect modules (use xxx!) - members are effect functions

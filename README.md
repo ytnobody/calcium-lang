@@ -499,6 +499,28 @@ Run an example:
 calcium examples/pipeline.ca
 ```
 
+## Compiler Optimization
+
+Calcium includes an optimizer with multiple optimization levels:
+
+| Level | Flag | Description |
+|-------|------|-------------|
+| O0 | `-O0` | No optimization (fastest compilation) |
+| O1 | `-O1` | AST optimizations (default) |
+| O2 | `-O2` | AST + bytecode optimizations |
+
+### Optimizations
+
+- **Constant Folding** - Evaluates constant expressions at compile time
+- **Dead Code Elimination** - Removes unreachable code paths
+- **Common Subexpression Elimination** - Reuses identical pure expressions
+- **Peephole Optimization** (O2) - Bytecode-level optimizations
+
+```bash
+# Compile with maximum optimization
+calcium compile -O2 program.ca -o program.bone
+```
+
 ## Project Structure
 
 ```
@@ -509,6 +531,7 @@ calcium/
 │   ├── bytecode/      # Bytecode definitions
 │   ├── compiler/      # Compiler (AST to bytecode)
 │   ├── lexer/         # Lexical analyzer
+│   ├── optimizer/     # Optimization passes
 │   ├── parser/        # Parser
 │   ├── token/         # Token definitions
 │   ├── value/         # Runtime value types

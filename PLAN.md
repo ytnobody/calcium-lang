@@ -409,11 +409,40 @@ func! process_and_save(input) =
 
 ## Next Steps (Post-MVP)
 
-- [ ] CLI (`calcium run file.ca`)
-- [ ] REPL (Interactive execution environment)
+- [x] CLI (`calcium run file.ca`)
+- [x] REPL (Interactive execution environment)
 - [ ] More detailed error messages (line numbers, column numbers)
 - [ ] Debugger
-- [ ] Optimization passes (constant folding, dead code elimination)
+- [x] Optimization passes (constant folding, dead code elimination, CSE)
+
+### Optimizer ✅ Complete
+
+The optimizer supports three levels:
+
+| Level | Description |
+|-------|-------------|
+| O0 | No optimization |
+| O1 | AST optimizations: constant folding, dead code elimination, CSE |
+| O2 | O1 + bytecode peephole optimization |
+
+#### Implemented Optimizations
+
+1. **Constant Folding** - Evaluates constant expressions at compile time
+   - `2 + 3` → `5`
+   - `"hello" + " world"` → `"hello world"`
+
+2. **Dead Code Elimination** - Removes unreachable code
+   - Unreachable match branches
+   - Code after unconditional returns
+
+3. **Common Subexpression Elimination (CSE)** - Detects duplicate pure expressions
+   - Identifies identical function calls in arguments
+   - Excludes effect functions (`func!`) from optimization
+   - Infrastructure ready for full transformation with `let...in` or lambdas
+
+4. **Peephole Optimization** (O2) - Bytecode-level optimizations
+   - Redundant load/store elimination
+   - Jump optimization
 
 ### Future Language Features
 

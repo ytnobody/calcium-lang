@@ -15,6 +15,8 @@ This document provides a complete reference for the Calcium programming language
 9. [Asynchronous Programming](#asynchronous-programming)
 10. [Standard Library](#standard-library)
 11. [Built-in Functions](#built-in-functions)
+12. [Testing](#testing)
+13. [Compiler Optimization](#compiler-optimization)
 
 ---
 
@@ -801,6 +803,77 @@ The test runner will:
 - Find all `.test.ca` files in the specified directory
 - Execute each test file
 - Display pass/fail summary
+
+---
+
+## Compiler Optimization
+
+Calcium includes an optimizer that performs various transformations to improve code efficiency.
+
+### Optimization Levels
+
+| Level | Description |
+|-------|-------------|
+| O0 | No optimization - fastest compilation |
+| O1 | AST optimizations (default) |
+| O2 | AST + bytecode optimizations |
+
+### AST Optimizations (O1+)
+
+#### Constant Folding
+
+Evaluates constant expressions at compile time:
+
+```calcium
+x = 2 + 3;        // Optimized to: x = 5;
+y = "hello" + " world";  // Optimized to: y = "hello world";
+```
+
+#### Dead Code Elimination
+
+Removes unreachable code:
+
+```calcium
+func example(x) = match x
+    true => "yes"
+    false => "no"
+    _ => "unreachable";  // This branch is eliminated
+```
+
+#### Common Subexpression Elimination (CSE)
+
+Detects and optimizes duplicate pure expressions:
+
+```calcium
+// The compiler detects that expensive(x) is called twice
+// and can optimize to compute it only once
+result = use_both(expensive(x), expensive(x));
+```
+
+**Note:** CSE only applies to pure expressions. Effect functions (`func!`) are never deduplicated because their side effects must occur each time.
+
+### Bytecode Optimizations (O2)
+
+#### Peephole Optimization
+
+Low-level bytecode transformations:
+
+- Redundant load/store elimination
+- Jump chain optimization
+- Constant propagation
+
+### Usage
+
+```bash
+# Default optimization (O1)
+calcium run program.ca
+
+# No optimization
+calcium run -O0 program.ca
+
+# Maximum optimization
+calcium compile -O2 program.ca -o program.bone
+```
 
 ---
 

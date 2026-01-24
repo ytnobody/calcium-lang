@@ -43,6 +43,9 @@ func (o *Optimizer) OptimizeAST(program *ast.Program) *ast.Program {
 	// Then apply dead code elimination
 	optimized = EliminateDeadCode(optimized)
 
+	// Apply common subexpression elimination
+	optimized = EliminateCommonSubexpressions(optimized)
+
 	return optimized.(*ast.Program)
 }
 

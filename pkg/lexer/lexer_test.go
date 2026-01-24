@@ -342,16 +342,18 @@ func TestStringEscape(t *testing.T) {
 	if tok.Type != token.STRING {
 		t.Fatalf("expected STRING, got %q", tok.Type)
 	}
-	if tok.Literal != `hello\nworld` {
-		t.Fatalf("expected %q, got %q", `hello\nworld`, tok.Literal)
+	// Escape sequences are processed: \n becomes actual newline
+	if tok.Literal != "hello\nworld" {
+		t.Fatalf("expected %q, got %q", "hello\nworld", tok.Literal)
 	}
 
 	tok = l.NextToken()
 	if tok.Type != token.STRING {
 		t.Fatalf("expected STRING, got %q", tok.Type)
 	}
-	if tok.Literal != `tab\there` {
-		t.Fatalf("expected %q, got %q", `tab\there`, tok.Literal)
+	// Escape sequences are processed: \t becomes actual tab
+	if tok.Literal != "tab\there" {
+		t.Fatalf("expected %q, got %q", "tab\there", tok.Literal)
 	}
 }
 

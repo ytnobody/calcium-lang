@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/example/calcium/pkg/value"
+	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
 // Builtin represents a built-in function

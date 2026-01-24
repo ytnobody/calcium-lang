@@ -1,4 +1,4 @@
-module github.com/example/calcium
+module github.com/ytnobody/calcium-lang
 
 go 1.22.0
 

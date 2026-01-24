@@ -8,7 +8,7 @@ import (
 	"math"
 	"regexp"
 
-	"github.com/example/calcium/pkg/value"
+	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
 // File format constants

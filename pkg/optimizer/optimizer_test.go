@@ -3,11 +3,11 @@ package optimizer
 import (
 	"testing"
 
-	"github.com/example/calcium/pkg/ast"
-	"github.com/example/calcium/pkg/bytecode"
-	"github.com/example/calcium/pkg/lexer"
-	"github.com/example/calcium/pkg/parser"
-	"github.com/example/calcium/pkg/token"
+	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
+	"github.com/ytnobody/calcium-lang/pkg/lexer"
+	"github.com/ytnobody/calcium-lang/pkg/parser"
+	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
 func parse(input string) *ast.Program {

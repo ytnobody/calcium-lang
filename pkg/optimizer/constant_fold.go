@@ -3,8 +3,8 @@ package optimizer
 import (
 	"math"
 
-	"github.com/example/calcium/pkg/ast"
-	"github.com/example/calcium/pkg/token"
+	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
 // FoldConstants performs constant folding optimization on the AST.

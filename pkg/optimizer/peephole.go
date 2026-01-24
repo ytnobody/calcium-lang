@@ -1,7 +1,7 @@
 package optimizer
 
 import (
-	"github.com/example/calcium/pkg/bytecode"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 )
 
 // PeepholeOptimize applies peephole optimizations to bytecode instructions.

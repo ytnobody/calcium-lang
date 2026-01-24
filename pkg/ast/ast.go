@@ -1,6 +1,6 @@
 package ast
 
-import "github.com/example/calcium/pkg/token"
+import "github.com/ytnobody/calcium-lang/pkg/token"
 
 // Node is the base interface for all AST nodes
 type Node interface {

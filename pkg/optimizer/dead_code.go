@@ -1,7 +1,7 @@
 package optimizer
 
 import (
-	"github.com/example/calcium/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/ast"
 )
 
 // EliminateDeadCode removes unreachable and unnecessary code from the AST.

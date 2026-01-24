@@ -3,7 +3,7 @@ package bytecode
 import (
 	"testing"
 
-	"github.com/example/calcium/pkg/value"
+	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
 func TestSerializeDeserializeBasic(t *testing.T) {

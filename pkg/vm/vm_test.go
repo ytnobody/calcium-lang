@@ -3,11 +3,11 @@ package vm
 import (
 	"testing"
 
-	"github.com/example/calcium/pkg/ast"
-	"github.com/example/calcium/pkg/compiler"
-	"github.com/example/calcium/pkg/lexer"
-	"github.com/example/calcium/pkg/parser"
-	"github.com/example/calcium/pkg/value"
+	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/compiler"
+	"github.com/ytnobody/calcium-lang/pkg/lexer"
+	"github.com/ytnobody/calcium-lang/pkg/parser"
+	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
 type vmTestCase struct {

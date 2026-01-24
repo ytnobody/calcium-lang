@@ -1,5 +1,6 @@
 # Binaries
 /calcium
+/bone
 *.exe
 *.exe~
 *.dll

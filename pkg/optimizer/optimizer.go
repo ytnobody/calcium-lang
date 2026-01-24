@@ -4,8 +4,8 @@
 package optimizer
 
 import (
-	"github.com/example/calcium/pkg/ast"
-	"github.com/example/calcium/pkg/bytecode"
+	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 )
 
 // Level represents the optimization level

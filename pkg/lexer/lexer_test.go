@@ -3,7 +3,7 @@ package lexer
 import (
 	"testing"
 
-	"github.com/example/calcium/pkg/token"
+	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
 func TestNextToken(t *testing.T) {

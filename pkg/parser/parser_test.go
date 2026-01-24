@@ -3,8 +3,8 @@ package parser
 import (
 	"testing"
 
-	"github.com/example/calcium/pkg/ast"
-	"github.com/example/calcium/pkg/lexer"
+	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/lexer"
 )
 
 func TestAssignmentStatements(t *testing.T) {

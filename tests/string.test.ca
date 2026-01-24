@@ -54,5 +54,18 @@ assert.eq("tab length", len("\t"), 1);
 assert.eq("quote length", len("\""), 1);
 assert.eq("backslash length", len("\\"), 1);
 
+// === Single-quoted Strings ===
+assert.section("Single-quoted strings");
+assert.eq("single quote basic", 'hello', "hello");
+assert.eq("single quote with spaces", 'hello world', "hello world");
+assert.eq("single quote empty", '', "");
+assert.eq("single quote length", len('hello'), 5);
+assert.eq("single quote concat", concat('hello', ' world'), "hello world");
+assert.eq("single quote double inside", 'say "hello"', "say \"hello\"");
+assert.eq("single quote escape", 'it\'s', "it's");
+assert.eq("single quote newline", len('\n'), 1);
+assert.eq("single quote tab", len('\t'), 1);
+assert.eq("single quote backslash", len('\\'), 1);
+
 io.println("\n============");
 io.println("String tests complete!");

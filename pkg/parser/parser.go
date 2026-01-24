@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/example/calcium/pkg/ast"
-	"github.com/example/calcium/pkg/lexer"
-	"github.com/example/calcium/pkg/token"
+	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/lexer"
+	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
 // Precedence levels
@@ -33,6 +33,7 @@ const (
 var precedences = map[token.TokenType]int{
 	token.PIPE:        PIPE,
 	token.EFFECT_PIPE: PIPE,
+	token.EFFECT_END:  PIPE, // !? for result handling
 	token.OR:          OR,
 	token.AND:         AND,
 	token.EQ:          EQUALS,
@@ -134,6 +135,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.EFFECT_PIPE, p.parseEffectPipeExpression)
 	p.registerInfix(token.SPREAD, p.parseSpreadExpression)
 	p.registerInfix(token.QUESTION, p.parseConstraintCheckExpression)
+	p.registerInfix(token.EFFECT_END, p.parseEffectHandleExpression)
 	p.registerInfix(token.ARROW, p.parseLambdaFromIdent)
 
 	// Read two tokens, so curToken and peekToken are both set
@@ -511,6 +513,12 @@ func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 
 	p.nextToken()
 	stmt.Body = p.parseExpression(LOWEST)
+
+	// Handle !? error handling in function body
+	if p.peekTokenIs(token.EFFECT_END) {
+		p.nextToken()
+		stmt.Body = p.parseEffectHandleExpression(stmt.Body)
+	}
 
 	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()

@@ -2091,36 +2091,69 @@ func builtinGet(args ...value.Value) value.Value {
 	if len(args) < 2 || len(args) > 3 {
 		return value.Failure(value.String("get: expected 2 or 3 arguments"))
 	}
-	if args[0].Type != value.TYPE_ARRAY {
-		return value.Failure(value.String("get: first argument must be array"))
+
+	// Handle array: get(array, index, [default])
+	if args[0].Type == value.TYPE_ARRAY {
+		if args[1].Type != value.TYPE_INT {
+			return value.Failure(value.String("get: index must be integer for array"))
+		}
+		arr := args[0].AsArray()
+		idx := int(args[1].AsInt())
+		if idx < 0 || idx >= len(arr) {
+			if len(args) == 3 {
+				return args[2]
+			}
+			return value.Null()
+		}
+		return arr[idx]
 	}
-	if args[1].Type != value.TYPE_INT {
-		return value.Failure(value.String("get: index must be integer"))
-	}
-	arr := args[0].AsArray()
-	idx := int(args[1].AsInt())
-	if idx < 0 || idx >= len(arr) {
+
+	// Handle hash: get(hash, key, [default])
+	if args[0].Type == value.TYPE_HASH {
+		if args[1].Type != value.TYPE_STRING {
+			return value.Failure(value.String("get: key must be string for hash"))
+		}
+		hash := args[0].AsHash()
+		key := args[1].AsString()
+		if idx, ok := hash.Lookup[key]; ok {
+			return hash.Pairs[idx].Value
+		}
 		if len(args) == 3 {
 			return args[2]
 		}
 		return value.Null()
 	}
-	return arr[idx]
+
+	return value.Failure(value.String("get: first argument must be array or hash"))
 }
 
 func builtinHas(args ...value.Value) value.Value {
 	if len(args) != 2 {
 		return value.Failure(value.String("has: expected 2 arguments"))
 	}
-	if args[0].Type != value.TYPE_ARRAY {
+
+	// Handle array: has(array, element) - check if element exists
+	if args[0].Type == value.TYPE_ARRAY {
+		arr := args[0].AsArray()
+		for _, v := range arr {
+			if v.Equals(args[1]) {
+				return value.Bool(true)
+			}
+		}
 		return value.Bool(false)
 	}
-	arr := args[0].AsArray()
-	for _, v := range arr {
-		if v.Equals(args[1]) {
-			return value.Bool(true)
+
+	// Handle hash: has(hash, key) - check if key exists
+	if args[0].Type == value.TYPE_HASH {
+		if args[1].Type != value.TYPE_STRING {
+			return value.Failure(value.String("has: key must be string for hash"))
 		}
+		hash := args[0].AsHash()
+		key := args[1].AsString()
+		_, exists := hash.Lookup[key]
+		return value.Bool(exists)
 	}
+
 	return value.Bool(false)
 }
 

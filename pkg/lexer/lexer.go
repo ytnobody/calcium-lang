@@ -230,6 +230,12 @@ func (l *Lexer) NextToken() token.Token {
 		l.prevToken = tok.Type
 		_ = stringContent // unused, just for peeking
 		return tok
+	case '\'':
+		// Single-quoted strings (no interpolation support)
+		tok.Type = token.STRING
+		tok.Literal = l.readSingleQuotedString()
+		l.prevToken = tok.Type
+		return tok
 	case 0:
 		tok.Literal = ""
 		tok.Type = token.EOF
@@ -376,6 +382,22 @@ func (l *Lexer) readString() string {
 	for {
 		l.readChar()
 		if l.ch == '"' || l.ch == 0 {
+			break
+		}
+		if l.ch == '\\' {
+			l.readChar() // skip escaped character
+		}
+	}
+	result := l.input[position:l.position]
+	l.readChar() // consume closing quote
+	return processEscapeSequences(result)
+}
+
+func (l *Lexer) readSingleQuotedString() string {
+	position := l.position + 1 // skip opening quote
+	for {
+		l.readChar()
+		if l.ch == '\'' || l.ch == 0 {
 			break
 		}
 		if l.ch == '\\' {

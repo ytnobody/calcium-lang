@@ -76,17 +76,33 @@ func Init(name string) error {
 		}
 	}
 
-	// Create meta.toml
-	meta := &Meta{
-		Name:        moduleName,
-		Author:      author,
-		Description: description,
-		License:     license,
-		Keywords:    keywords,
-		Entry:       "mod.ca",
+	// Create meta.toml with comments
+	metaContent := fmt.Sprintf(`name = %q
+author = %q
+description = %q
+license = %q
+`, moduleName, author, description, license)
+
+	// Add keywords if present
+	if len(keywords) > 0 {
+		metaContent += "keywords = ["
+		for i, kw := range keywords {
+			if i > 0 {
+				metaContent += ", "
+			}
+			metaContent += fmt.Sprintf("%q", kw)
+		}
+		metaContent += "]\n"
 	}
 
-	if err := SaveMeta(dir, meta); err != nil {
+	metaContent += `entry = "mod.ca"
+
+# External dependencies (core modules like core.io don't need to be listed)
+# [dependencies]
+# "author/module" = "^1.0.0"
+`
+
+	if err := os.WriteFile(metaPath, []byte(metaContent), 0644); err != nil {
 		return fmt.Errorf("failed to create meta.toml: %w", err)
 	}
 

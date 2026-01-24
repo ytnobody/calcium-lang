@@ -15,15 +15,42 @@ const (
 	BoneyardRawURL = "https://raw.githubusercontent.com/calcium-lang/boneyard/main/index"
 )
 
+// Dependency represents a module dependency with version constraint
+// Supports both simple string format and detailed object format:
+//
+//	[dependencies]
+//	"author/module" = "^1.0.0"                    # Simple format
+//	"author/module" = { version = "^1.0.0" }      # Detailed format
+type Dependency struct {
+	Version string // Version constraint (e.g., "^1.0.0", ">=2.0.0", "1.2.3")
+}
+
+// UnmarshalTOML implements custom TOML unmarshaling for Dependency
+// to support both string and object formats
+func (d *Dependency) UnmarshalTOML(data interface{}) error {
+	switch v := data.(type) {
+	case string:
+		// Simple format: "^1.0.0"
+		d.Version = v
+	case map[string]interface{}:
+		// Detailed format: { version = "^1.0.0" }
+		if version, ok := v["version"].(string); ok {
+			d.Version = version
+		}
+	}
+	return nil
+}
+
 // Meta represents the meta.toml file for a Calcium module
 type Meta struct {
-	Name        string   `toml:"name"`
-	Author      string   `toml:"author"`
-	Description string   `toml:"description"`
-	License     string   `toml:"license,omitempty"`
-	Keywords    []string `toml:"keywords,omitempty"`
-	Entry       string   `toml:"entry,omitempty"`
-	SourceURL   string   `toml:"source_url,omitempty"`
+	Name         string                `toml:"name"`
+	Author       string                `toml:"author"`
+	Description  string                `toml:"description"`
+	License      string                `toml:"license,omitempty"`
+	Keywords     []string              `toml:"keywords,omitempty"`
+	Entry        string                `toml:"entry,omitempty"`
+	SourceURL    string                `toml:"source_url,omitempty"`
+	Dependencies map[string]Dependency `toml:"dependencies,omitempty"` // "author/module" -> Dependency
 }
 
 // LockFile represents the calcium.lock file

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Add adds a module from Boneyard
@@ -29,6 +30,42 @@ func Add(moduleSpec string) error {
 		return fmt.Errorf("no meta.toml found. Run 'bone init' first")
 	}
 
+	// Load existing lock file
+	lock, err := LoadLockFile(projectRoot)
+	if err != nil {
+		return fmt.Errorf("failed to load lock file: %w", err)
+	}
+
+	// Track installed modules to avoid duplicates
+	installed := make(map[string]bool)
+	for _, m := range lock.Modules {
+		installed[m.Author+"/"+m.Name] = true
+	}
+
+	// Install module and its dependencies
+	if err := installModuleRecursive(projectRoot, author, name, version, lock, installed, 0); err != nil {
+		return err
+	}
+
+	// Save updated lock file
+	if err := SaveLockFile(projectRoot, lock); err != nil {
+		return fmt.Errorf("failed to save lock file: %w", err)
+	}
+
+	return nil
+}
+
+// installModuleRecursive installs a module and its dependencies recursively
+func installModuleRecursive(projectRoot, author, name, version string, lock *LockFile, installed map[string]bool, depth int) error {
+	moduleKey := author + "/" + name
+	indent := strings.Repeat("  ", depth)
+
+	// Skip if already installed
+	if installed[moduleKey] {
+		fmt.Printf("%s- %s/%s (already installed)\n", indent, author, name)
+		return nil
+	}
+
 	// Fetch module metadata from Boneyard
 	meta, err := FetchMeta(author, name)
 	if err != nil {
@@ -43,10 +80,10 @@ func Add(moduleSpec string) error {
 
 	resolvedVersion := versionInfo.Version
 	if resolvedVersion == "" || resolvedVersion == "null" {
-		resolvedVersion = versionInfo.Commit[:8] // Use short commit hash
+		resolvedVersion = versionInfo.Commit[:8]
 	}
 
-	fmt.Printf("Installing %s/%s@%s...\n", author, name, resolvedVersion)
+	fmt.Printf("%sInstalling %s/%s@%s...\n", indent, author, name, resolvedVersion)
 
 	// Create modules directory
 	modulesDir := filepath.Join(projectRoot, ModulesDir, author, name)
@@ -71,14 +108,36 @@ func Add(moduleSpec string) error {
 		return fmt.Errorf("failed to write %s: %w", entry, err)
 	}
 
-	// Update lock file
-	lock, err := LoadLockFile(projectRoot)
-	if err != nil {
-		return fmt.Errorf("failed to load lock file: %w", err)
+	// Mark as installed
+	installed[moduleKey] = true
+
+	// Update lock file entry
+	updateLockEntry(lock, author, name, resolvedVersion, versionInfo.Commit)
+
+	fmt.Printf("%s+ %s/%s@%s\n", indent, author, name, resolvedVersion)
+
+	// Install dependencies
+	if len(meta.Dependencies) > 0 {
+		fmt.Printf("%s  Dependencies:\n", indent)
+		for depSpec, dep := range meta.Dependencies {
+			depAuthor, depName, _, err := ParseModuleSpec(depSpec)
+			if err != nil {
+				return fmt.Errorf("invalid dependency spec %q: %w", depSpec, err)
+			}
+
+			if err := installModuleRecursive(projectRoot, depAuthor, depName, dep.Version, lock, installed, depth+1); err != nil {
+				return fmt.Errorf("failed to install dependency %s: %w", depSpec, err)
+			}
+		}
 	}
 
+	return nil
+}
+
+// updateLockEntry updates or adds a module entry in the lock file
+func updateLockEntry(lock *LockFile, author, name, version, commit string) {
 	// Remove existing entry if present
-	newModules := make([]LockedModule, 0, len(lock.Modules))
+	newModules := make([]LockedModule, 0, len(lock.Modules)+1)
 	for _, m := range lock.Modules {
 		if !(m.Author == author && m.Name == name) {
 			newModules = append(newModules, m)
@@ -89,17 +148,8 @@ func Add(moduleSpec string) error {
 	newModules = append(newModules, LockedModule{
 		Name:    name,
 		Author:  author,
-		Version: resolvedVersion,
-		Commit:  versionInfo.Commit,
+		Version: version,
+		Commit:  commit,
 	})
 	lock.Modules = newModules
-
-	if err := SaveLockFile(projectRoot, lock); err != nil {
-		return fmt.Errorf("failed to save lock file: %w", err)
-	}
-
-	fmt.Printf("Added %s/%s@%s\n", author, name, resolvedVersion)
-	fmt.Printf("  -> %s\n", filepath.Join(ModulesDir, author, name, entry))
-
-	return nil
 }

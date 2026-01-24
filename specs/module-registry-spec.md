@@ -82,7 +82,40 @@ repository = "https://github.com/johndoe/calcium-http"
 license = "MIT"
 keywords = ["http", "client", "network"]
 latest = "1.1.0"
+
+# Dependencies (optional)
+[dependencies]
+"SARAHDEV/json" = "^1.0.0"
+"CALCIUM/core" = ">=2.0.0"
 ```
+
+### Dependencies Format
+
+Dependencies are specified as a map of module names to version constraints:
+
+```toml
+[dependencies]
+"author/module" = "version_constraint"
+```
+
+> **Note:** Core modules (`core.*`) are part of the standard library and do NOT need to be declared as dependencies. Only external/third-party modules should be listed.
+
+**Supported version constraint operators:**
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `=` or none | Exact version | `"1.2.3"` |
+| `^` | Compatible with (same major) | `"^1.2.3"` means `>=1.2.3 <2.0.0` |
+| `~` | Approximately (same minor) | `"~1.2.3"` means `>=1.2.3 <1.3.0` |
+| `>=` | Greater than or equal | `">=1.0.0"` |
+| `<=` | Less than or equal | `"<=2.0.0"` |
+| `>` | Greater than | `">1.0.0"` |
+| `<` | Less than | `"<2.0.0"` |
+| `*` | Any version | `"*"` |
+| `latest` | Latest version | `"latest"` |
+
+**Special case for 0.x versions:**
+- `^0.2.3` means `>=0.2.3 <0.3.0` (more restrictive)
 
 ### packages/{A}/{AB}/{AUTHOR}/{MODULE}/{VERSION}.toml
 

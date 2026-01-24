@@ -517,6 +517,50 @@ io.println("Hello");
 math.sqrt(16);
 ```
 
+### Remote Modules
+
+Calcium supports importing modules from GitHub:
+
+```calcium
+// Format 1: author/module (simple)
+use ytnobody/json;
+use ytnobody/json!;  // Effect module
+
+// Format 2: GitHub URL (full path)
+use "github.com/ytnobody/json-calcium";
+use "github.com/ytnobody/json-calcium"!;
+```
+
+Remote modules are automatically:
+1. Fetched from GitHub
+2. Cached locally at `~/.calcium/cache/`
+3. Reused from cache on subsequent runs
+
+#### Module Resolution Order
+
+1. VM cache (in-memory)
+2. Global cache (`stdlibCache`)
+3. Standard library (embedded)
+4. Local filesystem (`./module/mod.ca`, `./module.ca`)
+5. Remote sources (GitHub)
+
+#### Cache Structure
+
+```
+~/.calcium/cache/
+└── {author}/
+    └── {module}/
+        └── mod.ca
+```
+
+#### GitHub URL Resolution
+
+For `author/module` format, Calcium tries:
+1. `github.com/{author}/{module}-calcium/main/mod.ca`
+2. `github.com/{author}/{module}/main/mod.ca`
+3. `github.com/{author}/{module}-calcium/master/mod.ca`
+4. `github.com/{author}/{module}/master/mod.ca`
+
 ### Defining Namespaces
 
 ```calcium

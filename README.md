@@ -18,7 +18,7 @@ A functional programming language with pipelines, pattern matching, and effect h
 - **Chained Comparisons** - Write `0 <= x <= 100` instead of `x >= 0 && x <= 100`
 - **Effect Functions** - Distinguish pure functions from side-effecting ones with `func!`
 - **Result Types** - Built-in `success(value)` and `failure(error)` for error handling
-- **Module System** - Organize code with `use` statements
+- **Module System** - Organize code with `use` statements, including GitHub imports
 - **Standard Library** - Math, string, array, regex, TOML, HTTP modules
 
 ## Installation
@@ -355,6 +355,21 @@ data = {name: "test", value: 123};
 toml.stringify(data);
 // success("name = \"test\"\nvalue = 123\n")
 ```
+
+### Remote Modules
+
+Import modules directly from GitHub:
+
+```calcium
+// Format 1: author/module (recommended)
+use ytnobody/json;
+use ytnobody/json!;  // Effect module
+
+// Format 2: GitHub URL
+use "github.com/ytnobody/json-calcium";
+```
+
+Remote modules are automatically fetched and cached at `~/.calcium/cache/`.
 
 ## Standard Library
 

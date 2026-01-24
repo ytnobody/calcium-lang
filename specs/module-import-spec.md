@@ -1,10 +1,67 @@
-# Calcium Remote Module Import Specification (Draft)
+# Calcium Remote Module Import Specification
+
+## Status: Partially Implemented ✓
+
+Basic remote module import from GitHub is now available.
 
 ## Overview
 
-Implement URL-based module imports, inspired by Deno's module system.
+URL-based module imports, inspired by Deno's module system.
 
-## Design Principles
+---
+
+## Implemented Features ✓
+
+### Simple GitHub Import
+
+```calcium
+// Format 1: author/module (recommended)
+use ytnobody/json;
+use ytnobody/json!;  // Effect module
+
+// Format 2: GitHub URL
+use "github.com/ytnobody/json-calcium";
+use "github.com/ytnobody/json-calcium"!;
+
+// Existing format (unchanged)
+use core.io!;
+use mylocal.module;
+```
+
+### Resolution Order
+
+1. VM cache (in-memory)
+2. Global cache (`stdlibCache`)
+3. Standard library (embedded FS)
+4. Local filesystem (`calcium_modules/`, relative paths)
+5. Remote sources (GitHub direct)
+
+### GitHub URL Resolution
+
+For `author/module` format, tries in order:
+1. `github.com/{author}/{module}-calcium/main/mod.ca`
+2. `github.com/{author}/{module}/main/mod.ca`
+3. `github.com/{author}/{module}-calcium/master/mod.ca`
+4. `github.com/{author}/{module}/master/mod.ca`
+
+### Cache Structure
+
+```
+~/.calcium/cache/
+└── {author}/
+    └── {module}/
+        └── mod.ca
+```
+
+---
+
+## Future Enhancements (Not Yet Implemented)
+
+The following features are planned but not yet implemented:
+
+---
+
+## Design Principles (Future)
 
 1. **URL-based** - Remote modules specified directly via HTTPS URL
 2. **No config file required** - Self-contained in code (use import map if needed)

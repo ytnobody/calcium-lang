@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/ytnobody/calcium-lang/pkg/bytecode"
@@ -153,6 +154,13 @@ func main() {
 	case "repl":
 		runREPL()
 
+	case "test":
+		dir := "."
+		if len(args) >= 2 {
+			dir = args[1]
+		}
+		runTests(dir)
+
 	case "version", "--version", "-v":
 		fmt.Printf("Calcium %s\n", version)
 
@@ -192,6 +200,7 @@ Usage:
   calcium run [-O0|-O1|-O2] <file>           Run a program
   calcium compile [-O0|-O1|-O2] <file> [-o out]  Compile to bytecode (.bone)
   calcium build [-O0|-O1|-O2] <file> [-o out]    Build standalone executable
+  calcium test [dir]                         Run all .test.ca files in directory
   calcium repl                               Start interactive REPL
   calcium version                            Show version
   calcium help                               Show this help
@@ -206,6 +215,7 @@ Examples:
   calcium -O2 hello.ca                Run with full optimization
   calcium compile -O2 hello.ca        Compile with full optimization
   calcium build hello.ca -o hello     Build standalone executable
+  calcium test ./tests                Run all tests in ./tests
   calcium ./hello                     Run standalone (no calcium needed)
   calcium repl                        Start REPL`)
 }
@@ -759,3 +769,117 @@ func stripEmbeddedData(data []byte) []byte {
 
 // Ensure io package is used
 var _ = io.EOF
+
+// runTests runs all .test.ca files in the specified directory
+func runTests(dir string) {
+	// Find all .test.ca files
+	var testFiles []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(path, ".test.ca") {
+			testFiles = append(testFiles, path)
+		}
+		return nil
+	})
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error scanning directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(testFiles) == 0 {
+		fmt.Printf("No .test.ca files found in %s\n", dir)
+		os.Exit(0)
+	}
+
+	// Sort for consistent ordering
+	sort.Strings(testFiles)
+
+	fmt.Println("╔══════════════════════════════════════╗")
+	fmt.Println("║     Calcium Language Test Suite      ║")
+	fmt.Println("╚══════════════════════════════════════╝")
+	fmt.Println()
+
+	passed := 0
+	failed := 0
+	var failedTests []string
+
+	for _, testFile := range testFiles {
+		relPath, _ := filepath.Rel(dir, testFile)
+		if relPath == "" {
+			relPath = testFile
+		}
+
+		fmt.Printf("━━━ %s ━━━\n", relPath)
+
+		content, err := os.ReadFile(testFile)
+		if err != nil {
+			fmt.Printf("  Error reading file: %v\n", err)
+			failed++
+			failedTests = append(failedTests, relPath)
+			continue
+		}
+
+		// Run the test file
+		absPath, _ := filepath.Abs(testFile)
+		_, err = executeTestFile(string(content), absPath)
+		if err != nil {
+			fmt.Printf("  Error: %v\n", err)
+			failed++
+			failedTests = append(failedTests, relPath)
+		} else {
+			passed++
+		}
+		fmt.Println()
+	}
+
+	// Summary
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("Results: %d passed, %d failed (out of %d test files)\n", passed, failed, len(testFiles))
+
+	if failed > 0 {
+		fmt.Println("\nFailed tests:")
+		for _, t := range failedTests {
+			fmt.Printf("  - %s\n", t)
+		}
+		os.Exit(1)
+	}
+}
+
+func executeTestFile(input, filename string) (string, error) {
+	useColor := isTerminal()
+
+	l := lexer.New(input)
+	p := parser.New(l)
+	program := p.ParseProgram()
+
+	if len(p.Errors()) > 0 {
+		return "", fmt.Errorf("%s", formatParseErrors(filename, p.Errors(), useColor))
+	}
+
+	// Use O1 optimization for tests
+	opt := optimizer.New(optimizer.O1)
+	program = opt.OptimizeAST(program)
+
+	comp := compiler.New()
+	comp.SetInput(input)
+	err := comp.Compile(program)
+	if err != nil {
+		return "", fmt.Errorf("%s", formatCompileErrors(filename, err, useColor))
+	}
+
+	instructions := comp.Bytecode().Instructions
+	instructions = opt.OptimizeBytecode(instructions)
+
+	machine := vm.New(comp.Constants())
+	machine.SetSourcePath(filename)
+	err = machine.Run(instructions)
+	if err != nil {
+		return "", fmt.Errorf("runtime error: %v", err)
+	}
+
+	result := machine.LastPoppedStackElem()
+	return result.String(), nil
+}

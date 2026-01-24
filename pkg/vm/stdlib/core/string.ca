@@ -15,8 +15,14 @@ func trim(s) = __str_trim(s);
 // upper converts a string to uppercase
 func upper(s) = __str_upper(s);
 
+// to_upper is an alias for upper
+func to_upper(s) = __str_upper(s);
+
 // lower converts a string to lowercase
 func lower(s) = __str_lower(s);
+
+// to_lower is an alias for lower
+func to_lower(s) = __str_lower(s);
 
 // replace replaces all occurrences of old with new
 func replace(s, old, new) = __str_replace(s, old, new);

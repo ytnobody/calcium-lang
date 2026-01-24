@@ -7,6 +7,15 @@ import (
 	"strings"
 )
 
+// getGlobalCacheDir returns the global module cache directory (~/.calcium/cache)
+func getGlobalCacheDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".", ".calcium", "cache")
+	}
+	return filepath.Join(home, ".calcium", "cache")
+}
+
 // Add adds a module from Boneyard
 func Add(moduleSpec string) error {
 	// Parse module specification
@@ -85,10 +94,10 @@ func installModuleRecursive(projectRoot, author, name, version string, lock *Loc
 
 	fmt.Printf("%sInstalling %s/%s@%s...\n", indent, author, name, resolvedVersion)
 
-	// Create modules directory
-	modulesDir := filepath.Join(projectRoot, ModulesDir, author, name)
-	if err := os.MkdirAll(modulesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create modules directory: %w", err)
+	// Create cache directory (~/.calcium/cache/author/name)
+	cacheDir := filepath.Join(getGlobalCacheDir(), author, name)
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
 	// Fetch entry file
@@ -102,8 +111,8 @@ func installModuleRecursive(projectRoot, author, name, version string, lock *Loc
 		return err
 	}
 
-	// Save entry file
-	entryPath := filepath.Join(modulesDir, entry)
+	// Save entry file (always as mod.ca for consistency)
+	entryPath := filepath.Join(cacheDir, "mod.ca")
 	if err := os.WriteFile(entryPath, content, 0644); err != nil {
 		return fmt.Errorf("failed to write %s: %w", entry, err)
 	}

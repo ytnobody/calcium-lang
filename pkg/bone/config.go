@@ -12,7 +12,7 @@ const (
 	LockFileName   = "calcium.lock"
 	ModulesDir     = "calcium_modules"
 	BoneyardURL    = "https://boneyard.ca.land"
-	BoneyardRawURL = "https://raw.githubusercontent.com/calcium-lang/boneyard/main/index"
+	BoneyardRawURL = "https://raw.githubusercontent.com/ytnobody/boneyard/main/index"
 )
 
 // Dependency represents a module dependency with version constraint

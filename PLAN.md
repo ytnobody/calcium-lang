@@ -415,6 +415,34 @@ func! process_and_save(input) =
 - [ ] Debugger
 - [ ] Optimization passes (constant folding, dead code elimination)
 
+### Future Language Features
+
+#### Namespace Scope Block
+Allow using module functions without prefix inside a block:
+
+```calcium
+// Current: repetitive prefix
+assert.eq("test 1", a, b);
+assert.eq("test 2", c, d);
+assert.eq("test 3", e, f);
+
+// Proposed: namespace scope block
+with assert {
+    eq("test 1", a, b);
+    eq("test 2", c, d);
+    eq("test 3", e, f);
+}
+
+// Alternative syntax options:
+// assert -> { ... }
+// use assert! { ... }
+```
+
+Considerations:
+- Shadowing: local variables vs module functions
+- Nesting: `with math { with string { ... } }`
+- Scope: block-local resolution only
+
 ---
 
 ## References

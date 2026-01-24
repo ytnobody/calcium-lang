@@ -67,5 +67,23 @@ assert.eq("single quote newline", len('\n'), 1);
 assert.eq("single quote tab", len('\t'), 1);
 assert.eq("single quote backslash", len('\\'), 1);
 
+// === Heredoc (Triple-quoted Strings) ===
+assert.section("Heredoc strings");
+assert.eq("heredoc basic", """hello""", "hello");
+assert.eq("heredoc with quotes", """say "hello" and 'hi'""", "say \"hello\" and 'hi'");
+multiline = """
+line 1
+line 2
+line 3
+""";
+assert.eq("heredoc multiline", string.contains(multiline, "line 2"), true);
+lines = string.split(multiline, "\n");
+assert.len_eq("heredoc line count", lines, 3);
+assert.eq("heredoc first line", lines[0], "line 1");
+json_heredoc = """
+{"name": "test", "value": 42}
+""";
+assert.is_true("heredoc json contains name", string.contains(json_heredoc, '"name"'));
+
 io.println("\n============");
 io.println("String tests complete!");

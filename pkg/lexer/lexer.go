@@ -212,6 +212,13 @@ func (l *Lexer) NextToken() token.Token {
 		}
 		tok = newToken(token.UNDERSCORE, l.ch, tok.Line, tok.Column)
 	case '"':
+		// Check for heredoc (triple-quoted string)
+		if l.peekChar() == '"' && l.peekCharN(2) == '"' {
+			tok.Type = token.STRING
+			tok.Literal = l.readHeredoc()
+			l.prevToken = tok.Type
+			return tok
+		}
 		// Check if this is an interpolated string or regular string
 		stringContent, hasInterpolation := l.peekStringContent()
 		if hasInterpolation {
@@ -407,6 +414,56 @@ func (l *Lexer) readSingleQuotedString() string {
 	result := l.input[position:l.position]
 	l.readChar() // consume closing quote
 	return processEscapeSequences(result)
+}
+
+// readHeredoc reads a triple-quoted string (heredoc)
+// Syntax: """..."""
+// - Content is taken literally (no escape processing except for \""")
+// - Leading newline after opening """ is stripped
+// - Trailing newline before closing """ is stripped
+func (l *Lexer) readHeredoc() string {
+	// Skip opening """
+	l.readChar() // first "
+	l.readChar() // second "
+	l.readChar() // third "
+
+	// Skip leading newline if present
+	if l.ch == '\n' {
+		l.readChar()
+	} else if l.ch == '\r' && l.peekChar() == '\n' {
+		l.readChar()
+		l.readChar()
+	}
+
+	position := l.position
+
+	// Read until closing """
+	for {
+		if l.ch == 0 {
+			break
+		}
+		if l.ch == '"' && l.peekChar() == '"' && l.peekCharN(2) == '"' {
+			break
+		}
+		l.readChar()
+	}
+
+	result := l.input[position:l.position]
+
+	// Strip trailing newline if present
+	if len(result) > 0 && result[len(result)-1] == '\n' {
+		result = result[:len(result)-1]
+		if len(result) > 0 && result[len(result)-1] == '\r' {
+			result = result[:len(result)-1]
+		}
+	}
+
+	// Skip closing """
+	l.readChar() // first "
+	l.readChar() // second "
+	l.readChar() // third "
+
+	return result
 }
 
 // processEscapeSequences converts escape sequences in a string to their actual characters

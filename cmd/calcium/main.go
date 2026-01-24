@@ -10,13 +10,13 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/example/calcium/pkg/bytecode"
-	"github.com/example/calcium/pkg/compiler"
-	"github.com/example/calcium/pkg/lexer"
-	"github.com/example/calcium/pkg/optimizer"
-	"github.com/example/calcium/pkg/parser"
-	"github.com/example/calcium/pkg/value"
-	"github.com/example/calcium/pkg/vm"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
+	"github.com/ytnobody/calcium-lang/pkg/compiler"
+	"github.com/ytnobody/calcium-lang/pkg/lexer"
+	"github.com/ytnobody/calcium-lang/pkg/optimizer"
+	"github.com/ytnobody/calcium-lang/pkg/parser"
+	"github.com/ytnobody/calcium-lang/pkg/value"
+	"github.com/ytnobody/calcium-lang/pkg/vm"
 )
 
 // ANSI color codes
@@ -480,6 +480,10 @@ func executeWithFilenameOpt(input, filename string, optLevel optimizer.Level) (s
 	instructions = opt.OptimizeBytecode(instructions)
 
 	machine := vm.New(comp.Constants())
+	// Set source path for external module resolution
+	if absPath, err := filepath.Abs(filename); err == nil {
+		machine.SetSourcePath(absPath)
+	}
 	err = machine.Run(instructions)
 	if err != nil {
 		return "", fmt.Errorf("%s", formatError(filename, fmt.Sprintf("runtime error: %v", err), useColor))

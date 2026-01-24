@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/example/calcium/pkg/bytecode"
-	"github.com/example/calcium/pkg/value"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
+	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
 const (
@@ -114,6 +114,14 @@ type VM struct {
 	eofSource     *value.EventSource // Shared EOF event source
 	stdinOnce     sync.Once          // Ensure stdin initialization happens once
 	mu            sync.Mutex         // Protects shared async state
+
+	// Source file path for external module resolution
+	sourcePath string
+}
+
+// SetSourcePath sets the source file path for external module resolution
+func (vm *VM) SetSourcePath(path string) {
+	vm.sourcePath = path
 }
 
 // New creates a new VM
@@ -215,6 +223,8 @@ func (vm *VM) initBuiltins() {
 		// Hash functions
 		{Name: "keys", Fn: builtinKeys},
 		{Name: "values", Fn: builtinValues},
+		{Name: "hash_set", Fn: builtinHashSet},
+		{Name: "hash_merge", Fn: builtinHashMerge},
 	}
 }
 
@@ -851,7 +861,17 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 				module = stdlibMod
 				vm.modules[modulePath] = module // Cache it
 			} else {
-				return fmt.Errorf("module not found: %s", modulePath)
+				// Try loading from external filesystem
+				extMod, err := vm.LoadExternalModule(modulePath)
+				if err != nil {
+					return fmt.Errorf("error loading module %s: %w", modulePath, err)
+				}
+				if extMod != nil {
+					module = extMod
+					vm.modules[modulePath] = module // Cache it
+				} else {
+					return fmt.Errorf("module not found: %s", modulePath)
+				}
 			}
 		}
 		vm.push(value.ModuleVal(module))
@@ -2206,6 +2226,72 @@ func builtinValues(args ...value.Value) value.Value {
 	}
 	hash := args[0].AsHash()
 	return value.Array(hash.Values())
+}
+
+// hash_set creates a new hash with the given key-value pair added/updated
+// hash_set(hash, key, value) -> new_hash
+func builtinHashSet(args ...value.Value) value.Value {
+	if len(args) != 3 {
+		return value.Failure(value.String("hash_set: expected 3 arguments (hash, key, value)"))
+	}
+	if args[0].Type != value.TYPE_HASH {
+		return value.Failure(value.String(fmt.Sprintf("hash_set: expected hash as first argument, got %s", args[0].Type)))
+	}
+	if args[1].Type != value.TYPE_STRING {
+		return value.Failure(value.String(fmt.Sprintf("hash_set: expected string as key, got %s", args[1].Type)))
+	}
+	hash := args[0].AsHash()
+	key := args[1].AsString()
+	val := args[2]
+
+	// Create a new hash with all existing pairs plus the new one
+	newPairs := make([]value.HashPair, 0, len(hash.Pairs)+1)
+	keyFound := false
+	for _, pair := range hash.Pairs {
+		if pair.Key.AsString() == key {
+			// Replace existing key
+			newPairs = append(newPairs, value.HashPair{Key: pair.Key, Value: val})
+			keyFound = true
+		} else {
+			newPairs = append(newPairs, pair)
+		}
+	}
+	if !keyFound {
+		newPairs = append(newPairs, value.HashPair{Key: value.String(key), Value: val})
+	}
+	return value.HashVal(&value.Hash{Pairs: newPairs})
+}
+
+// hash_merge merges two hashes, with the second hash's values taking precedence
+// hash_merge(hash1, hash2) -> new_hash
+func builtinHashMerge(args ...value.Value) value.Value {
+	if len(args) != 2 {
+		return value.Failure(value.String("hash_merge: expected 2 arguments"))
+	}
+	if args[0].Type != value.TYPE_HASH {
+		return value.Failure(value.String(fmt.Sprintf("hash_merge: expected hash as first argument, got %s", args[0].Type)))
+	}
+	if args[1].Type != value.TYPE_HASH {
+		return value.Failure(value.String(fmt.Sprintf("hash_merge: expected hash as second argument, got %s", args[1].Type)))
+	}
+	hash1 := args[0].AsHash()
+	hash2 := args[1].AsHash()
+
+	// Create a map for efficient lookup
+	merged := make(map[string]value.Value)
+	for _, pair := range hash1.Pairs {
+		merged[pair.Key.AsString()] = pair.Value
+	}
+	for _, pair := range hash2.Pairs {
+		merged[pair.Key.AsString()] = pair.Value
+	}
+
+	// Convert back to pairs
+	newPairs := make([]value.HashPair, 0, len(merged))
+	for k, v := range merged {
+		newPairs = append(newPairs, value.HashPair{Key: value.String(k), Value: v})
+	}
+	return value.HashVal(&value.Hash{Pairs: newPairs})
 }
 
 // Module functions

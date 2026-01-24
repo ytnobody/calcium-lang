@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/example/calcium/pkg/value"
+	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
 // Primitives are low-level functions that cannot be implemented in Calcium.
@@ -632,49 +632,51 @@ func primitiveRegexCompile(args ...value.Value) value.Value {
 // =============================================================================
 
 // __to_int converts a value to integer
+// Returns success(int) on success, failure(message) on error
 func primitiveToInt(args ...value.Value) value.Value {
 	if len(args) != 1 {
 		return value.Failure(value.String("__to_int: expected 1 argument"))
 	}
 	switch args[0].Type {
 	case value.TYPE_INT:
-		return args[0]
+		return value.Success(args[0])
 	case value.TYPE_FLOAT:
-		return value.Int(int64(args[0].AsFloat()))
+		return value.Success(value.Int(int64(args[0].AsFloat())))
 	case value.TYPE_STRING:
 		var i int64
 		_, err := fmt.Sscanf(args[0].AsString(), "%d", &i)
 		if err != nil {
 			return value.Failure(value.String(fmt.Sprintf("__to_int: cannot parse %q as int", args[0].AsString())))
 		}
-		return value.Int(i)
+		return value.Success(value.Int(i))
 	case value.TYPE_BOOL:
 		if args[0].AsBool() {
-			return value.Int(1)
+			return value.Success(value.Int(1))
 		}
-		return value.Int(0)
+		return value.Success(value.Int(0))
 	default:
 		return value.Failure(value.String(fmt.Sprintf("__to_int: cannot convert %s to int", args[0].Type)))
 	}
 }
 
 // __to_float converts a value to float
+// Returns success(float) on success, failure(message) on error
 func primitiveToFloat(args ...value.Value) value.Value {
 	if len(args) != 1 {
 		return value.Failure(value.String("__to_float: expected 1 argument"))
 	}
 	switch args[0].Type {
 	case value.TYPE_FLOAT:
-		return args[0]
+		return value.Success(args[0])
 	case value.TYPE_INT:
-		return value.Float(float64(args[0].AsInt()))
+		return value.Success(value.Float(float64(args[0].AsInt())))
 	case value.TYPE_STRING:
 		var f float64
 		_, err := fmt.Sscanf(args[0].AsString(), "%f", &f)
 		if err != nil {
 			return value.Failure(value.String(fmt.Sprintf("__to_float: cannot parse %q as float", args[0].AsString())))
 		}
-		return value.Float(f)
+		return value.Success(value.Float(f))
 	default:
 		return value.Failure(value.String(fmt.Sprintf("__to_float: cannot convert %s to float", args[0].Type)))
 	}
@@ -686,6 +688,11 @@ func primitiveTypeOf(args ...value.Value) value.Value {
 		return value.Failure(value.String("__type_of: expected 1 argument"))
 	}
 	return value.String(args[0].Type.String())
+}
+
+// __null returns the null value
+func primitiveNull(args ...value.Value) value.Value {
+	return value.Null()
 }
 
 // =============================================================================
@@ -1102,6 +1109,7 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__to_int":   {Name: "__to_int", Fn: primitiveToInt},
 		"__to_float": {Name: "__to_float", Fn: primitiveToFloat},
 		"__type_of":  {Name: "__type_of", Fn: primitiveTypeOf},
+		"__null":     {Name: "__null", Fn: primitiveNull},
 
 		// TOML
 		"__toml_parse":     {Name: "__toml_parse", Fn: primitiveTomlParse},

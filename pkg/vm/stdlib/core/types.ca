@@ -1,0 +1,45 @@
+// core.types - Type utilities
+// Uses primitives: __type_of, __null
+
+// type_of returns the type of a value as a string
+// Possible return values: "null", "bool", "int", "float", "string",
+//                         "array", "hash", "function", "closure", "builtin"
+func type_of(v) = __type_of(v);
+
+// null is the null value
+null = __null();
+
+// is_null checks if a value is null
+func is_null(v) = __type_of(v) == "null";
+
+// is_bool checks if a value is a boolean
+func is_bool(v) = __type_of(v) == "bool";
+
+// is_int checks if a value is an integer
+func is_int(v) = __type_of(v) == "int";
+
+// is_float checks if a value is a float
+func is_float(v) = __type_of(v) == "float";
+
+// is_number checks if a value is a number (int or float)
+func is_number(v) = __type_of(v) == "int" || __type_of(v) == "float";
+
+// is_string checks if a value is a string
+func is_string(v) = __type_of(v) == "string";
+
+// is_array checks if a value is an array
+func is_array(v) = __type_of(v) == "array";
+
+// is_hash checks if a value is a hash
+func is_hash(v) = __type_of(v) == "hash";
+
+// is_function checks if a value is a function
+func is_function(v) = __type_of(v) == "function" || __type_of(v) == "closure" || __type_of(v) == "builtin";
+
+// to_int converts a value to integer
+// Returns success(int) on success, failure(message) on error
+func to_int(v) = __to_int(v);
+
+// to_float converts a value to float
+// Returns success(float) on success, failure(message) on error
+func to_float(v) = __to_float(v);

@@ -5,10 +5,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/example/calcium/pkg/ast"
-	"github.com/example/calcium/pkg/bytecode"
-	"github.com/example/calcium/pkg/token"
-	"github.com/example/calcium/pkg/value"
+	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
+	"github.com/ytnobody/calcium-lang/pkg/token"
+	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
 // CompileError represents a compilation error with position information
@@ -201,7 +201,7 @@ func New() *Compiler {
 	}
 
 	// Define built-in functions
-	builtins := []string{"len", "concat", "to_string", "get", "has", "head", "tail", "push", "range", "map", "filter", "reduce", "keys", "values"}
+	builtins := []string{"len", "concat", "to_string", "get", "has", "head", "tail", "push", "range", "map", "filter", "reduce", "keys", "values", "hash_set", "hash_merge"}
 	for i, name := range builtins {
 		symbolTable.DefineBuiltin(i, name)
 	}
@@ -403,6 +403,22 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 func (c *Compiler) Compile(node ast.Node) error {
 	switch node := node.(type) {
 	case *ast.Program:
+		// First pass: register all function and constraint declarations
+		// This enables forward references (functions calling other functions defined later)
+		for _, s := range node.Statements {
+			switch stmt := s.(type) {
+			case *ast.FunctionDeclaration:
+				if stmt.IsEffect {
+					c.symbolTable.DefineEffect(stmt.Name.Value)
+				} else {
+					c.symbolTable.Define(stmt.Name.Value)
+				}
+			case *ast.ConstraintDeclaration:
+				c.symbolTable.Define(stmt.Name.Value)
+			}
+		}
+
+		// Second pass: compile all statements
 		for _, s := range node.Statements {
 			err := c.Compile(s)
 			if err != nil {
@@ -516,13 +532,15 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 
 	case *ast.FunctionDeclaration:
-		// Define the function name FIRST (for recursion support)
-		// Use DefineEffect for func! functions
-		var symbol Symbol
-		if node.IsEffect {
-			symbol = c.symbolTable.DefineEffect(node.Name.Value)
-		} else {
-			symbol = c.symbolTable.Define(node.Name.Value)
+		// Resolve the function name (already registered in first pass for forward references)
+		// If not found, define it (for nested scopes or REPL)
+		symbol, ok := c.symbolTable.Resolve(node.Name.Value)
+		if !ok {
+			if node.IsEffect {
+				symbol = c.symbolTable.DefineEffect(node.Name.Value)
+			} else {
+				symbol = c.symbolTable.Define(node.Name.Value)
+			}
 		}
 
 		c.enterScope()

@@ -9,37 +9,39 @@ io.println("================");
 // === Basic Constraint ===
 assert.section("Basic constraint");
 constraint Positive(x) = x > 0;
-assert.is_true("Positive(5)", Positive(5));
-assert.is_false("Positive(-3)", Positive(-3));
-assert.is_false("Positive(0)", Positive(0));
+assert.ok("5 is positive", 5 |> Positive?);
+assert.succeeds("5 passes Positive", 5 |> Positive?);
+assert.throws("-3 fails Positive", -3 |> Positive?);
+assert.throws("0 fails Positive", 0 |> Positive?);
 
 // === String Constraint ===
 assert.section("String constraint");
 constraint NonEmpty(s) = len(s) > 0;
-assert.is_true("NonEmpty hello", NonEmpty("hello"));
-assert.is_false("NonEmpty empty", NonEmpty(""));
+assert.ok("hello is non-empty", "hello" |> NonEmpty?);
+assert.throws("empty fails NonEmpty", "" |> NonEmpty?);
 
 // === Compound Constraint ===
 assert.section("Compound constraint");
 constraint InRange(x) = x >= 0 && x <= 100;
-assert.is_true("InRange(50)", InRange(50));
-assert.is_true("InRange(0)", InRange(0));
-assert.is_true("InRange(100)", InRange(100));
-assert.is_false("InRange(-1)", InRange(-1));
-assert.is_false("InRange(101)", InRange(101));
+assert.ok("50 in range", 50 |> InRange?);
+assert.ok("0 in range", 0 |> InRange?);
+assert.ok("100 in range", 100 |> InRange?);
+assert.throws("-1 out of range", -1 |> InRange?);
+assert.throws("101 out of range", 101 |> InRange?);
 
 // === Constraint with Contains ===
 assert.section("Constraint with string.contains");
 constraint Digit(c) = string.contains("0123456789", c);
-assert.is_true("Digit 5", Digit("5"));
-assert.is_false("Digit a", Digit("a"));
+assert.ok("5 is digit", "5" |> Digit?);
+assert.throws("a is not digit", "a" |> Digit?);
 
 constraint Letter(c) = string.contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", c);
-assert.is_true("Letter a", Letter("a"));
-assert.is_true("Letter Z", Letter("Z"));
-assert.is_false("Letter 5", Letter("5"));
+assert.ok("a is letter", "a" |> Letter?);
+assert.ok("Z is letter", "Z" |> Letter?);
+assert.throws("5 is not letter", "5" |> Letter?);
 
 // === Constraint in Match ===
+// Note: Using Constraint(value) returns boolean, useful for match branching
 assert.section("Constraint in match");
 func classify_char(c) = match Digit(c)
     true => "digit"
@@ -51,10 +53,25 @@ assert.eq("classify 5", classify_char("5"), "digit");
 assert.eq("classify a", classify_char("a"), "letter");
 assert.eq("classify @", classify_char("@"), "other");
 
+// Alternative: Using !? for result handling
+func is_digit(c) = c |> Digit? !? { success(_) => true  failure(_) => false };
+func is_letter(c) = c |> Letter? !? { success(_) => true  failure(_) => false };
+func classify_with_result(c) = match is_digit(c)
+    true => "digit"
+    false => match is_letter(c)
+        true => "letter"
+        false => "other";
+assert.eq("result classify 5", classify_with_result("5"), "digit");
+assert.eq("result classify a", classify_with_result("a"), "letter");
+
 // === Multiple Constraints ===
 assert.section("Multiple constraints");
 constraint Even(n) = n % 2 == 0;
 constraint Odd(n) = n % 2 == 1;
+
+assert.ok("4 is even", 4 |> Even?);
+assert.ok("7 is odd", 7 |> Odd?);
+assert.throws("7 is not even", 7 |> Even?);
 
 func describe_parity(n) = match Even(n)
     true => "even"
@@ -66,9 +83,13 @@ assert.eq("parity 7", describe_parity(7), "odd");
 // === Constraint Composition ===
 assert.section("Constraint composition");
 constraint PositiveEven(x) = Positive(x) && Even(x);
-assert.is_true("PositiveEven(4)", PositiveEven(4));
-assert.is_false("PositiveEven(3)", PositiveEven(3));
-assert.is_false("PositiveEven(-4)", PositiveEven(-4));
+assert.ok("4 is positive and even", 4 |> PositiveEven?);
+assert.throws("3 is not positive-even", 3 |> PositiveEven?);
+assert.throws("-4 is not positive-even", -4 |> PositiveEven?);
+
+// Composing with && on Result types
+assert.ok("4 passes both", (4 |> Positive?) && (4 |> Even?));
+assert.throws("3 fails composition", (3 |> Positive?) && (3 |> Even?));
 
 io.println("\n================");
 io.println("Constraint tests complete!");

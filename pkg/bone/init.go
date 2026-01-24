@@ -44,13 +44,13 @@ func Init(name string) error {
 		moduleName = strings.TrimSpace(input)
 	}
 
-	fmt.Print("Author (UPPERCASE): ")
+	fmt.Print("Author (GitHub username): ")
 	author, _ := reader.ReadString('\n')
 	author = strings.TrimSpace(author)
 	if author == "" {
 		return fmt.Errorf("author is required")
 	}
-	author = strings.ToUpper(author)
+	author = strings.ToLower(author)
 
 	fmt.Print("Description: ")
 	description, _ := reader.ReadString('\n')

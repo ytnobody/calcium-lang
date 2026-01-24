@@ -24,7 +24,7 @@ func ParseModuleSpec(spec string) (author, name, version string, err error) {
 		return "", "", "", fmt.Errorf("invalid module format: expected AUTHOR/name, got %s", moduleRef)
 	}
 
-	author = strings.ToUpper(slashParts[0])
+	author = strings.ToLower(slashParts[0])
 	name = strings.ToLower(slashParts[1])
 
 	return author, name, version, nil

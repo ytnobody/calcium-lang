@@ -2246,20 +2246,26 @@ func builtinHashSet(args ...value.Value) value.Value {
 
 	// Create a new hash with all existing pairs plus the new one
 	newPairs := make([]value.HashPair, 0, len(hash.Pairs)+1)
+	newLookup := make(map[string]int)
 	keyFound := false
-	for _, pair := range hash.Pairs {
-		if pair.Key.AsString() == key {
+	for i, pair := range hash.Pairs {
+		pairKey := pair.Key.AsString()
+		if pairKey == key {
 			// Replace existing key
 			newPairs = append(newPairs, value.HashPair{Key: pair.Key, Value: val})
+			newLookup[pairKey] = len(newPairs) - 1
 			keyFound = true
 		} else {
 			newPairs = append(newPairs, pair)
+			newLookup[pairKey] = len(newPairs) - 1
 		}
+		_ = i // suppress unused variable warning
 	}
 	if !keyFound {
 		newPairs = append(newPairs, value.HashPair{Key: value.String(key), Value: val})
+		newLookup[key] = len(newPairs) - 1
 	}
-	return value.HashVal(&value.Hash{Pairs: newPairs})
+	return value.HashVal(&value.Hash{Pairs: newPairs, Lookup: newLookup})
 }
 
 // hash_merge merges two hashes, with the second hash's values taking precedence
@@ -2286,12 +2292,14 @@ func builtinHashMerge(args ...value.Value) value.Value {
 		merged[pair.Key.AsString()] = pair.Value
 	}
 
-	// Convert back to pairs
+	// Convert back to pairs with lookup
 	newPairs := make([]value.HashPair, 0, len(merged))
+	newLookup := make(map[string]int)
 	for k, v := range merged {
 		newPairs = append(newPairs, value.HashPair{Key: value.String(k), Value: v})
+		newLookup[k] = len(newPairs) - 1
 	}
-	return value.HashVal(&value.Hash{Pairs: newPairs})
+	return value.HashVal(&value.Hash{Pairs: newPairs, Lookup: newLookup})
 }
 
 // Module functions

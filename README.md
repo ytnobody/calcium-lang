@@ -356,20 +356,39 @@ toml.stringify(data);
 // success("name = \"test\"\nvalue = 123\n")
 ```
 
-### Remote Modules
+### External Modules
 
-Import modules directly from GitHub:
+Import modules from the Boneyard registry or GitHub:
 
 ```calcium
-// Format 1: author/module (recommended)
+// Import from Boneyard registry (recommended)
 use ytnobody/json;
 use ytnobody/json!;  // Effect module
 
-// Format 2: GitHub URL
+// Import from GitHub URL
 use "github.com/ytnobody/json-calcium";
 ```
 
-Remote modules are automatically fetched and cached at `~/.calcium/cache/`.
+#### Installing Modules with bone
+
+Use the `bone` package manager to install modules:
+
+```bash
+# Install to project (calcium_modules/)
+bone add ytnobody/json
+
+# Install to global cache (~/.calcium/cache/)
+bone add --global ytnobody/json
+
+# Install a specific version
+bone add ytnobody/json@1.0.0
+```
+
+Module resolution order:
+1. In-memory cache
+2. Local `calcium_modules/author/module/`
+3. Global cache `~/.calcium/cache/author/module/`
+4. Auto-fetch from GitHub (saved to global cache)
 
 ## Standard Library
 
@@ -495,6 +514,125 @@ Remote modules are automatically fetched and cached at `~/.calcium/cache/`.
 | `success(value)` | Wrap value in success |
 | `failure(error)` | Wrap error in failure |
 
+## Package Manager (bone)
+
+`bone` is the package manager for Calcium. It manages dependencies and integrates with the Boneyard module registry.
+
+### Installation
+
+```bash
+go build -o bone ./cmd/bone
+```
+
+### Usage
+
+```bash
+# Initialize a new project
+bone init my-project
+
+# Add a module (installs to calcium_modules/)
+bone add ytnobody/json
+
+# Add to global cache
+bone add --global ytnobody/json
+
+# List installed modules
+bone list
+
+# Update modules
+bone update
+
+# Remove a module
+bone remove ytnobody/json
+
+# Show configuration
+bone config
+
+# Set custom registry URL
+bone config set registry_url https://example.com/registry
+```
+
+### Project Structure
+
+After `bone init`, your project looks like:
+
+```
+my-project/
+├── meta.toml           # Project metadata
+├── calcium.lock        # Lock file (versions)
+├── calcium_modules/    # Local modules
+│   └── author/
+│       └── module/
+│           └── mod.ca
+└── main.ca             # Entry point
+```
+
+### meta.toml
+
+```toml
+name = "my-project"
+author = "yourname"
+description = "My Calcium project"
+license = "MIT"
+entry = "main.ca"
+
+[dependencies]
+"ytnobody/json" = "^1.0.0"
+```
+
+### Configuration
+
+Configuration is stored in `~/.calcium/config.toml`:
+
+```toml
+registry_url = "https://raw.githubusercontent.com/ytnobody/boneyard/main/index"
+```
+
+## Boneyard Registry
+
+[Boneyard](https://github.com/ytnobody/boneyard) is the official module registry for Calcium.
+
+### Publishing a Module
+
+1. Create `meta.toml` in your repository:
+
+```toml
+name = "my-module"
+author = "YOURNAME"
+description = "My awesome module"
+license = "MIT"
+keywords = ["utility"]
+entry = "mod.ca"
+```
+
+2. (Optional) Create a release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+3. Submit your module by opening an issue at [Boneyard](https://github.com/ytnobody/boneyard/issues/new) with:
+
+```
+https://raw.githubusercontent.com/YOURNAME/my-module/main/meta.toml
+```
+
+### Using Modules
+
+```calcium
+use core.io!;
+use ytnobody/json;
+
+data = {name: "Calcium", version: 1};
+json_str = json.stringify(data);
+io.println(json_str);  // {"name":"Calcium","version":1}
+
+result = json.parse('{"hello": "world"}');
+parsed = result !? { success(v) => v  failure(e) => {} };
+io.println(parsed["hello"]);  // world
+```
+
 ## Examples
 
 See the `examples/` directory:
@@ -540,9 +678,12 @@ calcium compile -O2 program.ca -o program.bone
 
 ```
 calcium/
-├── cmd/calcium/       # CLI entry point
+├── cmd/
+│   ├── calcium/       # Calcium CLI
+│   └── bone/          # Package manager CLI
 ├── pkg/
 │   ├── ast/           # Abstract Syntax Tree
+│   ├── bone/          # Package manager core
 │   ├── bytecode/      # Bytecode definitions
 │   ├── compiler/      # Compiler (AST to bytecode)
 │   ├── lexer/         # Lexical analyzer

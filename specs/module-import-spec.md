@@ -1,382 +1,308 @@
-# Calcium Remote Module Import Specification
+# Calcium Module System Specification
 
-## Status: Partially Implemented ✓
+## Status: Implemented
 
-Basic remote module import from GitHub is now available.
-
-## Overview
-
-URL-based module imports, inspired by Deno's module system.
+Module import and dependency management with bone package manager and Boneyard registry.
 
 ---
 
-## Implemented Features ✓
+## Overview
 
-### Simple GitHub Import
+Calcium supports three types of module imports:
+
+1. **Standard library** - Built-in modules (`core.*`)
+2. **Local modules** - Project-local files
+3. **External modules** - From Boneyard registry or GitHub
+
+---
+
+## Import Syntax
+
+### Standard Library
+
+```calcium
+use core.io!;      // Effect module
+use core.math;     // Pure module
+use core.string;
+use core.array;
+```
+
+### Local Modules
+
+```calcium
+use mymodule;           // ./mymodule/mod.ca or ./mymodule.ca
+use utils.helper;       // ./utils/helper/mod.ca or ./utils/helper.ca
+```
+
+### External Modules
 
 ```calcium
 // Format 1: author/module (recommended)
 use ytnobody/json;
-use ytnobody/json!;  // Effect module
+use ytnobody/json!;     // Effect module
 
 // Format 2: GitHub URL
 use "github.com/ytnobody/json-calcium";
 use "github.com/ytnobody/json-calcium"!;
-
-// Existing format (unchanged)
-use core.io!;
-use mylocal.module;
-```
-
-### Resolution Order
-
-1. VM cache (in-memory)
-2. Global cache (`stdlibCache`)
-3. Standard library (embedded FS)
-4. Local filesystem (`calcium_modules/`, relative paths)
-5. Remote sources (GitHub direct)
-
-### GitHub URL Resolution
-
-For `author/module` format, tries in order:
-1. `github.com/{author}/{module}-calcium/main/mod.ca`
-2. `github.com/{author}/{module}/main/mod.ca`
-3. `github.com/{author}/{module}-calcium/master/mod.ca`
-4. `github.com/{author}/{module}/master/mod.ca`
-
-### Cache Structure
-
-```
-~/.calcium/cache/
-└── {author}/
-    └── {module}/
-        └── mod.ca
 ```
 
 ---
 
-## Future Enhancements (Not Yet Implemented)
+## Package Manager (bone)
 
-The following features are planned but not yet implemented:
-
----
-
-## Design Principles (Future)
-
-1. **URL-based** - Remote modules specified directly via HTTPS URL
-2. **No config file required** - Self-contained in code (use import map if needed)
-3. **Global cache** - Once fetched, modules are reused
-4. **Version in URL** - Format like `@1.0.0`
-
----
-
-## Basic Syntax
-
-### Direct Import via URL
-
-```calcium
-// Direct import from HTTPS URL (author scope)
-use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"!;
-use "https://ca.land/SARAHDEV/json@2.0.0/mod.ca";
-
-// GitHub raw URL (direct)
-use "https://raw.githubusercontent.com/johndoe/calcium-http/v1.0.0/client.ca"!;
-```
-
-### URL Structure
-
-```
-https://ca.land/JOHNDOE/http@1.0.0/client.ca
-         │       │       │   │       │
-         │       │       │   │       └── File path
-         │       │       │   └── Version
-         │       │       └── Module name
-         │       └── Author name (uppercase)
-         └── Host (placeholder)
-```
-
-### Resolution Flow
-
-```
-use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"!;
-```
-
-```
-1. Get metadata
-   GET https://ca.land/JOHNDOE/http/1.0.0.toml
-
-2. Search file info
-   Find "client.ca" in 1.0.0.toml's [files]
-   → Get hash value
-   → Build actual URL from base_url + "client.ca"
-
-3. Get actual file
-   GET https://raw.githubusercontent.com/johndoe/calcium-http/v1.0.0/client.ca
-
-4. Hash verification
-   SHA256(content) == hash value in 1.0.0.toml?
-   → Match: Save to cache, load
-   → Mismatch: Error (possible tampering)
-```
-
-### Distinguishing Local and Remote Modules
-
-```calcium
-// Remote (URL) - author/module@version
-use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"!;
-
-// Local (as before)
-use core.io!;             // Standard library
-use utils.helper;         // In project (src/utils/helper.ca)
-```
-
-**Decision rule**: Starts with `"` → URL, otherwise → local
-
----
-
-## deps.ca Pattern
-
-Recommended pattern for managing dependencies in one place.
-
-```calcium
-// deps.ca - Dependency aggregation file
-pub use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"! as http;
-pub use "https://ca.land/JOHNDOE/json@2.0.0/mod.ca" as json;
-pub use "https://ca.land/CALCIUM/std@1.0.0/async.ca"! as async;
-```
-
-```calcium
-// main.ca - Use via deps.ca
-use deps { http, json };
-
-result = http.get("https://api.example.com")
-    |> json.parse;
-```
-
-**Benefits:**
-- Version management in one place
-- Minimal changes when updating
-- URLs don't scatter
-
----
-
-## Import Map (calcium.imports.toml)
-
-Optional feature for defining URL aliases.
-
-```toml
-[imports]
-"http/" = "https://ca.land/JOHNDOE/http@1.0.0/"
-"json" = "https://ca.land/JOHNDOE/json@2.0.0/mod.ca"
-"std/" = "https://ca.land/CALCIUM/std@1.0.0/"
-```
-
-```calcium
-// With import map
-use "http/client.ca"!;   // → https://ca.land/JOHNDOE/http@1.0.0/client.ca
-use "json";              // → https://ca.land/JOHNDOE/json@2.0.0/mod.ca
-use "std/async.ca"!;     // → https://ca.land/CALCIUM/std@1.0.0/async.ca
-```
-
-### Runtime Specification
+### Installation
 
 ```bash
-calcium run --import-map=calcium.imports.toml src/main.ca
+go build -o bone ./cmd/bone
 ```
 
----
-
-## Cache
-
-### Global Cache
-
-```
-~/.calcium/
-└── cache/
-    └── https/
-        └── ca.land/
-            ├── JOHNDOE/
-            │   ├── http@1.0.0/
-            │   │   └── client.ca
-            │   └── json@2.0.0/
-            │       └── mod.ca
-            └── CALCIUM/
-                └── std@1.0.0/
-                    └── async.ca
-```
-
-### Cache Operations
+### Commands
 
 ```bash
-# Pre-cache dependencies
-calcium cache src/main.ca
-calcium cache deps.ca
+# Initialize a new project
+bone init [name]
 
-# Show cache info
-calcium cache --info
+# Add modules
+bone add author/module              # Local install (calcium_modules/)
+bone add --global author/module     # Global install (~/.calcium/cache/)
+bone add author/module@1.0.0        # Specific version
 
-# Clear cache
-calcium cache --clear
+# Manage modules
+bone list                           # List installed modules
+bone update [module]                # Update modules
+bone remove author/module           # Remove a module
+
+# Configuration
+bone config                         # Show all config
+bone config get registry_url        # Get config value
+bone config set registry_url URL    # Set config value
 ```
-
----
-
-## Lock File (calcium.lock)
-
-For integrity verification. Auto-generated by `calcium cache` or first run. TOML format.
-
-```toml
-version = "1"
-generated = "2025-01-22T10:00:00Z"
-
-[modules."JOHNDOE/http@1.0.0"]
-meta_url = "https://ca.land/JOHNDOE/http/1.0.0.toml"
-meta_sha256 = "fff000..."
-
-[modules."JOHNDOE/http@1.0.0".files]
-"client.ca" = { url = "https://raw.githubusercontent.com/johndoe/calcium-http/v1.0.0/client.ca", sha256 = "a1b2c3..." }
-
-[modules."JOHNDOE/json@2.0.0"]
-meta_url = "https://ca.land/JOHNDOE/json/2.0.0.toml"
-meta_sha256 = "eee111..."
-
-[modules."JOHNDOE/json@2.0.0".files]
-"mod.ca" = { url = "https://raw.githubusercontent.com/johndoe/calcium-json/v2.0.0/mod.ca", sha256 = "b2c3d4..." }
-```
-
-**Lock file role:**
-- Records hash of metadata itself (tampering prevention)
-- Records only actually used files
-- Guarantees complete reproducibility in CI environment
-
-```bash
-# Integrity check with lock file
-calcium run --lock=calcium.lock src/main.ca
-
-# Update lock file
-calcium cache --lock=calcium.lock --lock-write src/main.ca
-```
-
----
-
-## Module Resolution Order
-
-```calcium
-use foo.bar;              // Local
-use "https://.../mod.ca"; // Remote
-```
-
-**Local (`use foo.bar;`)**
-1. In project: `src/foo/bar.ca`
-2. Standard library: `core.*`
-
-**Remote (`use "https://...";`)**
-1. Map with Import Map (if exists)
-2. Check cache
-3. Fetch from network if not cached
-
----
-
-## CLI Commands
-
-### calcium run
-
-```bash
-# Basic execution (auto-fetch required modules)
-calcium run src/main.ca
-
-# Specify import map
-calcium run --import-map=calcium.imports.json src/main.ca
-
-# Integrity check with lock file
-calcium run --lock=calcium.lock src/main.ca
-
-# Disable network access (cache only)
-calcium run --cached-only src/main.ca
-```
-
-### calcium cache
-
-```bash
-# Pre-cache dependencies
-calcium cache src/main.ca
-
-# Cache info
-calcium cache --info
-
-# Clear cache
-calcium cache --clear
-
-# Generate lock file
-calcium cache --lock=calcium.lock --lock-write src/main.ca
-```
-
----
-
-## Complete Example
 
 ### Project Structure
 
 ```
 my-project/
-├── calcium.imports.toml   # (Optional) import map
-├── calcium.lock           # (Auto-generated) TOML format
-├── deps.ca                # Dependency aggregation
-└── src/
-    └── main.ca
+├── meta.toml           # Project metadata
+├── calcium.lock        # Lock file (versions)
+├── calcium_modules/    # Local modules
+│   └── author/
+│       └── module/
+│           └── mod.ca
+└── main.ca             # Entry point
 ```
 
-### deps.ca
+### meta.toml
 
-```calcium
-// deps.ca
-pub use "https://ca.land/JOHNDOE/http@1.0.0/client.ca"! as http;
-pub use "https://ca.land/JOHNDOE/json@2.0.0/mod.ca" as json;
+```toml
+name = "my-project"
+author = "yourname"
+description = "My Calcium project"
+license = "MIT"
+keywords = ["web", "utility"]
+entry = "main.ca"
+
+[dependencies]
+"ytnobody/json" = "^1.0.0"
+"author/module" = ">=2.0.0"
 ```
 
-### src/main.ca
+### calcium.lock
 
-```calcium
-// src/main.ca
-use core.io!;
-use deps { http, json };
+Auto-generated lock file with exact versions:
 
-data = http.get("https://api.example.com/users")
-    |> json.parse;
+```toml
+[[modules]]
+  name = "json"
+  author = "ytnobody"
+  version = "1.0.0"
+  commit = "abc123def456..."
 
-io.println(data);
+[[modules]]
+  name = "module"
+  author = "author"
+  version = "2.1.0"
+  commit = "def456abc789..."
 ```
 
-### Execution
+### Configuration
+
+Stored in `~/.calcium/config.toml`:
+
+```toml
+registry_url = "https://raw.githubusercontent.com/ytnobody/boneyard/main/index"
+```
+
+---
+
+## Module Resolution
+
+### Resolution Order
+
+When loading `use author/module`:
+
+1. **In-memory cache** - Already loaded modules
+2. **Local project** - `calcium_modules/author/module/mod.ca`
+3. **Global cache** - `~/.calcium/cache/author/module/mod.ca`
+4. **Remote fetch** - GitHub (saved to global cache)
+
+### Directory Structure
+
+```
+# Project local
+./calcium_modules/
+└── author/
+    └── module/
+        └── mod.ca
+
+# Global cache
+~/.calcium/
+├── config.toml
+└── cache/
+    └── author/
+        └── module/
+            └── mod.ca
+```
+
+### GitHub URL Resolution
+
+For modules not in Boneyard, tries:
+1. `github.com/{author}/{module}-calcium/main/mod.ca`
+2. `github.com/{author}/{module}/main/mod.ca`
+3. `github.com/{author}/{module}-calcium/master/mod.ca`
+4. `github.com/{author}/{module}/master/mod.ca`
+
+---
+
+## Boneyard Registry
+
+[Boneyard](https://github.com/ytnobody/boneyard) is the official module registry.
+
+### Registry Structure
+
+```
+boneyard/
+├── index/
+│   └── A/AU/AUTHOR/module-name/
+│       ├── meta.toml        # Module metadata
+│       ├── 1.0.0.toml       # Version info
+│       ├── 1.1.0.toml
+│       └── latest.toml      # Latest version
+└── tags/
+    └── keyword/
+        └── A/AU/AUTHOR/
+            └── module-name -> (symlink)
+```
+
+### meta.toml (in registry)
+
+```toml
+name = "module-name"
+author = "author"
+description = "Description"
+license = "MIT"
+keywords = ["utility", "helper"]
+entry = "mod.ca"
+source_url = "https://github.com/author/module-name"
+```
+
+### Version TOML
+
+```toml
+version = "1.0.0"
+tag = "v1.0.0"
+commit = "abc123def456..."
+published = "2025-01-24T10:00:00Z"
+```
+
+### Publishing a Module
+
+1. Create `meta.toml` in your repository:
+
+```toml
+name = "my-module"
+author = "YOURNAME"
+description = "My module"
+license = "MIT"
+keywords = ["utility"]
+entry = "mod.ca"
+```
+
+2. (Optional) Create a release:
 
 ```bash
-# First run (auto-fetch and cache dependencies)
-calcium run src/main.ca
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-# Generate lock file (for CI)
-calcium cache --lock=calcium.lock --lock-write src/main.ca
+3. Submit by opening an issue at [Boneyard](https://github.com/ytnobody/boneyard/issues/new):
 
-# CI environment
-calcium run --lock=calcium.lock --cached-only src/main.ca
+```
+https://raw.githubusercontent.com/YOURNAME/my-module/main/meta.toml
 ```
 
 ---
 
-## Implementation Steps
+## Version Constraints
 
-1. **Parser extension**: Support `use "https://..."` syntax
-2. **TOML parser**: Read/write metadata, lock, import map
-3. **HTTP client**: Fetch files from URL
-4. **SHA256**: Hash calculation and verification
-5. **Cache management**: Save/load to `~/.calcium/cache/`
-6. **Module resolution**: URL → metadata → actual URL → cache
+Supported version constraint syntax:
+
+| Constraint | Meaning |
+|------------|---------|
+| `^1.0.0` | Compatible with 1.x.x (>=1.0.0 <2.0.0) |
+| `~1.0.0` | Patch updates only (>=1.0.0 <1.1.0) |
+| `>=1.0.0` | Greater than or equal |
+| `<=1.0.0` | Less than or equal |
+| `>1.0.0` | Greater than |
+| `<1.0.0` | Less than |
+| `=1.0.0` | Exact version |
+| `*` | Any version |
 
 ---
 
-## Undecided Items
+## Example Usage
 
-- [ ] Parser support for `pub use ... as` syntax
-- [ ] Cache directory environment variable (`CALCIUM_DIR`)
-- [ ] Redirect handling (how many hops to follow)
-- [ ] Timeout settings
-- [ ] Private URL authentication (Authorization header)
+### Complete Workflow
+
+```bash
+# Create project
+bone init my-app
+cd my-app
+
+# Add dependencies
+bone add ytnobody/json
+
+# Edit main.ca
+cat > main.ca << 'EOF'
+use core.io!;
+use ytnobody/json;
+
+data = {name: "Calcium", version: 1};
+json_str = json.stringify(data);
+io.println(json_str);
+
+result = json.parse('{"hello": "world"}');
+parsed = result !? { success(v) => v  failure(e) => {} };
+io.println(parsed["hello"]);
+EOF
+
+# Run
+calcium main.ca
+```
+
+### Output
+
+```
+{"name":"Calcium","version":1}
+world
+```
+
+---
+
+## Future Enhancements
+
+- [ ] Version range resolution for dependencies
+- [ ] Dependency tree visualization
+- [ ] Private registry support
+- [ ] Workspace/monorepo support
+- [ ] `pub use ... as` syntax for re-exports
+- [ ] Import maps for URL aliases

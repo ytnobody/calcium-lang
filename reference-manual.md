@@ -517,12 +517,12 @@ io.println("Hello");
 math.sqrt(16);
 ```
 
-### Remote Modules
+### External Modules
 
-Calcium supports importing modules from GitHub:
+Calcium supports importing modules from the Boneyard registry or GitHub:
 
 ```calcium
-// Format 1: author/module (simple)
+// Format 1: author/module (recommended)
 use ytnobody/json;
 use ytnobody/json!;  // Effect module
 
@@ -531,31 +531,53 @@ use "github.com/ytnobody/json-calcium";
 use "github.com/ytnobody/json-calcium"!;
 ```
 
-Remote modules are automatically:
-1. Fetched from GitHub
-2. Cached locally at `~/.calcium/cache/`
-3. Reused from cache on subsequent runs
+### Installing Modules with bone
 
-#### Module Resolution Order
+The `bone` package manager handles module installation:
 
-1. VM cache (in-memory)
-2. Global cache (`stdlibCache`)
-3. Standard library (embedded)
-4. Local filesystem (`./module/mod.ca`, `./module.ca`)
-5. Remote sources (GitHub)
+```bash
+# Install to project directory (calcium_modules/)
+bone add ytnobody/json
 
-#### Cache Structure
+# Install to global cache (~/.calcium/cache/)
+bone add --global ytnobody/json
 
-```
-~/.calcium/cache/
-└── {author}/
-    └── {module}/
-        └── mod.ca
+# Install specific version
+bone add ytnobody/json@1.0.0
 ```
 
-#### GitHub URL Resolution
+### Module Resolution Order
 
-For `author/module` format, Calcium tries:
+When loading an external module, Calcium searches in this order:
+
+1. In-memory cache (already loaded modules)
+2. Local project directory (`calcium_modules/author/module/mod.ca`)
+3. Global cache (`~/.calcium/cache/author/module/mod.ca`)
+4. Remote fetch from GitHub (auto-saved to global cache)
+
+### Directory Structure
+
+```
+my-project/
+├── meta.toml              # Project metadata
+├── calcium.lock           # Locked versions
+├── calcium_modules/       # Local modules (installed by bone add)
+│   └── ytnobody/
+│       └── json/
+│           └── mod.ca
+└── main.ca
+
+~/.calcium/
+├── config.toml            # Global configuration
+└── cache/                 # Global module cache
+    └── ytnobody/
+        └── json/
+            └── mod.ca
+```
+
+### GitHub URL Resolution
+
+For `author/module` format without Boneyard registration, Calcium tries:
 1. `github.com/{author}/{module}-calcium/main/mod.ca`
 2. `github.com/{author}/{module}/main/mod.ca`
 3. `github.com/{author}/{module}-calcium/master/mod.ca`
@@ -578,6 +600,10 @@ use math { add, multiply };
 
 add(2, 3);  // Can use directly
 ```
+
+### Publishing Modules
+
+See [Boneyard](https://github.com/ytnobody/boneyard) for publishing your own modules.
 
 ---
 

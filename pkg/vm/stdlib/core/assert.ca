@@ -1,0 +1,90 @@
+// core.assert - Testing assertions
+// Uses primitives: __println, __type_of
+
+// eq asserts that actual equals expected
+func! eq(actual, expected) = match actual == expected
+    true => __println(concat("  ✓ eq: ", concat(to_string(actual), " == ", to_string(expected))))
+    false => __println(concat("  ✗ eq: Expected ", concat(to_string(expected), concat(", got ", to_string(actual)))));
+
+// neq asserts that actual does not equal expected
+func! neq(actual, expected) = match actual == expected
+    false => __println(concat("  ✓ neq: ", concat(to_string(actual), " != ", to_string(expected))))
+    true => __println(concat("  ✗ neq: Expected not equal to ", to_string(expected)));
+
+// ok asserts that value is truthy
+func! ok(value) = match value
+    true => __println("  ✓ ok: true")
+    false => __println("  ✗ ok: Expected truthy value, got false")
+    _ => __println(concat("  ✓ ok: ", to_string(value)));
+
+// is_true asserts that value is exactly true
+func! is_true(value) = match value
+    true => __println("  ✓ is_true")
+    _ => __println(concat("  ✗ is_true: Expected true, got ", to_string(value)));
+
+// is_false asserts that value is exactly false
+func! is_false(value) = match value
+    false => __println("  ✓ is_false")
+    _ => __println(concat("  ✗ is_false: Expected false, got ", to_string(value)));
+
+// is_null asserts that value is null
+func! is_null(value) = match __type_of(value)
+    "null" => __println("  ✓ is_null")
+    _ => __println(concat("  ✗ is_null: Expected null, got ", to_string(value)));
+
+// is_type asserts that value has the expected type
+func! is_type(value, expected_type) = match __type_of(value) == expected_type
+    true => __println(concat("  ✓ is_type: ", expected_type))
+    false => __println(concat("  ✗ is_type: Expected ", concat(expected_type, concat(", got ", __type_of(value)))));
+
+// fail explicitly fails with a message
+func! fail(message) = __println(concat("  ✗ fail: ", message));
+
+// throws asserts that a result is a failure
+func! throws(result) = match __type_of(result)
+    "failure" => __println("  ✓ throws: got failure")
+    _ => __println(concat("  ✗ throws: Expected failure, got ", to_string(result)));
+
+// succeeds asserts that a result is a success
+func! succeeds(result) = match __type_of(result)
+    "success" => __println("  ✓ succeeds: got success")
+    _ => __println(concat("  ✗ succeeds: Expected success, got ", to_string(result)));
+
+// contains asserts that an array contains an element
+func! contains(arr, element) = match _array_contains(arr, element)
+    true => __println(concat("  ✓ contains: ", to_string(element)))
+    false => __println(concat("  ✗ contains: Expected array to contain ", to_string(element)));
+
+func _array_contains(arr, element) = match len(arr)
+    0 => false
+    _ => match head(arr) == element
+        true => true
+        false => _array_contains(tail(arr), element);
+
+// len_eq asserts that the length of a value equals expected
+func! len_eq(value, expected) = match len(value) == expected
+    true => __println(concat("  ✓ len_eq: ", to_string(expected)))
+    false => __println(concat("  ✗ len_eq: Expected length ", concat(to_string(expected), concat(", got ", to_string(len(value))))));
+
+// gt asserts that actual > expected
+func! gt(actual, expected) = match actual > expected
+    true => __println(concat("  ✓ gt: ", concat(to_string(actual), concat(" > ", to_string(expected)))))
+    false => __println(concat("  ✗ gt: Expected ", concat(to_string(actual), concat(" > ", to_string(expected)))));
+
+// gte asserts that actual >= expected
+func! gte(actual, expected) = match actual >= expected
+    true => __println(concat("  ✓ gte: ", concat(to_string(actual), concat(" >= ", to_string(expected)))))
+    false => __println(concat("  ✗ gte: Expected ", concat(to_string(actual), concat(" >= ", to_string(expected)))));
+
+// lt asserts that actual < expected
+func! lt(actual, expected) = match actual < expected
+    true => __println(concat("  ✓ lt: ", concat(to_string(actual), concat(" < ", to_string(expected)))))
+    false => __println(concat("  ✗ lt: Expected ", concat(to_string(actual), concat(" < ", to_string(expected)))));
+
+// lte asserts that actual <= expected
+func! lte(actual, expected) = match actual <= expected
+    true => __println(concat("  ✓ lte: ", concat(to_string(actual), concat(" <= ", to_string(expected)))))
+    false => __println(concat("  ✗ lte: Expected ", concat(to_string(actual), concat(" <= ", to_string(expected)))));
+
+// section prints a section header
+func! section(name) = __println(concat("\n", concat(name, ":")));

@@ -1642,7 +1642,12 @@ func (vm *VM) runStayLoop(stay *StayLoop) (value.Value, error) {
 		case event := <-stay.EventQueue:
 			// Execute the handler callback synchronously
 			if event.Handler.Status == value.HandlerActive {
-				result, err := vm.callValueSync(event.Handler.Callback, []value.Value{event.Value})
+				// EOF events don't pass a value to the callback (handler is () => ...)
+				var args []value.Value
+				if event.Handler.Source.Kind != value.EventSourceEOF {
+					args = []value.Value{event.Value}
+				}
+				result, err := vm.callValueSync(event.Handler.Callback, args)
 				if err != nil {
 					return value.Null(), err
 				}
@@ -2022,7 +2027,8 @@ func (vm *VM) initStdinSource() {
 					return
 				}
 			}
-			// EOF reached
+			// EOF reached - send null value before closing to trigger eof event handler
+			vm.eofSource.Channel <- value.Null()
 			close(vm.eofSource.Channel)
 		}()
 	})

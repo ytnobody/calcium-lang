@@ -255,7 +255,7 @@ hash(k, v)  // ["a", 1, "b", 2, "c", 3]
 ### Arithmetic Operators
 
 ```calcium
-+   // Addition (numbers only)
++   // Addition (numbers and strings)
 -   // Subtraction
 *   // Multiplication
 /   // Division (always floating point)
@@ -263,11 +263,11 @@ hash(k, v)  // ["a", 1, "b", 2, "c", 3]
 **  // Exponentiation
 ```
 
-`+` is for numbers only. Use the `concat` function for string concatenation:
+`+` works with both numbers and strings. For strings, `+` is syntactic sugar for the `concat` function:
 
 ```calcium
 10 + 11                      // 21
-"10" + "11"                  // Error
+"Hello" + " " + "World"      // "Hello World" (syntactic sugar for concat)
 concat("Hello", " ", "World") // "Hello World"
 concat("value: ", 42)        // "value: 42"
 ```
@@ -476,30 +476,31 @@ items |> map(double);
 items |> map(triple);
 ```
 
-### Function Scope Constraints
+### Function Scope and Closures
 
-Functions can only reference their parameters. Capturing external variables (closures) is prohibited.
+Functions and lambdas can reference external variables (closures are supported).
 
 ```calcium
-// OK: Only references parameters
+// Reference parameters
 func add(a, b) = a + b;
 f = (x) => x * 2;
 
-// NG: References external variable
+// Capture external variable (closure)
 n = 2;
-f = (x) => x * n;   // Error: n is not a parameter
+f = (x) => x * n;   // OK: n is captured
+f(5);               // 10
+
+// Return a function that captures parameter
+func make_adder(x) = n => x + n;
+add5 = make_adder(5);
+add5(3);            // 8
 ```
 
-All state must be explicitly passed as arguments:
+Closures can be used with higher-order functions:
 
 ```calcium
-// NG: Capturing n via closure
 n = 2;
-[1, 2, 3] |> map(x => x * n);
-
-// OK: Pass required value as argument
-func multiply_by(n, x) = x * n;
-[1, 2, 3] |> map(x => multiply_by(2, x));
+[1, 2, 3] |> map(x => x * n);  // [2, 4, 6]
 ```
 
 ### Shadowing
@@ -876,19 +877,26 @@ async.stay(results: []) {
 
 The `core.io!` module provides input/output functionality.
 
-#### io.say / io.print
+#### io.println / io.say / io.print
 
 Output to standard output.
+
+| Function | Description |
+|----------|-------------|
+| `io.println` | Output with newline |
+| `io.say` | Synonym for `io.println` |
+| `io.print` | Output without newline |
 
 ```calcium
 use core.io!
 
-"Hello" !> io.say;    // Hello\n (with newline)
-"Hello" !> io.print;  // Hello (no newline)
+"Hello" !> io.println;  // Hello\n (with newline)
+"Hello" !> io.say;      // Hello\n (synonym for io.println)
+"Hello" !> io.print;    // Hello (no newline)
 
 // Values are automatically converted to strings
-42 !> io.say;         // 42\n
-[1, 2, 3] !> io.say;  // [1, 2, 3]\n
+42 !> io.println;       // 42\n
+[1, 2, 3] !> io.say;    // [1, 2, 3]\n
 ```
 
 #### io.stdin / io.eof (Event Sources)
@@ -1250,8 +1258,9 @@ Output is provided by the `core.io!` module:
 ```calcium
 use core.io!
 
-"Hello" !> io.say;    // Hello\n (with newline)
-"Hello" !> io.print;  // Hello (no newline)
+"Hello" !> io.println;  // Hello\n (with newline)
+"Hello" !> io.say;      // Hello\n (synonym for io.println)
+"Hello" !> io.print;    // Hello (no newline)
 ```
 
 ### Input

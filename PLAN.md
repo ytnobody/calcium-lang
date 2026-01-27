@@ -136,10 +136,10 @@ calcium/
 - [x] `[head | tail] = arr`
 - [x] `[a, b, c] = arr`
 
-### Extension 3: Asynchronous Processing
+### Extension 3: Asynchronous Processing ✅ Complete
 - [x] core.async! (async.stay, async.spawn, async.expects, etc.)
 - [x] core.schedule! (schedule.timeout, schedule.interval)
-- [ ] io.stdin, io.eof events
+- [x] io.stdin, io.eof events
 
 ---
 

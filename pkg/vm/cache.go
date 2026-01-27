@@ -1,7 +1,9 @@
 package vm
 
 import (
+	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -126,4 +128,149 @@ func parseGitHubURL(url string) (author, repo string) {
 		return parts[1], parts[2]
 	}
 	return "", ""
+}
+
+// ============================================================
+// Exported functions for calcium cache command
+// ============================================================
+
+// GetCacheDir returns the path to the module cache directory
+func GetCacheDir() string {
+	return getCacheDir()
+}
+
+// CachedModule represents information about a cached module
+type CachedModule struct {
+	Author   string
+	Name     string
+	Path     string
+	Size     int64
+	ModTime  time.Time
+}
+
+// ListCachedModules returns a list of all cached modules
+func ListCachedModules() ([]CachedModule, error) {
+	cacheDir := getCacheDir()
+	var modules []CachedModule
+
+	// Check if cache directory exists
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		return modules, nil // Empty list if no cache
+	}
+
+	// Walk through cache directory
+	err := filepath.WalkDir(cacheDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Look for mod.ca files
+		if !d.IsDir() && d.Name() == "mod.ca" {
+			info, err := d.Info()
+			if err != nil {
+				return nil // Skip this file
+			}
+
+			// Extract author/name from path
+			rel, err := filepath.Rel(cacheDir, path)
+			if err != nil {
+				return nil
+			}
+			parts := strings.Split(filepath.Dir(rel), string(filepath.Separator))
+			if len(parts) >= 2 {
+				modules = append(modules, CachedModule{
+					Author:  parts[0],
+					Name:    parts[1],
+					Path:    filepath.Dir(path),
+					Size:    info.Size(),
+					ModTime: info.ModTime(),
+				})
+			}
+		}
+		return nil
+	})
+
+	return modules, err
+}
+
+// GetCacheSize returns the total size of the cache directory in bytes
+func GetCacheSize() (int64, error) {
+	cacheDir := getCacheDir()
+	var totalSize int64
+
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		return 0, nil
+	}
+
+	err := filepath.WalkDir(cacheDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err == nil {
+				totalSize += info.Size()
+			}
+		}
+		return nil
+	})
+
+	return totalSize, err
+}
+
+// ClearCache removes all cached modules
+func ClearCache() error {
+	cacheDir := getCacheDir()
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		return nil // Nothing to clear
+	}
+	return os.RemoveAll(cacheDir)
+}
+
+// FetchAndCacheModule fetches a remote module and caches it
+// Returns the cached content and any error
+func FetchAndCacheModule(author, name string) ([]byte, error) {
+	content := fetchFromGitHubDirect(author, name)
+	if content == nil {
+		return nil, fmt.Errorf("module not found: %s/%s", author, name)
+	}
+
+	// Save to cache
+	cacheDir := getModuleCachePath(author, name)
+	if err := saveToCacheDir(cacheDir, "mod.ca", content); err != nil {
+		return content, fmt.Errorf("failed to cache module: %w", err)
+	}
+
+	return content, nil
+}
+
+// FetchAndCacheGitHubURL fetches a module from a GitHub URL and caches it
+func FetchAndCacheGitHubURL(url string) ([]byte, error) {
+	author, repo := parseGitHubURL(url)
+	if author == "" || repo == "" {
+		return nil, fmt.Errorf("invalid GitHub URL: %s", url)
+	}
+
+	// Try main branch first, then master
+	content := fetchRawGitHub(author, repo, "main", "mod.ca")
+	if content == nil {
+		content = fetchRawGitHub(author, repo, "master", "mod.ca")
+	}
+	if content == nil {
+		return nil, fmt.Errorf("module not found: %s", url)
+	}
+
+	// Save to cache
+	cacheDir := getModuleCachePath(author, repo)
+	if err := saveToCacheDir(cacheDir, "mod.ca", content); err != nil {
+		return content, fmt.Errorf("failed to cache module: %w", err)
+	}
+
+	return content, nil
+}
+
+// IsModuleCached checks if a module is already cached
+func IsModuleCached(author, name string) bool {
+	cacheDir := getModuleCachePath(author, name)
+	return readCachedModule(cacheDir) != nil
 }

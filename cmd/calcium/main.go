@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ytnobody/calcium-lang/pkg/ast"
 	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 	"github.com/ytnobody/calcium-lang/pkg/compiler"
 	"github.com/ytnobody/calcium-lang/pkg/lexer"
@@ -161,6 +162,9 @@ func main() {
 		}
 		runTests(dir)
 
+	case "cache":
+		runCacheCommand(args[1:])
+
 	case "version", "--version", "-v":
 		fmt.Printf("Calcium %s\n", version)
 
@@ -201,6 +205,9 @@ Usage:
   calcium compile [-O0|-O1|-O2] <file> [-o out]  Compile to bytecode (.bone)
   calcium build [-O0|-O1|-O2] <file> [-o out]    Build standalone executable
   calcium test [dir]                         Run all .test.ca files in directory
+  calcium cache <file.ca>                    Pre-fetch dependencies recursively
+  calcium cache --list                       List cached modules
+  calcium cache --clear                      Clear module cache
   calcium repl                               Start interactive REPL
   calcium version                            Show version
   calcium help                               Show this help
@@ -882,4 +889,250 @@ func executeTestFile(input, filename string) (string, error) {
 
 	result := machine.LastPoppedStackElem()
 	return result.String(), nil
+}
+
+// runCacheCommand handles the "calcium cache" subcommand
+func runCacheCommand(args []string) {
+	if len(args) == 0 {
+		printCacheHelp()
+		return
+	}
+
+	switch args[0] {
+	case "--list", "-l":
+		runCacheList()
+	case "--clear", "-c":
+		runCacheClear()
+	case "--help", "-h":
+		printCacheHelp()
+	default:
+		// Assume it's a file to pre-fetch dependencies for
+		if strings.HasSuffix(args[0], ".ca") {
+			runCacheFile(args[0])
+		} else {
+			fmt.Fprintf(os.Stderr, "Unknown cache option: %s\n", args[0])
+			printCacheHelp()
+			os.Exit(1)
+		}
+	}
+}
+
+func printCacheHelp() {
+	fmt.Println(`Usage: calcium cache <command>
+
+Commands:
+  <file.ca>   Pre-fetch all remote dependencies recursively
+  --list      List all cached modules
+  --clear     Clear the module cache
+
+Examples:
+  calcium cache main.ca        Pre-fetch dependencies for main.ca
+  calcium cache --list         Show cached modules
+  calcium cache --clear        Remove all cached modules`)
+}
+
+func runCacheList() {
+	modules, err := vm.ListCachedModules()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing cache: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(modules) == 0 {
+		fmt.Println("No cached modules found.")
+		fmt.Printf("Cache directory: %s\n", vm.GetCacheDir())
+		return
+	}
+
+	totalSize, _ := vm.GetCacheSize()
+
+	fmt.Println("Cached modules:")
+	fmt.Println()
+	for _, mod := range modules {
+		fmt.Printf("  %s/%s\n", mod.Author, mod.Name)
+		fmt.Printf("    Size: %d bytes\n", mod.Size)
+		fmt.Printf("    Modified: %s\n", mod.ModTime.Format("2006-01-02 15:04:05"))
+	}
+	fmt.Println()
+	fmt.Printf("Total: %d modules, %s\n", len(modules), formatSize(totalSize))
+	fmt.Printf("Cache directory: %s\n", vm.GetCacheDir())
+}
+
+func runCacheClear() {
+	modules, _ := vm.ListCachedModules()
+	if len(modules) == 0 {
+		fmt.Println("Cache is already empty.")
+		return
+	}
+
+	err := vm.ClearCache()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error clearing cache: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Cleared %d cached modules.\n", len(modules))
+}
+
+func runCacheFile(filename string) {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Parse the file to extract dependencies
+	l := lexer.New(string(content))
+	p := parser.New(l)
+	program := p.ParseProgram()
+
+	if len(p.Errors()) > 0 {
+		useColor := isTerminal()
+		fmt.Fprintln(os.Stderr, formatParseErrors(filename, p.Errors(), useColor))
+		os.Exit(1)
+	}
+
+	// Collect remote module dependencies
+	deps := collectRemoteDependencies(program)
+	if len(deps) == 0 {
+		fmt.Println("No remote dependencies found.")
+		return
+	}
+
+	fmt.Printf("Found %d remote dependencies\n", len(deps))
+	fmt.Println()
+
+	// Process each dependency recursively
+	fetched := make(map[string]bool)
+	errors := []string{}
+
+	absPath, _ := filepath.Abs(filename)
+	baseDir := filepath.Dir(absPath)
+
+	for _, dep := range deps {
+		fetchDependencyRecursive(dep, baseDir, fetched, &errors)
+	}
+
+	// Summary
+	fmt.Println()
+	if len(errors) > 0 {
+		fmt.Printf("Completed with %d errors:\n", len(errors))
+		for _, e := range errors {
+			fmt.Printf("  - %s\n", e)
+		}
+		os.Exit(1)
+	}
+
+	fmt.Printf("Successfully cached %d modules.\n", len(fetched))
+}
+
+// collectRemoteDependencies extracts remote module paths from a program
+func collectRemoteDependencies(program *ast.Program) []string {
+	var deps []string
+
+	for _, stmt := range program.Statements {
+		if useStmt, ok := stmt.(*ast.UseStatement); ok {
+			if useStmt.Path != nil && useStmt.Path.IsRemote {
+				if useStmt.Path.RawURL != "" {
+					// URL format: "github.com/author/repo"
+					deps = append(deps, useStmt.Path.RawURL)
+				} else if useStmt.Path.Author != "" && useStmt.Path.Name != "" {
+					// author/module format
+					deps = append(deps, useStmt.Path.Author+"/"+useStmt.Path.Name)
+				}
+			}
+		}
+	}
+
+	return deps
+}
+
+// fetchDependencyRecursive fetches a module and its dependencies
+func fetchDependencyRecursive(dep string, baseDir string, fetched map[string]bool, errors *[]string) {
+	if fetched[dep] {
+		return
+	}
+
+	// Check if already cached
+	var content []byte
+	var err error
+
+	if strings.HasPrefix(dep, "github.com/") {
+		// URL format
+		fmt.Printf("  Fetching %s... ", dep)
+		author, name := parseAuthorName(dep)
+		if vm.IsModuleCached(author, name) {
+			fmt.Println("(cached)")
+			fetched[dep] = true
+		} else {
+			content, err = vm.FetchAndCacheGitHubURL(dep)
+			if err != nil {
+				fmt.Println("FAILED")
+				*errors = append(*errors, fmt.Sprintf("%s: %v", dep, err))
+				return
+			}
+			fmt.Println("OK")
+			fetched[dep] = true
+		}
+	} else if strings.Contains(dep, "/") {
+		// author/module format
+		parts := strings.SplitN(dep, "/", 2)
+		author, name := parts[0], parts[1]
+
+		fmt.Printf("  Fetching %s... ", dep)
+		if vm.IsModuleCached(author, name) {
+			fmt.Println("(cached)")
+			fetched[dep] = true
+		} else {
+			content, err = vm.FetchAndCacheModule(author, name)
+			if err != nil {
+				fmt.Println("FAILED")
+				*errors = append(*errors, fmt.Sprintf("%s: %v", dep, err))
+				return
+			}
+			fmt.Println("OK")
+			fetched[dep] = true
+		}
+	}
+
+	// Parse the fetched module to find nested dependencies
+	if content != nil {
+		l := lexer.New(string(content))
+		p := parser.New(l)
+		program := p.ParseProgram()
+
+		if len(p.Errors()) == 0 {
+			nestedDeps := collectRemoteDependencies(program)
+			for _, nested := range nestedDeps {
+				fetchDependencyRecursive(nested, baseDir, fetched, errors)
+			}
+		}
+	}
+}
+
+// parseAuthorName extracts author and name from a GitHub URL
+func parseAuthorName(url string) (string, string) {
+	url = strings.TrimPrefix(url, "https://")
+	url = strings.TrimPrefix(url, "http://")
+	parts := strings.Split(url, "/")
+	if len(parts) >= 3 {
+		return parts[1], parts[2]
+	}
+	return "", ""
+}
+
+// formatSize formats bytes into human-readable size
+func formatSize(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+	)
+	switch {
+	case bytes >= MB:
+		return fmt.Sprintf("%.2f MB", float64(bytes)/MB)
+	case bytes >= KB:
+		return fmt.Sprintf("%.2f KB", float64(bytes)/KB)
+	default:
+		return fmt.Sprintf("%d bytes", bytes)
+	}
 }

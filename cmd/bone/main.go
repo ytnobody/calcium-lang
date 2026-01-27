@@ -22,6 +22,8 @@ func main() {
 		handleInit(args[1:])
 	case "add":
 		handleAdd(args[1:])
+	case "install":
+		handleInstall()
 	case "remove", "rm":
 		handleRemove(args[1:])
 	case "list", "ls":
@@ -50,6 +52,7 @@ Usage:
 Commands:
   init [name]              Initialize a new Calcium module
                            If name is provided, creates a new directory
+  install                  Install all modules from calcium.lock
   add <module>[@version]   Add a module from Boneyard
                            Options:
                              --global, -g  Install to global cache (~/.calcium/cache/)
@@ -149,6 +152,13 @@ func handleUpdate(args []string) {
 	}
 
 	if err := bone.Update(module); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func handleInstall() {
+	if err := bone.Install(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

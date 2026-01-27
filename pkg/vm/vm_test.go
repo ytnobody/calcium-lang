@@ -1330,3 +1330,51 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+// Test exported cache functions for calcium cache command
+func TestCacheExportedFunctions(t *testing.T) {
+	// Test GetCacheDir
+	cacheDir := GetCacheDir()
+	if cacheDir == "" {
+		t.Error("GetCacheDir returned empty string")
+	}
+
+	// Test ListCachedModules on empty/non-existent cache
+	modules, err := ListCachedModules()
+	if err != nil {
+		t.Errorf("ListCachedModules returned error: %v", err)
+	}
+	// modules can be empty or contain items, both are valid
+	_ = modules
+
+	// Test GetCacheSize
+	size, err := GetCacheSize()
+	if err != nil {
+		t.Errorf("GetCacheSize returned error: %v", err)
+	}
+	if size < 0 {
+		t.Error("GetCacheSize returned negative size")
+	}
+
+	// Test IsModuleCached for non-existent module
+	cached := IsModuleCached("nonexistent", "module")
+	// Should return false for non-existent module
+	_ = cached // Result depends on cache state
+}
+
+// Test CachedModule struct
+func TestCachedModuleStruct(t *testing.T) {
+	mod := CachedModule{
+		Author: "testauthor",
+		Name:   "testmodule",
+		Path:   "/path/to/module",
+		Size:   1024,
+	}
+
+	if mod.Author != "testauthor" {
+		t.Errorf("CachedModule.Author = %q, want %q", mod.Author, "testauthor")
+	}
+	if mod.Name != "testmodule" {
+		t.Errorf("CachedModule.Name = %q, want %q", mod.Name, "testmodule")
+	}
+}

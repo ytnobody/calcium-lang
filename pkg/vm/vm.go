@@ -117,11 +117,24 @@ type VM struct {
 
 	// Source file path for external module resolution
 	sourcePath string
+
+	// Run options (import map, lock file, cached-only mode)
+	runOptions *RunOptions
 }
 
 // SetSourcePath sets the source file path for external module resolution
 func (vm *VM) SetSourcePath(path string) {
 	vm.sourcePath = path
+}
+
+// SetRunOptions sets the run options for the VM
+func (vm *VM) SetRunOptions(opts *RunOptions) {
+	vm.runOptions = opts
+}
+
+// GetRunOptions returns the run options for the VM
+func (vm *VM) GetRunOptions() *RunOptions {
+	return vm.runOptions
 }
 
 // New creates a new VM

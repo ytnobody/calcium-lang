@@ -102,15 +102,15 @@ func main() {
 	switch args[0] {
 	case "run":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: calcium run [-O0|-O1|-O2] <file.ca|file.bone>")
+			fmt.Fprintln(os.Stderr, "Usage: calcium run [options] <file.ca|file.bone>")
 			os.Exit(1)
 		}
-		optLevel, fileArg := parseOptLevel(args[1:])
-		if fileArg == "" {
-			fmt.Fprintln(os.Stderr, "Usage: calcium run [-O0|-O1|-O2] <file.ca|file.bone>")
+		runOpts := parseRunArgs(args[1:])
+		if runOpts.file == "" {
+			fmt.Fprintln(os.Stderr, "Usage: calcium run [options] <file.ca|file.bone>")
 			os.Exit(1)
 		}
-		runFileWithOpt(fileArg, optLevel)
+		runFileWithOptions(runOpts)
 
 	case "compile":
 		if len(args) < 2 {
@@ -201,7 +201,7 @@ func printHelp() {
 Usage:
   calcium <file.ca>                          Run a Calcium source file
   calcium <file.bone>                        Run a compiled bytecode file
-  calcium run [-O0|-O1|-O2] <file>           Run a program
+  calcium run [options] <file>               Run a program
   calcium compile [-O0|-O1|-O2] <file> [-o out]  Compile to bytecode (.bone)
   calcium build [-O0|-O1|-O2] <file> [-o out]    Build standalone executable
   calcium test [dir]                         Run all .test.ca files in directory
@@ -212,6 +212,12 @@ Usage:
   calcium version                            Show version
   calcium help                               Show this help
 
+Run Options:
+  -O0|-O1|-O2              Optimization level (default: -O1)
+  --import-map=<file>      Load import mappings from TOML file
+  --lock=<file>            Load lock file for dependency verification
+  --cached-only            Only use cached modules, no network access
+
 Optimization Levels:
   -O0    No optimization
   -O1    Basic optimization (constant folding, dead code elimination) [default]
@@ -220,11 +226,100 @@ Optimization Levels:
 Examples:
   calcium hello.ca                    Run source directly (with -O1)
   calcium -O2 hello.ca                Run with full optimization
+  calcium run --import-map=imports.toml main.ca  Run with import mappings
+  calcium run --cached-only main.ca   Run using only cached modules
   calcium compile -O2 hello.ca        Compile with full optimization
   calcium build hello.ca -o hello     Build standalone executable
   calcium test ./tests                Run all tests in ./tests
-  calcium ./hello                     Run standalone (no calcium needed)
   calcium repl                        Start REPL`)
+}
+
+// runArgs holds parsed arguments for the run command
+type runArgs struct {
+	file       string
+	optLevel   optimizer.Level
+	importMap  string
+	lockFile   string
+	cachedOnly bool
+}
+
+// parseRunArgs parses all run command arguments
+func parseRunArgs(args []string) runArgs {
+	result := runArgs{
+		optLevel: optimizer.O1,
+	}
+
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+		switch {
+		case arg == "-O0":
+			result.optLevel = optimizer.O0
+		case arg == "-O1":
+			result.optLevel = optimizer.O1
+		case arg == "-O2":
+			result.optLevel = optimizer.O2
+		case arg == "--cached-only":
+			result.cachedOnly = true
+		case strings.HasPrefix(arg, "--import-map="):
+			result.importMap = strings.TrimPrefix(arg, "--import-map=")
+		case arg == "--import-map" && i+1 < len(args):
+			i++
+			result.importMap = args[i]
+		case strings.HasPrefix(arg, "--lock="):
+			result.lockFile = strings.TrimPrefix(arg, "--lock=")
+		case arg == "--lock" && i+1 < len(args):
+			i++
+			result.lockFile = args[i]
+		case !strings.HasPrefix(arg, "-"):
+			// This is the file argument
+			result.file = arg
+		}
+		i++
+	}
+
+	return result
+}
+
+// runFileWithOptions runs a file with the specified options
+func runFileWithOptions(opts runArgs) {
+	content, err := os.ReadFile(opts.file)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if it's a compiled bytecode file
+	if strings.HasSuffix(opts.file, ".bone") {
+		err = executeBytecode(content)
+	} else {
+		// Build run options
+		runOpts := vm.DefaultRunOptions()
+		runOpts.CachedOnly = opts.cachedOnly
+
+		if opts.importMap != "" {
+			runOpts.ImportMap, err = vm.LoadImportMap(opts.importMap)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading import map: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		if opts.lockFile != "" {
+			runOpts.LockFile, err = vm.LoadLockFile(opts.lockFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading lock file: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		_, err = executeWithOptions(string(content), opts.file, opts.optLevel, runOpts)
+	}
+
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 // parseOptLevel parses optimization level from args, returns level and remaining file arg
@@ -471,6 +566,10 @@ func executeWithFilename(input, filename string) (string, error) {
 }
 
 func executeWithFilenameOpt(input, filename string, optLevel optimizer.Level) (string, error) {
+	return executeWithOptions(input, filename, optLevel, nil)
+}
+
+func executeWithOptions(input, filename string, optLevel optimizer.Level, runOpts *vm.RunOptions) (string, error) {
 	useColor := isTerminal()
 
 	l := lexer.New(input)
@@ -500,6 +599,10 @@ func executeWithFilenameOpt(input, filename string, optLevel optimizer.Level) (s
 	// Set source path for external module resolution
 	if absPath, err := filepath.Abs(filename); err == nil {
 		machine.SetSourcePath(absPath)
+	}
+	// Set run options if provided
+	if runOpts != nil {
+		machine.SetRunOptions(runOpts)
 	}
 	err = machine.Run(instructions)
 	if err != nil {

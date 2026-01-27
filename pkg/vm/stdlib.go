@@ -165,19 +165,31 @@ func IsStdlibModule(moduleName string) bool {
 // 5. Remote sources (Boneyard registry, GitHub direct)
 // Returns the module if found, or nil if not found
 func (vm *VM) LoadExternalModule(moduleName string) (*value.Module, error) {
-	// Check cache first
+	// Apply import map if available
+	resolvedName := moduleName
+	if vm.runOptions != nil {
+		resolvedName = vm.runOptions.ResolveModuleName(moduleName)
+	}
+
+	// Check cache first (using original name for cache key)
 	if mod, ok := stdlibCache[moduleName]; ok {
 		return mod, nil
 	}
+	// Also check resolved name
+	if resolvedName != moduleName {
+		if mod, ok := stdlibCache[resolvedName]; ok {
+			return mod, nil
+		}
+	}
 
 	// Check if this is a remote module (contains /)
-	if strings.Contains(moduleName, "/") {
+	if strings.Contains(resolvedName, "/") {
 		// Check if it's a URL format (github.com/...)
-		if strings.HasPrefix(moduleName, "github.com/") {
-			return vm.LoadGitHubURLModule(moduleName)
+		if strings.HasPrefix(resolvedName, "github.com/") {
+			return vm.LoadGitHubURLModule(resolvedName)
 		}
 		// Otherwise it's author/module format
-		parts := strings.SplitN(moduleName, "/", 2)
+		parts := strings.SplitN(resolvedName, "/", 2)
 		if len(parts) == 2 {
 			return vm.LoadRemoteModule(parts[0], parts[1])
 		}
@@ -328,7 +340,7 @@ func (vm *VM) LoadExternalModule(moduleName string) (*value.Module, error) {
 // 1. In-memory cache (stdlibCache)
 // 2. Local project directory (calcium_modules/author/module)
 // 3. Global cache directory (~/.calcium/cache/author/module)
-// 4. Direct GitHub fetch (saves to global cache)
+// 4. Direct GitHub fetch (saves to global cache) - skipped if --cached-only
 func (vm *VM) LoadRemoteModule(author, name string) (*value.Module, error) {
 	cacheKey := author + "/" + name
 
@@ -361,7 +373,11 @@ func (vm *VM) LoadRemoteModule(author, name string) (*value.Module, error) {
 	}
 
 	// 4. If not found, fetch from GitHub (save to global cache)
+	// Skip if --cached-only is set
 	if content == nil {
+		if vm.runOptions != nil && vm.runOptions.CachedOnly {
+			return nil, fmt.Errorf("module not in cache (--cached-only mode): %s/%s", author, name)
+		}
 		content = fetchFromGitHubDirect(author, name)
 		if content == nil {
 			return nil, fmt.Errorf("remote module not found: %s/%s", author, name)
@@ -416,7 +432,11 @@ func (vm *VM) LoadGitHubURLModule(url string) (*value.Module, error) {
 	content := readCachedModule(cacheDir)
 
 	// 3. If not in cache, fetch from GitHub
+	// Skip if --cached-only is set
 	if content == nil {
+		if vm.runOptions != nil && vm.runOptions.CachedOnly {
+			return nil, fmt.Errorf("module not in cache (--cached-only mode): %s", url)
+		}
 		// Try main branch first, then master
 		content = fetchRawGitHub(author, repo, "main", "mod.ca")
 		if content == nil {

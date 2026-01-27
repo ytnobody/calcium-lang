@@ -40,7 +40,9 @@ func Install() error {
 	return nil
 }
 
-// installFromLock installs a module from lock file entry (fixed commit)
+// installFromLock installs a module from lock file entry (fixed commit).
+// Note: This does not recursively resolve dependencies - calcium.lock is assumed
+// to contain the full flattened dependency tree (written by 'bone add').
 func installFromLock(projectRoot string, mod LockedModule) error {
 	moduleKey := mod.Author + "/" + mod.Name
 

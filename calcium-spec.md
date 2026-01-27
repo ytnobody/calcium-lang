@@ -476,30 +476,31 @@ items |> map(double);
 items |> map(triple);
 ```
 
-### Function Scope Constraints
+### Function Scope and Closures
 
-Functions can only reference their parameters. Capturing external variables (closures) is prohibited.
+Functions and lambdas can reference external variables (closures are supported).
 
 ```calcium
-// OK: Only references parameters
+// Reference parameters
 func add(a, b) = a + b;
 f = (x) => x * 2;
 
-// NG: References external variable
+// Capture external variable (closure)
 n = 2;
-f = (x) => x * n;   // Error: n is not a parameter
+f = (x) => x * n;   // OK: n is captured
+f(5);               // 10
+
+// Return a function that captures parameter
+func make_adder(x) = n => x + n;
+add5 = make_adder(5);
+add5(3);            // 8
 ```
 
-All state must be explicitly passed as arguments:
+Closures can be used with higher-order functions:
 
 ```calcium
-// NG: Capturing n via closure
 n = 2;
-[1, 2, 3] |> map(x => x * n);
-
-// OK: Pass required value as argument
-func multiply_by(n, x) = x * n;
-[1, 2, 3] |> map(x => multiply_by(2, x));
+[1, 2, 3] |> map(x => x * n);  // [2, 4, 6]
 ```
 
 ### Shadowing

@@ -172,11 +172,12 @@ async.spawn(() => 42)
 	time.Sleep(50 * time.Millisecond)
 
 	task := result.AsTask()
-	if task.Status != value.TaskCompleted {
-		t.Fatalf("expected completed, got status %d", task.Status)
+	if task.GetStatus() != value.TaskCompleted {
+		t.Fatalf("expected completed, got status %d", task.GetStatus())
 	}
-	if task.Result.Type != value.TYPE_INT || task.Result.AsInt() != 42 {
-		t.Fatalf("expected result 42, got %s", task.Result.String())
+	taskResult := task.GetResult()
+	if taskResult.Type != value.TYPE_INT || taskResult.AsInt() != 42 {
+		t.Fatalf("expected result 42, got %s", taskResult.String())
 	}
 }
 

@@ -74,14 +74,14 @@ func TestSerializeDeserializeAllTypes(t *testing.T) {
 		index    int
 		expected interface{}
 	}{
-		{0, nil},                  // null
-		{1, true},                 // bool true
-		{2, false},                // bool false
-		{3, int64(123456789)},     // positive int
-		{4, int64(-987654321)},    // negative int
-		{5, 3.14159265359},        // float
-		{6, "Hello, World!"},      // ASCII string
-		{7, "日本語テスト"},            // Unicode string
+		{0, nil},               // null
+		{1, true},              // bool true
+		{2, false},             // bool false
+		{3, int64(123456789)},  // positive int
+		{4, int64(-987654321)}, // negative int
+		{5, 3.14159265359},     // float
+		{6, "Hello, World!"},   // ASCII string
+		{7, "日本語テスト"},          // Unicode string
 	}
 
 	for _, tt := range tests {
@@ -191,7 +191,7 @@ func TestDeserializeInvalidMagic(t *testing.T) {
 
 func TestDeserializeInvalidVersion(t *testing.T) {
 	data := []byte(MagicNumber)
-	data = append(data, 255, 0) // Version 255.0
+	data = append(data, 255, 0)     // Version 255.0
 	data = append(data, 0, 0, 0, 0) // 0 constants
 	data = append(data, 0, 0, 0, 0) // 0 instructions
 

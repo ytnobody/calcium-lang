@@ -91,11 +91,11 @@ type Symbol struct {
 type SymbolScope string
 
 const (
-	GlobalScope      SymbolScope = "GLOBAL"
-	LocalScope       SymbolScope = "LOCAL"
-	BuiltinScope     SymbolScope = "BUILTIN"
-	FreeScope        SymbolScope = "FREE"
-	StayStateScope   SymbolScope = "STAY_STATE"
+	GlobalScope    SymbolScope = "GLOBAL"
+	LocalScope     SymbolScope = "LOCAL"
+	BuiltinScope   SymbolScope = "BUILTIN"
+	FreeScope      SymbolScope = "FREE"
+	StayStateScope SymbolScope = "STAY_STATE"
 )
 
 // SymbolTable manages variable bindings
@@ -1588,7 +1588,7 @@ func convertRegexFlags(pattern, flags string) string {
 			prefix += "m"
 		case 's': // single-line: . matches newline
 			prefix += "s"
-		// 'g' (global) is not a Go regex flag, handled at match time
+			// 'g' (global) is not a Go regex flag, handled at match time
 		}
 	}
 

@@ -60,9 +60,9 @@ func (as *AssignmentStatement) TokenLiteral() string { return as.Token.Literal }
 
 // ArrayDestructuringStatement represents: [a, b, c] = arr;
 type ArrayDestructuringStatement struct {
-	Token    token.Token   // the '[' token
-	Names    []*Identifier // variables to bind
-	Value    Expression    // the array expression
+	Token token.Token   // the '[' token
+	Names []*Identifier // variables to bind
+	Value Expression    // the array expression
 }
 
 func (ad *ArrayDestructuringStatement) statementNode()       {}

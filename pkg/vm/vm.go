@@ -107,13 +107,13 @@ type VM struct {
 	modules map[string]*value.Module
 
 	// Async support
-	stayStack     []*StayLoop       // Stack of active stay loops
-	taskCounter   int64             // Unique task ID counter
-	handlerCounter int64            // Unique handler ID counter
-	stdinSource   *value.EventSource // Shared stdin event source
-	eofSource     *value.EventSource // Shared EOF event source
-	stdinOnce     sync.Once          // Ensure stdin initialization happens once
-	mu            sync.Mutex         // Protects shared async state
+	stayStack      []*StayLoop        // Stack of active stay loops
+	taskCounter    int64              // Unique task ID counter
+	handlerCounter int64              // Unique handler ID counter
+	stdinSource    *value.EventSource // Shared stdin event source
+	eofSource      *value.EventSource // Shared EOF event source
+	stdinOnce      sync.Once          // Ensure stdin initialization happens once
+	mu             sync.Mutex         // Protects shared async state
 
 	// Source file path for external module resolution
 	sourcePath string
@@ -189,14 +189,14 @@ func (vm *VM) CloneForSpawn() *VM {
 	frames[0] = mainFrame
 
 	clone := &VM{
-		constants:   vm.constants,              // Share constants (read-only)
-		globals:     vm.globals,                // Share globals (spawned tasks may access)
+		constants:   vm.constants,                   // Share constants (read-only)
+		globals:     vm.globals,                     // Share globals (spawned tasks may access)
 		stack:       make([]value.Value, StackSize), // Own stack
 		sp:          0,
-		frames:      frames,                    // Own frames
+		frames:      frames, // Own frames
 		framesIndex: 1,
-		builtins:    vm.builtins,               // Share builtins (read-only)
-		modules:     vm.modules,                // Share modules (read-only)
+		builtins:    vm.builtins, // Share builtins (read-only)
+		modules:     vm.modules,  // Share modules (read-only)
 		sourcePath:  vm.sourcePath,
 		runOptions:  vm.runOptions,
 	}

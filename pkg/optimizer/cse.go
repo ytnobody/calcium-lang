@@ -4,9 +4,12 @@
 // and transforms the code to compute them only once.
 //
 // Example:
-//   use_twice(expensive(x), expensive(x))
+//
+//	use_twice(expensive(x), expensive(x))
+//
 // Becomes internally:
-//   let _cse_0 = expensive(x) in use_twice(_cse_0, _cse_0)
+//
+//	let _cse_0 = expensive(x) in use_twice(_cse_0, _cse_0)
 //
 // Note: Only pure expressions are candidates for CSE.
 // Effect function calls (func!) are never deduplicated.

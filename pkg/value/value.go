@@ -154,7 +154,7 @@ const (
 // Task represents an async task (result of async.spawn)
 type Task struct {
 	ID     int64
-	mu     sync.RWMutex  // Protects Status, Result, Error
+	mu     sync.RWMutex // Protects Status, Result, Error
 	status TaskStatus
 	result Value
 	err    error
@@ -235,8 +235,8 @@ type HashPair struct {
 
 // Hash represents a hash map (associative array)
 type Hash struct {
-	Pairs  []HashPair        // Ordered pairs for iteration
-	Lookup map[string]int    // Key (as string) -> index in Pairs for O(1) lookup
+	Pairs  []HashPair     // Ordered pairs for iteration
+	Lookup map[string]int // Key (as string) -> index in Pairs for O(1) lookup
 }
 
 // Constructors

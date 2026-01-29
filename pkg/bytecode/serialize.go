@@ -13,10 +13,10 @@ import (
 
 // File format constants
 const (
-	MagicNumber    = "CALB" // CALcium Bytecode
-	VersionMajor   = 1
-	VersionMinor   = 0
-	FileExtension  = ".bone"
+	MagicNumber   = "CALB" // CALcium Bytecode
+	VersionMajor  = 1
+	VersionMinor  = 0
+	FileExtension = ".bone"
 )
 
 // Constant type tags for serialization

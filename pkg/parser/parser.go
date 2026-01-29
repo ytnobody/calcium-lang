@@ -667,8 +667,8 @@ func (p *Parser) parseRemoteModulePath() *ast.ModulePath {
 	path := &ast.ModulePath{Token: p.curToken, IsRemote: true}
 	path.Author = p.curToken.Literal // "ytnobody"
 
-	p.nextToken() // consume '/'
-	p.nextToken() // move to module name
+	p.nextToken()                  // consume '/'
+	p.nextToken()                  // move to module name
 	path.Name = p.curToken.Literal // "json"
 	path.Parts = []string{path.Author, path.Name}
 

@@ -68,12 +68,12 @@ const (
 	OpGetMember // Get object property
 
 	// Result handling
-	OpWrapSuccess   // Wrap value in success()
-	OpWrapFailure   // Wrap value in failure()
-	OpUnwrapOrJump  // Unwrap success or jump to failure handler
-	OpIsSuccess     // Check if value is success
-	OpIsFailure     // Check if value is failure
-	OpUnwrap        // Unwrap success/failure
+	OpWrapSuccess  // Wrap value in success()
+	OpWrapFailure  // Wrap value in failure()
+	OpUnwrapOrJump // Unwrap success or jump to failure handler
+	OpIsSuccess    // Check if value is success
+	OpIsFailure    // Check if value is failure
+	OpUnwrap       // Unwrap success/failure
 
 	// Built-in functions
 	OpBuiltin // Call built-in function
@@ -90,21 +90,21 @@ const (
 	OpFalse // Push false
 
 	// Async operations
-	OpStayBegin      // stay loop start (initialize state hash)
-	OpStayEnd        // stay loop execution (start event loop)
-	OpStayGetState   // Get stay state
-	OpContinue       // async.continue (update state and continue)
-	OpLeave          // async.leave (exit from stay)
-	OpSpawn          // async.spawn (create task)
-	OpExpects        // async.expects (create handler)
-	OpHandlerReady   // handler.ready() - activate handler
-	OpHandlerReset   // handler.reset()
-	OpHandlerPause   // handler.pause()
-	OpHandlerResume  // handler.resume()
-	OpCancel         // async.cancel (cancel task/handler)
-	OpAll            // async.all (wait for all tasks)
-	OpTimeout        // schedule.timeout (timeout event source)
-	OpInterval       // schedule.interval (interval event source)
+	OpStayBegin     // stay loop start (initialize state hash)
+	OpStayEnd       // stay loop execution (start event loop)
+	OpStayGetState  // Get stay state
+	OpContinue      // async.continue (update state and continue)
+	OpLeave         // async.leave (exit from stay)
+	OpSpawn         // async.spawn (create task)
+	OpExpects       // async.expects (create handler)
+	OpHandlerReady  // handler.ready() - activate handler
+	OpHandlerReset  // handler.reset()
+	OpHandlerPause  // handler.pause()
+	OpHandlerResume // handler.resume()
+	OpCancel        // async.cancel (cancel task/handler)
+	OpAll           // async.all (wait for all tasks)
+	OpTimeout       // schedule.timeout (timeout event source)
+	OpInterval      // schedule.interval (interval event source)
 )
 
 // Definition describes an opcode
@@ -150,14 +150,14 @@ var definitions = map[OpCode]*Definition{
 	OpCall:       {"OpCall", []int{1}}, // 1-byte argument count
 	OpReturn:     {"OpReturn", []int{}},
 	OpClosure:    {"OpClosure", []int{2, 1}}, // 2-byte function constant index, 1-byte free variable count
-	OpGetFree:    {"OpGetFree", []int{1}}, // 1-byte free variable index
+	OpGetFree:    {"OpGetFree", []int{1}},    // 1-byte free variable index
 	OpCallEffect: {"OpCallEffect", []int{1}}, // 1-byte argument count
 
 	OpArray:       {"OpArray", []int{2}},       // 2-byte element count
 	OpArrayConcat: {"OpArrayConcat", []int{2}}, // 2-byte element count
 	OpIndex:       {"OpIndex", []int{}},
 	OpSpread:      {"OpSpread", []int{}},
-	OpCallSpread:  {"OpCallSpread", []int{}},   // Call with spread array
+	OpCallSpread:  {"OpCallSpread", []int{}}, // Call with spread array
 
 	OpHash: {"OpHash", []int{2}}, // 2-byte pair count
 
@@ -176,7 +176,7 @@ var definitions = map[OpCode]*Definition{
 
 	OpLoadModule: {"OpLoadModule", []int{2}}, // 2-byte module path constant index
 
-	OpNull: {"OpNull", []int{}},
+	OpNull:  {"OpNull", []int{}},
 	OpTrue:  {"OpTrue", []int{}},
 	OpFalse: {"OpFalse", []int{}},
 

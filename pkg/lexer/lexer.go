@@ -232,8 +232,6 @@ func (l *Lexer) NextToken() token.Token {
 		}
 		tok.Type = token.STRING
 		tok.Literal = l.readString()
-		tok.Line = tok.Line
-		tok.Column = tok.Column
 		l.prevToken = tok.Type
 		_ = stringContent // unused, just for peeking
 		return tok

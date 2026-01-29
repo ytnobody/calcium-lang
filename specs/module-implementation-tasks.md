@@ -103,6 +103,55 @@ calcium run --cached-only src/main.ca
 - [ ] Load lock file & verify hashes
 - [ ] --cached-only disables network
 
+#### Import Map Format (`calcium.imports.toml`)
+
+```toml
+# calcium.imports.toml
+
+[imports]
+# alias = "actual URL"
+"json" = "https://boneyard.calcium-lang.org/ytnobody/json"
+"@myorg/utils" = "https://example.com/my-org/calcium-utils"
+"std/http" = "https://boneyard.calcium-lang.org/calcium-lang/http"
+```
+
+**Resolution Rules:**
+1. When `use "json"` is encountered, look up `imports.json`
+2. If found, replace with the mapped URL
+3. If not found, treat as literal URL (existing behavior)
+4. Aliases starting with `@` are scoped (organization namespace)
+5. Aliases with `/` are hierarchical (e.g., `std/http`)
+
+**File Discovery:**
+- Default: `./calcium.imports.toml` in current directory
+- Explicit: `--import-map=path/to/file.toml`
+
+#### Lock File Format (`calcium.lock`)
+
+```toml
+# calcium.lock
+# Auto-generated - do not edit manually
+
+[[packages]]
+name = "json"
+url = "https://boneyard.calcium-lang.org/ytnobody/json"
+version = "1.2.0"
+
+[[packages.files]]
+path = "json.ca"
+sha256 = "abc123..."
+
+[[packages.files]]
+path = "internal/parser.ca"
+sha256 = "def456..."
+```
+
+**Verification:**
+1. Load lock file
+2. For each imported module, find matching entry
+3. Verify SHA256 hash of cached/fetched files
+4. Fail if hash mismatch (integrity error)
+
 ---
 
 ## 4. Required Libraries/Modules

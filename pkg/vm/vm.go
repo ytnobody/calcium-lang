@@ -107,13 +107,13 @@ type VM struct {
 	modules map[string]*value.Module
 
 	// Async support
-	stayStack     []*StayLoop       // Stack of active stay loops
-	taskCounter   int64             // Unique task ID counter
-	handlerCounter int64            // Unique handler ID counter
-	stdinSource   *value.EventSource // Shared stdin event source
-	eofSource     *value.EventSource // Shared EOF event source
-	stdinOnce     sync.Once          // Ensure stdin initialization happens once
-	mu            sync.Mutex         // Protects shared async state
+	stayStack      []*StayLoop        // Stack of active stay loops
+	taskCounter    int64              // Unique task ID counter
+	handlerCounter int64              // Unique handler ID counter
+	stdinSource    *value.EventSource // Shared stdin event source
+	eofSource      *value.EventSource // Shared EOF event source
+	stdinOnce      sync.Once          // Ensure stdin initialization happens once
+	mu             sync.Mutex         // Protects shared async state
 
 	// Source file path for external module resolution
 	sourcePath string
@@ -171,6 +171,37 @@ func NewWithGlobals(constants []value.Value, globals []value.Value) *VM {
 	vm := New(constants)
 	vm.globals = globals
 	return vm
+}
+
+// CloneForSpawn creates a lightweight VM clone for async.spawn execution.
+// The cloned VM shares constants, globals, modules, and builtins with the parent,
+// but has its own stack and frame to avoid data races during concurrent execution.
+func (vm *VM) CloneForSpawn() *VM {
+	mainFn := &value.Function{
+		Name:      "<spawn>",
+		Body:      bytecode.Instructions{},
+		NumLocals: 0,
+	}
+	mainClosure := &value.Closure{Fn: mainFn}
+	mainFrame := NewFrame(mainClosure, 0)
+
+	frames := make([]*Frame, MaxFrames)
+	frames[0] = mainFrame
+
+	clone := &VM{
+		constants:   vm.constants,                   // Share constants (read-only)
+		globals:     vm.globals,                     // Share globals (spawned tasks may access)
+		stack:       make([]value.Value, StackSize), // Own stack
+		sp:          0,
+		frames:      frames, // Own frames
+		framesIndex: 1,
+		builtins:    vm.builtins, // Share builtins (read-only)
+		modules:     vm.modules,  // Share modules (read-only)
+		sourcePath:  vm.sourcePath,
+		runOptions:  vm.runOptions,
+	}
+
+	return clone
 }
 
 // NewForREPL creates a VM for REPL use (doesn't capture stdin)
@@ -720,10 +751,10 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 				// Return the done event source
 				vm.push(value.EventSourceVal(task.Done))
 			case "result":
-				vm.push(task.Result)
+				vm.push(task.GetResult())
 			case "status":
 				statusStr := "pending"
-				switch task.Status {
+				switch task.GetStatus() {
 				case value.TaskRunning:
 					statusStr = "running"
 				case value.TaskCompleted:
@@ -1769,10 +1800,10 @@ func (vm *VM) executeSpawn() error {
 
 	task := &value.Task{
 		ID:     taskID,
-		Status: value.TaskPending,
 		Done:   doneSource,
 		Cancel: make(chan struct{}),
 	}
+	task.SetStatus(value.TaskPending)
 
 	// Register task with current stay loop
 	if stay := vm.currentStay(); stay != nil {
@@ -1781,26 +1812,26 @@ func (vm *VM) executeSpawn() error {
 
 	// Start the task in a goroutine
 	go func() {
-		task.Status = value.TaskRunning
+		task.SetStatus(value.TaskRunning)
 
 		select {
 		case <-task.Cancel:
-			task.Status = value.TaskCancelled
-			task.Result = value.Null()
+			task.SetStatus(value.TaskCancelled)
+			task.SetResult(value.Null())
 		default:
 			result, err := vm.callValueSync(fn, []value.Value{})
 			if err != nil {
-				task.Status = value.TaskFailed
-				task.Error = err
-				task.Result = value.Failure(value.String(err.Error()))
+				task.SetStatus(value.TaskFailed)
+				task.SetError(err)
+				task.SetResult(value.Failure(value.String(err.Error())))
 			} else {
-				task.Status = value.TaskCompleted
-				task.Result = result
+				task.SetStatus(value.TaskCompleted)
+				task.SetResult(result)
 			}
 		}
 
 		// Send result to done channel
-		task.Done.Channel <- task.Result
+		task.Done.Channel <- task.GetResult()
 		close(task.Done.Done)
 	}()
 
@@ -1920,7 +1951,7 @@ func (vm *VM) executeCancel() error {
 	case value.TYPE_TASK:
 		task := target.AsTask()
 		close(task.Cancel)
-		task.Status = value.TaskCancelled
+		task.SetStatus(value.TaskCancelled)
 	case value.TYPE_HANDLER:
 		handler := target.AsHandler()
 		handler.Status = value.HandlerCancelled
@@ -3016,10 +3047,10 @@ func (vm *VM) builtinAsyncSpawn(args ...value.Value) value.Value {
 
 	task := &value.Task{
 		ID:     taskID,
-		Status: value.TaskPending,
 		Done:   doneSource,
 		Cancel: make(chan struct{}),
 	}
+	task.SetStatus(value.TaskPending)
 
 	// Register task with current stay loop
 	if stay := vm.currentStay(); stay != nil {
@@ -3028,29 +3059,32 @@ func (vm *VM) builtinAsyncSpawn(args ...value.Value) value.Value {
 		vm.mu.Unlock()
 	}
 
-	// Start the task in a goroutine
+	// Clone VM for independent execution in goroutine
+	spawnVM := vm.CloneForSpawn()
+
+	// Start the task in a goroutine with cloned VM
 	go func() {
-		task.Status = value.TaskRunning
+		task.SetStatus(value.TaskRunning)
 
 		select {
 		case <-task.Cancel:
-			task.Status = value.TaskCancelled
-			task.Result = value.Null()
+			task.SetStatus(value.TaskCancelled)
+			task.SetResult(value.Null())
 		default:
-			result, err := vm.callValueSync(fn, []value.Value{})
+			result, err := spawnVM.callValueSync(fn, []value.Value{})
 			if err != nil {
-				task.Status = value.TaskFailed
-				task.Error = err
-				task.Result = value.Failure(value.String(err.Error()))
+				task.SetStatus(value.TaskFailed)
+				task.SetError(err)
+				task.SetResult(value.Failure(value.String(err.Error())))
 			} else {
-				task.Status = value.TaskCompleted
-				task.Result = result
+				task.SetStatus(value.TaskCompleted)
+				task.SetResult(result)
 			}
 		}
 
 		// Send result to done channel
 		select {
-		case task.Done.Channel <- task.Result:
+		case task.Done.Channel <- task.GetResult():
 		default:
 		}
 		close(task.Done.Done)
@@ -3175,7 +3209,7 @@ func (vm *VM) builtinAsyncCancel(args ...value.Value) value.Value {
 		default:
 			close(task.Cancel)
 		}
-		task.Status = value.TaskCancelled
+		task.SetStatus(value.TaskCancelled)
 	case value.TYPE_HANDLER:
 		handler := target.AsHandler()
 		handler.Status = value.HandlerCancelled

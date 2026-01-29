@@ -386,8 +386,8 @@ func TestRegexLiteral(t *testing.T) {
 func TestRegexVsDivision(t *testing.T) {
 	// Test context detection: regex vs division
 	tests := []struct {
-		input    string
-		tokens   []token.TokenType
+		input  string
+		tokens []token.TokenType
 	}{
 		// Regex contexts
 		{`x = /pat/`, []token.TokenType{token.IDENT, token.ASSIGN, token.REGEX}},

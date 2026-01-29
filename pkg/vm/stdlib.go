@@ -30,7 +30,7 @@ func (vm *VM) registerPrimitives() {
 	for name, builtin := range primitives {
 		vm.builtins = append(vm.builtins, builtin)
 		// Also add to symbol table if needed
-		_ = name      // name is used for debugging
+		_ = name       // name is used for debugging
 		_ = startIndex // index tracking
 	}
 }

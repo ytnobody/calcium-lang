@@ -184,10 +184,10 @@ func TestRemoteUseStatement(t *testing.T) {
 	// Test author/module format
 	t.Run("author/module format", func(t *testing.T) {
 		tests := []struct {
-			input       string
-			author      string
-			name        string
-			isEffect    bool
+			input    string
+			author   string
+			name     string
+			isEffect bool
 		}{
 			{`use ytnobody/json;`, "ytnobody", "json", false},
 			{`use ytnobody/json!;`, "ytnobody", "json", true},

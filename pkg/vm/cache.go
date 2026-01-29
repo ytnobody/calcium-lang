@@ -141,11 +141,11 @@ func GetCacheDir() string {
 
 // CachedModule represents information about a cached module
 type CachedModule struct {
-	Author   string
-	Name     string
-	Path     string
-	Size     int64
-	ModTime  time.Time
+	Author  string
+	Name    string
+	Path    string
+	Size    int64
+	ModTime time.Time
 }
 
 // ListCachedModules returns a list of all cached modules

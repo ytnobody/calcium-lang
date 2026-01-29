@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // Type represents the type of a Value
@@ -153,11 +154,54 @@ const (
 // Task represents an async task (result of async.spawn)
 type Task struct {
 	ID     int64
-	Status TaskStatus
-	Result Value
+	mu     sync.RWMutex // Protects Status, Result, Error
+	status TaskStatus
+	result Value
+	err    error
 	Done   *EventSource  // .done property
 	Cancel chan struct{} // Cancel signal
-	Error  error         // Error information
+}
+
+// SetStatus sets the task status safely
+func (t *Task) SetStatus(s TaskStatus) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.status = s
+}
+
+// GetStatus returns the task status safely
+func (t *Task) GetStatus() TaskStatus {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.status
+}
+
+// SetResult sets the task result safely
+func (t *Task) SetResult(v Value) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.result = v
+}
+
+// GetResult returns the task result safely
+func (t *Task) GetResult() Value {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.result
+}
+
+// SetError sets the task error safely
+func (t *Task) SetError(e error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.err = e
+}
+
+// GetError returns the task error safely
+func (t *Task) GetError() error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.err
 }
 
 // Handler represents an event handler (result of async.expects)
@@ -191,8 +235,8 @@ type HashPair struct {
 
 // Hash represents a hash map (associative array)
 type Hash struct {
-	Pairs  []HashPair        // Ordered pairs for iteration
-	Lookup map[string]int    // Key (as string) -> index in Pairs for O(1) lookup
+	Pairs  []HashPair     // Ordered pairs for iteration
+	Lookup map[string]int // Key (as string) -> index in Pairs for O(1) lookup
 }
 
 // Constructors
@@ -582,7 +626,7 @@ func (v Value) String() string {
 	case TYPE_TASK:
 		t := v.AsTask()
 		statusStr := "pending"
-		switch t.Status {
+		switch t.GetStatus() {
 		case TaskRunning:
 			statusStr = "running"
 		case TaskCompleted:

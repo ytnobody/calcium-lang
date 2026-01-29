@@ -1283,9 +1283,9 @@ func TestRegexSplit(t *testing.T) {
 // Test parseGitHubURL helper function
 func TestParseGitHubURL(t *testing.T) {
 	tests := []struct {
-		url      string
-		author   string
-		repo     string
+		url    string
+		author string
+		repo   string
 	}{
 		{"github.com/ytnobody/json-calcium", "ytnobody", "json-calcium"},
 		{"github.com/author/repo", "author", "repo"},

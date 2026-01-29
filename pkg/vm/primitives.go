@@ -1096,14 +1096,14 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__str_contains":    {Name: "__str_contains", Fn: primitiveStrContains},
 
 		// Regex
-		"__regex_test":     {Name: "__regex_test", Fn: primitiveRegexTest},
-		"__regex_find":     {Name: "__regex_find", Fn: primitiveRegexFind},
-		"__regex_find_all": {Name: "__regex_find_all", Fn: primitiveRegexFindAll},
+		"__regex_test":          {Name: "__regex_test", Fn: primitiveRegexTest},
+		"__regex_find":          {Name: "__regex_find", Fn: primitiveRegexFind},
+		"__regex_find_all":      {Name: "__regex_find_all", Fn: primitiveRegexFindAll},
 		"__regex_replace":       {Name: "__regex_replace", Fn: primitiveRegexReplace},
 		"__regex_replace_first": {Name: "__regex_replace_first", Fn: primitiveRegexReplaceFirst},
-		"__regex_split":    {Name: "__regex_split", Fn: primitiveRegexSplit},
-		"__regex_capture":  {Name: "__regex_capture", Fn: primitiveRegexCapture},
-		"__regex_compile":  {Name: "__regex_compile", Fn: primitiveRegexCompile},
+		"__regex_split":         {Name: "__regex_split", Fn: primitiveRegexSplit},
+		"__regex_capture":       {Name: "__regex_capture", Fn: primitiveRegexCapture},
+		"__regex_compile":       {Name: "__regex_compile", Fn: primitiveRegexCompile},
 
 		// Type conversion
 		"__to_int":   {Name: "__to_int", Fn: primitiveToInt},

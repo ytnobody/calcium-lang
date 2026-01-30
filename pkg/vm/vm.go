@@ -2410,61 +2410,6 @@ func (vm *VM) builtinPrintln(args ...value.Value) value.Value {
 	return value.Null()
 }
 
-// abs - returns absolute value (core.math)
-func builtinAbs(args ...value.Value) value.Value {
-	if len(args) != 1 {
-		return value.Failure(value.String("abs: expected 1 argument"))
-	}
-	switch args[0].Type {
-	case value.TYPE_INT:
-		n := args[0].AsInt()
-		if n < 0 {
-			return value.Int(-n)
-		}
-		return value.Int(n)
-	case value.TYPE_FLOAT:
-		n := args[0].AsFloat()
-		if n < 0 {
-			return value.Float(-n)
-		}
-		return value.Float(n)
-	default:
-		return value.Failure(value.String("abs: argument must be numeric"))
-	}
-}
-
-// min - returns minimum of two values (core.math)
-func builtinMin(args ...value.Value) value.Value {
-	if len(args) != 2 {
-		return value.Failure(value.String("min: expected 2 arguments"))
-	}
-	a, aOk := args[0].ToNumber()
-	b, bOk := args[1].ToNumber()
-	if !aOk || !bOk {
-		return value.Failure(value.String("min: arguments must be numeric"))
-	}
-	if a < b {
-		return args[0]
-	}
-	return args[1]
-}
-
-// max - returns maximum of two values (core.math)
-func builtinMax(args ...value.Value) value.Value {
-	if len(args) != 2 {
-		return value.Failure(value.String("max: expected 2 arguments"))
-	}
-	a, aOk := args[0].ToNumber()
-	b, bOk := args[1].ToNumber()
-	if !aOk || !bOk {
-		return value.Failure(value.String("max: arguments must be numeric"))
-	}
-	if a > b {
-		return args[0]
-	}
-	return args[1]
-}
-
 // ============================================================
 // core.io functions
 // ============================================================
@@ -2522,74 +2467,6 @@ func builtinFormat(args ...value.Value) value.Value {
 		result = result[:idx] + args[i].String() + result[idx+len(placeholder):]
 	}
 	return value.String(result)
-}
-
-// ============================================================
-// core.math functions
-// ============================================================
-
-// floor - rounds down to nearest integer (core.math)
-func builtinFloor(args ...value.Value) value.Value {
-	if len(args) != 1 {
-		return value.Failure(value.String("floor: expected 1 argument"))
-	}
-	n, ok := args[0].ToNumber()
-	if !ok {
-		return value.Failure(value.String("floor: argument must be numeric"))
-	}
-	return value.Int(int64(math.Floor(n)))
-}
-
-// ceil - rounds up to nearest integer (core.math)
-func builtinCeil(args ...value.Value) value.Value {
-	if len(args) != 1 {
-		return value.Failure(value.String("ceil: expected 1 argument"))
-	}
-	n, ok := args[0].ToNumber()
-	if !ok {
-		return value.Failure(value.String("ceil: argument must be numeric"))
-	}
-	return value.Int(int64(math.Ceil(n)))
-}
-
-// round - rounds to nearest integer (core.math)
-func builtinRound(args ...value.Value) value.Value {
-	if len(args) != 1 {
-		return value.Failure(value.String("round: expected 1 argument"))
-	}
-	n, ok := args[0].ToNumber()
-	if !ok {
-		return value.Failure(value.String("round: argument must be numeric"))
-	}
-	return value.Int(int64(math.Round(n)))
-}
-
-// sqrt - square root (core.math)
-func builtinSqrt(args ...value.Value) value.Value {
-	if len(args) != 1 {
-		return value.Failure(value.String("sqrt: expected 1 argument"))
-	}
-	n, ok := args[0].ToNumber()
-	if !ok {
-		return value.Failure(value.String("sqrt: argument must be numeric"))
-	}
-	if n < 0 {
-		return value.Failure(value.String("sqrt: argument must be non-negative"))
-	}
-	return value.Float(math.Sqrt(n))
-}
-
-// pow - power function (core.math)
-func builtinPow(args ...value.Value) value.Value {
-	if len(args) != 2 {
-		return value.Failure(value.String("pow: expected 2 arguments"))
-	}
-	base, baseOk := args[0].ToNumber()
-	exp, expOk := args[1].ToNumber()
-	if !baseOk || !expOk {
-		return value.Failure(value.String("pow: arguments must be numeric"))
-	}
-	return value.Float(math.Pow(base, exp))
 }
 
 // ============================================================
@@ -2964,63 +2841,6 @@ func builtinDrop(args ...value.Value) value.Value {
 	result := make([]value.Value, len(arr)-n)
 	copy(result, arr[n:])
 	return value.Array(result)
-}
-
-// sum - sums all numeric elements (core.array)
-func builtinSum(args ...value.Value) value.Value {
-	if len(args) != 1 {
-		return value.Failure(value.String("sum: expected 1 argument"))
-	}
-	if args[0].Type != value.TYPE_ARRAY {
-		return value.Failure(value.String("sum: argument must be array"))
-	}
-	arr := args[0].AsArray()
-	var sum float64
-	hasFloat := false
-	for _, v := range arr {
-		n, ok := v.ToNumber()
-		if !ok {
-			return value.Failure(value.String("sum: array must contain only numbers"))
-		}
-		sum += n
-		if v.Type == value.TYPE_FLOAT {
-			hasFloat = true
-		}
-	}
-	if hasFloat {
-		return value.Float(sum)
-	}
-	return value.Int(int64(sum))
-}
-
-// product - multiplies all numeric elements (core.array)
-func builtinProduct(args ...value.Value) value.Value {
-	if len(args) != 1 {
-		return value.Failure(value.String("product: expected 1 argument"))
-	}
-	if args[0].Type != value.TYPE_ARRAY {
-		return value.Failure(value.String("product: argument must be array"))
-	}
-	arr := args[0].AsArray()
-	if len(arr) == 0 {
-		return value.Int(1)
-	}
-	var prod float64 = 1
-	hasFloat := false
-	for _, v := range arr {
-		n, ok := v.ToNumber()
-		if !ok {
-			return value.Failure(value.String("product: array must contain only numbers"))
-		}
-		prod *= n
-		if v.Type == value.TYPE_FLOAT {
-			hasFloat = true
-		}
-	}
-	if hasFloat {
-		return value.Float(prod)
-	}
-	return value.Int(int64(prod))
 }
 
 // ============================================================

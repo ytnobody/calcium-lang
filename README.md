@@ -29,8 +29,33 @@ A functional programming language with pipelines, pattern matching, and effect h
 
 ## Installation
 
+### Download Binary (Recommended)
+
+Download pre-built binaries from [GitHub Releases](https://github.com/ytnobody/calcium-lang/releases).
+
+**Supported platforms:**
+- Linux (amd64, arm64)
+- macOS (amd64, arm64)
+- Windows (amd64, arm64)
+
+Example for Linux (amd64):
+```bash
+# Download and extract
+curl -LO https://github.com/ytnobody/calcium-lang/releases/latest/download/calcium_Linux_x86_64.tar.gz
+tar xzf calcium_Linux_x86_64.tar.gz
+
+# Move to PATH
+sudo mv calcium /usr/local/bin/
+sudo mv bone /usr/local/bin/
+```
+
+### Build from Source
+
+Requires Go 1.24 or later.
+
 ```bash
 go build -o calcium ./cmd/calcium
+go build -o bone ./cmd/bone
 ```
 
 ## Usage
@@ -524,11 +549,7 @@ Module resolution order:
 
 `bone` is the package manager for Calcium. It manages dependencies and integrates with the Boneyard module registry.
 
-### Installation
-
-```bash
-go build -o bone ./cmd/bone
-```
+> **Note:** When you download Calcium from [GitHub Releases](https://github.com/ytnobody/calcium-lang/releases), `bone` is included in the archive.
 
 ### Usage
 

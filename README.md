@@ -51,7 +51,7 @@ sudo mv bone /usr/local/bin/
 
 ### Build from Source
 
-Requires Go 1.24 or later.
+Requires Go 1.22 or later.
 
 ```bash
 go build -o calcium ./cmd/calcium

@@ -1,5 +1,9 @@
 # Calcium-lang
 
+[![CI](https://github.com/ytnobody/calcium-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/ytnobody/calcium-lang/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ytnobody/calcium-lang/branch/main/graph/badge.svg)](https://codecov.io/gh/ytnobody/calcium-lang)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ytnobody/calcium-lang)](https://goreportcard.com/report/github.com/ytnobody/calcium-lang)
+
 > **Note:** This project is currently under active development. APIs and syntax may change without notice.
 
 A functional programming language with pipelines, pattern matching, and effect handling.

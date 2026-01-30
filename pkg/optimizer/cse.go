@@ -143,6 +143,7 @@ func (o *CSEOptimizer) optimizeSubExprs(expr ast.Expression) ast.Expression {
 		left := o.optimizeExpr(e.Left)
 		right := o.optimizeExpr(e.Right)
 		// Check if left and right are identical pure expressions
+		//nolint:staticcheck // TODO: Implement CSE optimization with AST transformation
 		if o.isPureExpr(left) && o.exprEqual(left, right) {
 			// They're the same, but we can't easily introduce a let binding
 			// at this level without AST transformation support.

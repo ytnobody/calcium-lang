@@ -2250,7 +2250,8 @@ func builtinPush(args ...value.Value) value.Value {
 }
 
 func builtinRange(args ...value.Value) value.Value {
-	var start, end, step int64 = 0, 0, 1
+	var start, step int64 = 0, 1
+	var end int64
 	switch len(args) {
 	case 1:
 		if args[0].Type != value.TYPE_INT {

@@ -1143,9 +1143,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 				parts := strings.Split(node.Path.RawURL, "/")
 				moduleName = parts[len(parts)-1]
 				// Remove -calcium suffix if present
-				if strings.HasSuffix(moduleName, "-calcium") {
-					moduleName = strings.TrimSuffix(moduleName, "-calcium")
-				}
+				moduleName = strings.TrimSuffix(moduleName, "-calcium")
 			} else {
 				// author/module format: "ytnobody/json"
 				modulePath = node.Path.Author + "/" + node.Path.Name

@@ -338,9 +338,9 @@ func TestHash(t *testing.T) {
 // Test ToNumber
 func TestToNumber(t *testing.T) {
 	tests := []struct {
-		val     Value
-		want    float64
-		wantOk  bool
+		val    Value
+		want   float64
+		wantOk bool
 	}{
 		{Int(42), 42.0, true},
 		{Int(-10), -10.0, true},

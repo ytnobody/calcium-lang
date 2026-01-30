@@ -1,0 +1,71 @@
+# GoReleaser configuration for Calcium
+# https://goreleaser.com
+
+version: 2
+
+project_name: calcium
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: calcium
+    binary: calcium
+    main: ./cmd/calcium
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+  - id: bone
+    binary: bone
+    main: ./cmd/bone
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: calcium-archive
+    builds:
+      - calcium
+      - bone
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: ytnobody
+    name: calcium-lang
+  prerelease: auto
+  draft: false

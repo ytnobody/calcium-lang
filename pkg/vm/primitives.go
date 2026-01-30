@@ -1055,6 +1055,281 @@ func calciumValueToGo(v value.Value) interface{} {
 }
 
 // =============================================================================
+// Time/DateTime Primitives
+// =============================================================================
+
+// __time_now returns the current Unix timestamp in seconds
+func primitiveTimeNow(args ...value.Value) value.Value {
+	if len(args) != 0 {
+		return value.Failure(value.String("__time_now: expected 0 arguments"))
+	}
+	return value.Int(time.Now().Unix())
+}
+
+// __time_now_ms returns the current Unix timestamp in milliseconds
+func primitiveTimeNowMs(args ...value.Value) value.Value {
+	if len(args) != 0 {
+		return value.Failure(value.String("__time_now_ms: expected 0 arguments"))
+	}
+	return value.Int(time.Now().UnixMilli())
+}
+
+// __time_format formats a Unix timestamp using Go's time format
+// Args: timestamp (int), format (string), [timezone (string)]
+func primitiveTimeFormat(args ...value.Value) value.Value {
+	if len(args) < 2 || len(args) > 3 {
+		return value.Failure(value.String("__time_format: expected 2-3 arguments (timestamp, format, [timezone])"))
+	}
+	if args[0].Type != value.TYPE_INT {
+		return value.Failure(value.String("__time_format: timestamp must be integer"))
+	}
+	if args[1].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__time_format: format must be string"))
+	}
+
+	timestamp := args[0].AsInt()
+	format := args[1].AsString()
+	loc := time.Local
+
+	if len(args) == 3 {
+		if args[2].Type != value.TYPE_STRING {
+			return value.Failure(value.String("__time_format: timezone must be string"))
+		}
+		tzName := args[2].AsString()
+		var err error
+		loc, err = time.LoadLocation(tzName)
+		if err != nil {
+			return value.Failure(value.String(fmt.Sprintf("__time_format: invalid timezone %q", tzName)))
+		}
+	}
+
+	t := time.Unix(timestamp, 0).In(loc)
+	return value.Success(value.String(t.Format(format)))
+}
+
+// __time_parse parses a time string into a Unix timestamp
+// Args: value (string), format (string), [timezone (string)]
+func primitiveTimeParse(args ...value.Value) value.Value {
+	if len(args) < 2 || len(args) > 3 {
+		return value.Failure(value.String("__time_parse: expected 2-3 arguments (value, format, [timezone])"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__time_parse: value must be string"))
+	}
+	if args[1].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__time_parse: format must be string"))
+	}
+
+	str := args[0].AsString()
+	format := args[1].AsString()
+	loc := time.Local
+
+	if len(args) == 3 {
+		if args[2].Type != value.TYPE_STRING {
+			return value.Failure(value.String("__time_parse: timezone must be string"))
+		}
+		tzName := args[2].AsString()
+		var err error
+		loc, err = time.LoadLocation(tzName)
+		if err != nil {
+			return value.Failure(value.String(fmt.Sprintf("__time_parse: invalid timezone %q", tzName)))
+		}
+	}
+
+	t, err := time.ParseInLocation(format, str, loc)
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("__time_parse: %v", err)))
+	}
+	return value.Success(value.Int(t.Unix()))
+}
+
+// __time_components extracts time components from a Unix timestamp
+// Returns a hash with year, month, day, hour, minute, second, weekday
+func primitiveTimeComponents(args ...value.Value) value.Value {
+	if len(args) < 1 || len(args) > 2 {
+		return value.Failure(value.String("__time_components: expected 1-2 arguments (timestamp, [timezone])"))
+	}
+	if args[0].Type != value.TYPE_INT {
+		return value.Failure(value.String("__time_components: timestamp must be integer"))
+	}
+
+	timestamp := args[0].AsInt()
+	loc := time.Local
+
+	if len(args) == 2 {
+		if args[1].Type != value.TYPE_STRING {
+			return value.Failure(value.String("__time_components: timezone must be string"))
+		}
+		tzName := args[1].AsString()
+		var err error
+		loc, err = time.LoadLocation(tzName)
+		if err != nil {
+			return value.Failure(value.String(fmt.Sprintf("__time_components: invalid timezone %q", tzName)))
+		}
+	}
+
+	t := time.Unix(timestamp, 0).In(loc)
+	result := value.NewHash()
+	result.Set(value.String("year"), value.Int(int64(t.Year())))
+	result.Set(value.String("month"), value.Int(int64(t.Month())))
+	result.Set(value.String("day"), value.Int(int64(t.Day())))
+	result.Set(value.String("hour"), value.Int(int64(t.Hour())))
+	result.Set(value.String("minute"), value.Int(int64(t.Minute())))
+	result.Set(value.String("second"), value.Int(int64(t.Second())))
+	result.Set(value.String("weekday"), value.Int(int64(t.Weekday())))
+	result.Set(value.String("yearday"), value.Int(int64(t.YearDay())))
+
+	return value.HashVal(result)
+}
+
+// __time_from_components creates a Unix timestamp from time components
+// Args: year, month, day, hour, minute, second, [timezone]
+func primitiveTimeFromComponents(args ...value.Value) value.Value {
+	if len(args) < 6 || len(args) > 7 {
+		return value.Failure(value.String("__time_from_components: expected 6-7 arguments (year, month, day, hour, minute, second, [timezone])"))
+	}
+
+	// Validate all required args are integers
+	for i := 0; i < 6; i++ {
+		if args[i].Type != value.TYPE_INT {
+			return value.Failure(value.String(fmt.Sprintf("__time_from_components: argument %d must be integer", i+1)))
+		}
+	}
+
+	year := int(args[0].AsInt())
+	month := time.Month(args[1].AsInt())
+	day := int(args[2].AsInt())
+	hour := int(args[3].AsInt())
+	minute := int(args[4].AsInt())
+	second := int(args[5].AsInt())
+	loc := time.Local
+
+	if len(args) == 7 {
+		if args[6].Type != value.TYPE_STRING {
+			return value.Failure(value.String("__time_from_components: timezone must be string"))
+		}
+		tzName := args[6].AsString()
+		var err error
+		loc, err = time.LoadLocation(tzName)
+		if err != nil {
+			return value.Failure(value.String(fmt.Sprintf("__time_from_components: invalid timezone %q", tzName)))
+		}
+	}
+
+	t := time.Date(year, month, day, hour, minute, second, 0, loc)
+	return value.Int(t.Unix())
+}
+
+// __time_add adds a duration to a timestamp
+// Args: timestamp (int), seconds (int)
+func primitiveTimeAdd(args ...value.Value) value.Value {
+	if len(args) != 2 {
+		return value.Failure(value.String("__time_add: expected 2 arguments (timestamp, seconds)"))
+	}
+	if args[0].Type != value.TYPE_INT {
+		return value.Failure(value.String("__time_add: timestamp must be integer"))
+	}
+	if args[1].Type != value.TYPE_INT {
+		return value.Failure(value.String("__time_add: seconds must be integer"))
+	}
+
+	timestamp := args[0].AsInt()
+	seconds := args[1].AsInt()
+	return value.Int(timestamp + seconds)
+}
+
+// __time_diff returns the difference between two timestamps in seconds
+func primitiveTimeDiff(args ...value.Value) value.Value {
+	if len(args) != 2 {
+		return value.Failure(value.String("__time_diff: expected 2 arguments (timestamp1, timestamp2)"))
+	}
+	if args[0].Type != value.TYPE_INT {
+		return value.Failure(value.String("__time_diff: timestamp1 must be integer"))
+	}
+	if args[1].Type != value.TYPE_INT {
+		return value.Failure(value.String("__time_diff: timestamp2 must be integer"))
+	}
+
+	t1 := args[0].AsInt()
+	t2 := args[1].AsInt()
+	return value.Int(t1 - t2)
+}
+
+// =============================================================================
+// Environment Variable Primitives
+// =============================================================================
+
+// __env_get retrieves an environment variable
+// Returns success(value) if set, failure("not set") if not
+func primitiveEnvGet(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__env_get: expected 1 argument (name)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__env_get: name must be string"))
+	}
+
+	name := args[0].AsString()
+	val, exists := os.LookupEnv(name)
+	if !exists {
+		return value.Failure(value.String("not set"))
+	}
+	return value.Success(value.String(val))
+}
+
+// __env_set sets an environment variable
+func primitiveEnvSet(args ...value.Value) value.Value {
+	if len(args) != 2 {
+		return value.Failure(value.String("__env_set: expected 2 arguments (name, value)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__env_set: name must be string"))
+	}
+	if args[1].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__env_set: value must be string"))
+	}
+
+	name := args[0].AsString()
+	val := args[1].AsString()
+	if err := os.Setenv(name, val); err != nil {
+		return value.Failure(value.String(fmt.Sprintf("__env_set: %v", err)))
+	}
+	return value.Success(value.Null())
+}
+
+// __env_unset removes an environment variable
+func primitiveEnvUnset(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__env_unset: expected 1 argument (name)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__env_unset: name must be string"))
+	}
+
+	name := args[0].AsString()
+	if err := os.Unsetenv(name); err != nil {
+		return value.Failure(value.String(fmt.Sprintf("__env_unset: %v", err)))
+	}
+	return value.Success(value.Null())
+}
+
+// __env_list returns all environment variables as a hash
+func primitiveEnvList(args ...value.Value) value.Value {
+	if len(args) != 0 {
+		return value.Failure(value.String("__env_list: expected 0 arguments"))
+	}
+
+	result := value.NewHash()
+	for _, e := range os.Environ() {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			result.Set(value.String(parts[0]), value.String(parts[1]))
+		}
+	}
+	return value.HashVal(result)
+}
+
+// =============================================================================
 // Primitive Registry
 // =============================================================================
 
@@ -1121,5 +1396,21 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__http_put":     {Name: "__http_put", Fn: primitiveHttpPut},
 		"__http_delete":  {Name: "__http_delete", Fn: primitiveHttpDelete},
 		"__http_request": {Name: "__http_request", Fn: primitiveHttpRequest},
+
+		// Time/DateTime
+		"__time_now":             {Name: "__time_now", Fn: primitiveTimeNow},
+		"__time_now_ms":          {Name: "__time_now_ms", Fn: primitiveTimeNowMs},
+		"__time_format":          {Name: "__time_format", Fn: primitiveTimeFormat},
+		"__time_parse":           {Name: "__time_parse", Fn: primitiveTimeParse},
+		"__time_components":      {Name: "__time_components", Fn: primitiveTimeComponents},
+		"__time_from_components": {Name: "__time_from_components", Fn: primitiveTimeFromComponents},
+		"__time_add":             {Name: "__time_add", Fn: primitiveTimeAdd},
+		"__time_diff":            {Name: "__time_diff", Fn: primitiveTimeDiff},
+
+		// Environment
+		"__env_get":   {Name: "__env_get", Fn: primitiveEnvGet},
+		"__env_set":   {Name: "__env_set", Fn: primitiveEnvSet},
+		"__env_unset": {Name: "__env_unset", Fn: primitiveEnvUnset},
+		"__env_list":  {Name: "__env_list", Fn: primitiveEnvList},
 	}
 }

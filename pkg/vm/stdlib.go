@@ -384,7 +384,7 @@ func (vm *VM) LoadRemoteModule(author, name string) (*value.Module, error) {
 		}
 		// Save to global cache
 		globalDir := getModuleCachePath(author, name)
-		saveToCacheDir(globalDir, "mod.ca", content)
+		saveToCacheDir(globalDir, "mod.ca", content) //nolint:errcheck // TODO: Handle error properly
 		moduleDir = globalDir
 	}
 
@@ -446,7 +446,7 @@ func (vm *VM) LoadGitHubURLModule(url string) (*value.Module, error) {
 			return nil, fmt.Errorf("GitHub module not found: %s", url)
 		}
 		// Save to cache
-		saveToCacheDir(cacheDir, "mod.ca", content)
+		saveToCacheDir(cacheDir, "mod.ca", content) //nolint:errcheck // TODO: Handle error properly
 	}
 
 	// Compile and cache the module

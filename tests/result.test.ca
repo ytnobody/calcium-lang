@@ -1,70 +1,71 @@
 // Result Handling Test (!? operator)
 use core.io!;
-use core.assert!;
+use test;
 use core.types;
 
-io.println("Result Handling Tests");
-io.println("====================");
+io.println("# Result Handling Tests");
+
+ctx = test.new();
 
 // === Success/Failure Creation ===
-assert.section("Success/Failure creation");
+io.println("# Success/Failure creation");
 s = success(42);
 f = failure("error");
-assert.eq("success type", types.type_of(s), "success");
-assert.eq("failure type", types.type_of(f), "failure");
+ctx = test.is(ctx, "success type", types.type_of(s), "success");
+ctx = test.is(ctx, "failure type", types.type_of(f), "failure");
 
 // === Basic !? Handling ===
-assert.section("Basic !? handling");
+io.println("# Basic !? handling");
 result1 = success(42) !? {
     success(v) => v
     failure(err) => 0
 };
-assert.eq("unwrap success", result1, 42);
+ctx = test.is(ctx, "unwrap success", result1, 42);
 
 result2 = failure("error") !? {
     success(v) => v
     failure(err) => 0
 };
-assert.eq("unwrap failure", result2, 0);
+ctx = test.is(ctx, "unwrap failure", result2, 0);
 
 // === Effect Functions ===
-assert.section("Effect functions returning results");
+io.println("# Effect functions returning results");
 func safe_divide(a, b) = match b == 0
     true => failure("division by zero")
     false => success(a / b);
 
-safe_divide(10, 2) !? {
-    success(v) => assert.eq("divide success", v, 5)
-    failure(err) => assert.fail("should not fail")
+ctx = safe_divide(10, 2) !? {
+    success(v) => test.is(ctx, "divide success", v, 5)
+    failure(err) => test.fail(ctx, "should not fail")
 };
 
-safe_divide(10, 0) !? {
-    success(v) => assert.fail("should fail")
-    failure(e) => assert.eq("divide by zero error", e, "division by zero")
+ctx = safe_divide(10, 0) !? {
+    success(v) => test.fail(ctx, "should fail")
+    failure(e) => test.is(ctx, "divide by zero error", e, "division by zero")
 };
 
 // === Result Unwrapping Helper ===
-assert.section("Result unwrapping");
+io.println("# Result unwrapping");
 func unwrap_or(result, default_val) = result !? {
     success(v) => v
     failure(err) => default_val
 };
 
-assert.eq("unwrap_or success", unwrap_or(success(42), 0), 42);
-assert.eq("unwrap_or failure", unwrap_or(failure("error"), 0), 0);
+ctx = test.is(ctx, "unwrap_or success", unwrap_or(success(42), 0), 42);
+ctx = test.is(ctx, "unwrap_or failure", unwrap_or(failure("error"), 0), 0);
 
 // === Simple Chaining ===
-assert.section("Simple chaining");
+io.println("# Simple chaining");
 func add_one(x) = success(x + 1);
 
 chain_result = add_one(1);
 v1 = unwrap_or(chain_result, 0);
 chain_result2 = add_one(v1);
 v2 = unwrap_or(chain_result2, 0);
-assert.eq("chained result", v2, 3);
+ctx = test.is(ctx, "chained result", v2, 3);
 
 // === Result in Function Body ===
-assert.section("Result in function body");
+io.println("# Result in function body");
 func safe_sqrt(x) = match x >= 0
     true => success(x)
     false => failure("negative number");
@@ -74,11 +75,11 @@ func process(x) = safe_sqrt(x) !? {
     failure(err) => -1
 };
 
-assert.eq("process positive", process(16), 32);
-assert.eq("process negative", process(-4), -1);
+ctx = test.is(ctx, "process positive", process(16), 32);
+ctx = test.is(ctx, "process negative", process(-4), -1);
 
 // === Step Functions for Pipeline ===
-assert.section("Propagating failures");
+io.println("# Propagating failures");
 func step1(x) = success(x + 10);
 func step2(x) = match x > 50
     true => failure("too large")
@@ -99,15 +100,14 @@ func chain_step3(r) = r !? {
 // Pipeline using helper functions
 func run_pipeline(x) = chain_step3(chain_step2(chain_step1(x)));
 
-run_pipeline(10) !? {
-    success(v) => assert.eq("pipeline success", v, 35)
-    failure(err) => assert.fail("should succeed")
+ctx = run_pipeline(10) !? {
+    success(v) => test.is(ctx, "pipeline success", v, 35)
+    failure(err) => test.fail(ctx, "should succeed")
 };
 
-run_pipeline(50) !? {
-    success(v) => assert.fail("should fail")
-    failure(e) => assert.eq("pipeline failure", e, "too large")
+ctx = run_pipeline(50) !? {
+    success(v) => test.fail(ctx, "should fail")
+    failure(e) => test.is(ctx, "pipeline failure", e, "too large")
 };
 
-io.println("\n====================");
-io.println("Result tests complete!");
+test.done(ctx);

@@ -1,150 +1,151 @@
 // CSV Module Test Suite
 use core.io!;
-use core.assert!;
+use test;
 use csv;
 
-io.println("CSV Module Test Suite");
-io.println("=====================");
+io.println("# CSV Module Tests");
+
+ctx = test.new();
+ctx = test.plan(ctx, 45);
 
 // ============================================
 // parse: Basic cases
 // ============================================
 
-assert.section("parse: Basic CSV");
+io.println("# parse: Basic CSV");
 
 csv_basic = "name,age,city\nAlice,30,Tokyo\nBob,25,Osaka";
 result_basic = csv.parse(csv_basic);
-assert.len_eq("basic: row count", result_basic, 3);
-assert.eq("basic: header name", result_basic[0][0], "name");
-assert.eq("basic: header age", result_basic[0][1], "age");
-assert.eq("basic: header city", result_basic[0][2], "city");
-assert.eq("basic: row1 name", result_basic[1][0], "Alice");
-assert.eq("basic: row1 age", result_basic[1][1], "30");
-assert.eq("basic: row1 city", result_basic[1][2], "Tokyo");
-assert.eq("basic: row2 name", result_basic[2][0], "Bob");
-assert.eq("basic: row2 age", result_basic[2][1], "25");
+ctx = test.is(ctx, "basic: row count", len(result_basic), 3);
+ctx = test.is(ctx, "basic: header name", result_basic[0][0], "name");
+ctx = test.is(ctx, "basic: header age", result_basic[0][1], "age");
+ctx = test.is(ctx, "basic: header city", result_basic[0][2], "city");
+ctx = test.is(ctx, "basic: row1 name", result_basic[1][0], "Alice");
+ctx = test.is(ctx, "basic: row1 age", result_basic[1][1], "30");
+ctx = test.is(ctx, "basic: row1 city", result_basic[1][2], "Tokyo");
+ctx = test.is(ctx, "basic: row2 name", result_basic[2][0], "Bob");
+ctx = test.is(ctx, "basic: row2 age", result_basic[2][1], "25");
 
-assert.section("parse: Empty input");
+io.println("# parse: Empty input");
 
 empty_result = csv.parse("");
-assert.len_eq("empty: no rows", empty_result, 0);
+ctx = test.is(ctx, "empty: no rows", len(empty_result), 0);
 
-assert.section("parse: Single row");
+io.println("# parse: Single row");
 
 single_row = csv.parse("a,b,c");
-assert.len_eq("single row: count", single_row, 1);
-assert.len_eq("single row: fields", single_row[0], 3);
-assert.eq("single row: first field", single_row[0][0], "a");
-assert.eq("single row: last field", single_row[0][2], "c");
+ctx = test.is(ctx, "single row: count", len(single_row), 1);
+ctx = test.is(ctx, "single row: fields", len(single_row[0]), 3);
+ctx = test.is(ctx, "single row: first field", single_row[0][0], "a");
+ctx = test.is(ctx, "single row: last field", single_row[0][2], "c");
 
-assert.section("parse: Quoted fields");
+io.println("# parse: Quoted fields");
 
 csv_quoted = '"hello, world","she said ""hi""",normal';
 result_quoted = csv.parse(csv_quoted);
-assert.len_eq("quoted: field count", result_quoted[0], 3);
-assert.eq("quoted: comma in field", result_quoted[0][0], "hello, world");
-assert.eq("quoted: escaped quote", result_quoted[0][1], 'she said "hi"');
-assert.eq("quoted: normal field", result_quoted[0][2], "normal");
+ctx = test.is(ctx, "quoted: field count", len(result_quoted[0]), 3);
+ctx = test.is(ctx, "quoted: comma in field", result_quoted[0][0], "hello, world");
+ctx = test.is(ctx, "quoted: escaped quote", result_quoted[0][1], 'she said "hi"');
+ctx = test.is(ctx, "quoted: normal field", result_quoted[0][2], "normal");
 
-assert.section("parse: CRLF line endings");
+io.println("# parse: CRLF line endings");
 
 csv_crlf = "a,b\r\nc,d\r\ne,f";
 result_crlf = csv.parse(csv_crlf);
-assert.len_eq("crlf: row count", result_crlf, 3);
-assert.eq("crlf: row1 field1", result_crlf[0][0], "a");
-assert.eq("crlf: row2 field1", result_crlf[1][0], "c");
-assert.eq("crlf: row3 field1", result_crlf[2][0], "e");
+ctx = test.is(ctx, "crlf: row count", len(result_crlf), 3);
+ctx = test.is(ctx, "crlf: row1 field1", result_crlf[0][0], "a");
+ctx = test.is(ctx, "crlf: row2 field1", result_crlf[1][0], "c");
+ctx = test.is(ctx, "crlf: row3 field1", result_crlf[2][0], "e");
 
-assert.section("parse: Empty fields");
+io.println("# parse: Empty fields");
 
 csv_empty_fields = "a,,c\n,b,";
 result_ef = csv.parse(csv_empty_fields);
-assert.eq("empty fields: row1 field2 empty", result_ef[0][1], "");
-assert.eq("empty fields: row2 field1 empty", result_ef[1][0], "");
-assert.eq("empty fields: row2 field3 empty", result_ef[1][2], "");
+ctx = test.is(ctx, "empty fields: row1 field2 empty", result_ef[0][1], "");
+ctx = test.is(ctx, "empty fields: row2 field1 empty", result_ef[1][0], "");
+ctx = test.is(ctx, "empty fields: row2 field3 empty", result_ef[1][2], "");
 
-assert.section("parse: Whitespace preserved");
+io.println("# parse: Whitespace preserved");
 
 csv_ws = " hello , world ";
 result_ws = csv.parse(csv_ws);
-assert.eq("whitespace: preserved in field", result_ws[0][0], " hello ");
-assert.eq("whitespace: preserved in field2", result_ws[0][1], " world ");
+ctx = test.is(ctx, "whitespace: preserved in field", result_ws[0][0], " hello ");
+ctx = test.is(ctx, "whitespace: preserved in field2", result_ws[0][1], " world ");
 
 // ============================================
 // parse_with_header: Basic cases
 // ============================================
 
-assert.section("parse_with_header: Basic");
+io.println("# parse_with_header: Basic");
 
 csv_header = "name,age,city\nAlice,30,Tokyo\nBob,25,Osaka";
 result_header = csv.parse_with_header(csv_header);
-assert.len_eq("header: row count", result_header, 2);
-assert.eq("header: row1 name", result_header[0]["name"], "Alice");
-assert.eq("header: row1 age", result_header[0]["age"], "30");
-assert.eq("header: row1 city", result_header[0]["city"], "Tokyo");
-assert.eq("header: row2 name", result_header[1]["name"], "Bob");
-assert.eq("header: row2 age", result_header[1]["age"], "25");
+ctx = test.is(ctx, "header: row count", len(result_header), 2);
+ctx = test.is(ctx, "header: row1 name", result_header[0]["name"], "Alice");
+ctx = test.is(ctx, "header: row1 age", result_header[0]["age"], "30");
+ctx = test.is(ctx, "header: row1 city", result_header[0]["city"], "Tokyo");
+ctx = test.is(ctx, "header: row2 name", result_header[1]["name"], "Bob");
+ctx = test.is(ctx, "header: row2 age", result_header[1]["age"], "25");
 
-assert.section("parse_with_header: Only header row");
+io.println("# parse_with_header: Only header row");
 
 csv_only_header = "name,age,city";
 result_oh = csv.parse_with_header(csv_only_header);
-assert.len_eq("only header: no data rows", result_oh, 0);
+ctx = test.is(ctx, "only header: no data rows", len(result_oh), 0);
 
-assert.section("parse_with_header: Short rows fill with empty");
+io.println("# parse_with_header: Short rows fill with empty");
 
 csv_short = "a,b,c\n1,2";
 result_short = csv.parse_with_header(csv_short);
-assert.eq("short row: missing field is empty", result_short[0]["c"], "");
+ctx = test.is(ctx, "short row: missing field is empty", result_short[0]["c"], "");
 
 // ============================================
 // stringify: Basic cases
 // ============================================
 
-assert.section("stringify: Basic");
+io.println("# stringify: Basic");
 
 data_basic = [["name", "age"], ["Alice", "30"], ["Bob", "25"]];
 result_str = csv.stringify(data_basic);
-assert.eq("stringify: basic output", result_str, "name,age\r\nAlice,30\r\nBob,25");
+ctx = test.is(ctx, "stringify: basic output", result_str, "name,age\r\nAlice,30\r\nBob,25");
 
-assert.section("stringify: Quoting");
+io.println("# stringify: Quoting");
 
 data_quote = [["hello, world", 'say "hi"', "normal"]];
 result_quote = csv.stringify(data_quote);
-assert.eq("stringify: comma quoted", result_quote, '"hello, world","say ""hi""",normal');
+ctx = test.is(ctx, "stringify: comma quoted", result_quote, '"hello, world","say ""hi""",normal');
 
-assert.section("stringify: Newline in field");
+io.println("# stringify: Newline in field");
 
 data_newline = [["line1\nline2", "normal"]];
 result_nl = csv.stringify(data_newline);
-assert.eq("stringify: newline quoted", result_nl, '"line1\nline2",normal');
+ctx = test.is(ctx, "stringify: newline quoted", result_nl, '"line1\nline2",normal');
 
-assert.section("stringify: Empty array");
+io.println("# stringify: Empty array");
 
 empty_data = [];
 result_empty = csv.stringify(empty_data);
-assert.eq("stringify: empty is empty string", result_empty, "");
+ctx = test.is(ctx, "stringify: empty is empty string", result_empty, "");
 
-assert.section("stringify: Single row");
+io.println("# stringify: Single row");
 
 single_data = [["a", "b", "c"]];
 result_single = csv.stringify(single_data);
-assert.eq("stringify: single row", result_single, "a,b,c");
+ctx = test.is(ctx, "stringify: single row", result_single, "a,b,c");
 
 // ============================================
 // Round-trip tests
 // ============================================
 
-assert.section("Round-trip");
+io.println("# Round-trip");
 
 original = [["name", "age", "note"], ["Alice", "30", "hello, world"], ["Bob", "25", 'say "hi"']];
 csv_str = csv.stringify(original);
 parsed_back = csv.parse(csv_str);
-assert.len_eq("round-trip: row count", parsed_back, 3);
-assert.eq("round-trip: header", parsed_back[0][0], "name");
-assert.eq("round-trip: name field", parsed_back[1][0], "Alice");
-assert.eq("round-trip: comma field", parsed_back[1][2], "hello, world");
-assert.eq("round-trip: quote field", parsed_back[2][2], 'say "hi"');
+ctx = test.is(ctx, "round-trip: row count", len(parsed_back), 3);
+ctx = test.is(ctx, "round-trip: header", parsed_back[0][0], "name");
+ctx = test.is(ctx, "round-trip: name field", parsed_back[1][0], "Alice");
+ctx = test.is(ctx, "round-trip: comma field", parsed_back[1][2], "hello, world");
+ctx = test.is(ctx, "round-trip: quote field", parsed_back[2][2], 'say "hi"');
 
-io.println("\n=====================");
-io.println("CSV test suite complete!");
+test.done(ctx);

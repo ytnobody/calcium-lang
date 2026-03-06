@@ -47,3 +47,7 @@ ehthumbs.db
 # Calcium cache (if implemented)
 .calcium/
 *.ca.cache
+
+# madflow generated files
+prompts/
+madflow.toml

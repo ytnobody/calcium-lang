@@ -1,0 +1,141 @@
+// test - TAP-compatible test framework for Calcium
+// Inspired by Perl's Test::More
+// Author: YTNOBODY
+// License: MIT
+//
+// Usage:
+//   use test;
+//   ctx = test.new();
+//   ctx = test.plan(ctx, 3);
+//   ctx = test.is(ctx, "addition", 1 + 1, 2);
+//   ctx = test.ok(ctx, "truthy", true);
+//   ctx = test.isnt(ctx, "not equal", 1, 2);
+//   test.done(ctx);
+
+namespace test;
+
+use core.string;
+use core.io!;
+
+// ============================================
+// Context Management
+// ============================================
+
+// new creates a fresh test context
+func new() = {total: 0, passed: 0, failed: 0, planned: 0};
+
+// plan sets the expected number of tests and prints the plan line
+func plan(ctx, n) =
+    _tap_print(hash_set(ctx, "planned", n), concat("1..", to_string(n)));
+
+// ============================================
+// Assertion Functions
+// ============================================
+
+// ok asserts that value is truthy
+func ok(ctx, label, value) =
+    match value
+        false => _record_fail(ctx, label, "expected truthy value, got false")
+        0 => _record_fail(ctx, label, "expected truthy value, got 0")
+        "" => _record_fail(ctx, label, "expected truthy value, got empty string")
+        _ => _ok_check_null(ctx, label, value);
+
+func _ok_check_null(ctx, label, value) =
+    match __type_of(value)
+        "null" => _record_fail(ctx, label, "expected truthy value, got null")
+        _ => _record_pass(ctx, label);
+
+// is asserts that actual equals expected
+func is(ctx, label, actual, expected) =
+    match actual == expected
+        true => _record_pass(ctx, label)
+        false => _record_fail_detail(ctx, label, actual, expected);
+
+// isnt asserts that actual does not equal expected
+func isnt(ctx, label, actual, expected) =
+    match actual == expected
+        false => _record_pass(ctx, label)
+        true => _record_fail(ctx, label,
+            concat("expected anything other than ", to_string(expected)));
+
+// pass unconditionally records a passing test
+func pass(ctx, label) = _record_pass(ctx, label);
+
+// fail unconditionally records a failing test
+func fail(ctx, label) = _record_fail(ctx, label, "explicitly failed");
+
+// ============================================
+// Internal: Recording Results
+// ============================================
+
+func _record_pass(ctx, label) =
+    _tap_print(
+        _increment_passed(_increment_total(ctx)),
+        concat("ok ", concat(to_string(ctx["total"] + 1), concat(" - ", label))));
+
+func _record_fail(ctx, label, reason) =
+    _tap_print_diag(
+        _tap_print(
+            _increment_failed(_increment_total(ctx)),
+            concat("not ok ", concat(to_string(ctx["total"] + 1), concat(" - ", label)))),
+        concat("#   ", reason));
+
+func _record_fail_detail(ctx, label, actual, expected) =
+    _tap_print_diag(
+        _tap_print_diag(
+            _tap_print(
+                _increment_failed(_increment_total(ctx)),
+                concat("not ok ", concat(to_string(ctx["total"] + 1), concat(" - ", label)))),
+            concat("#   got:      ", to_string(actual))),
+        concat("#   expected: ", to_string(expected)));
+
+// ============================================
+// Internal: Context Updates
+// ============================================
+
+func _increment_total(ctx) =
+    hash_set(ctx, "total", ctx["total"] + 1);
+
+func _increment_passed(ctx) =
+    hash_set(ctx, "passed", ctx["passed"] + 1);
+
+func _increment_failed(ctx) =
+    hash_set(ctx, "failed", ctx["failed"] + 1);
+
+// ============================================
+// Output Helpers
+// ============================================
+
+// _tap_print prints a message and returns the context
+func _tap_print(ctx, msg) = _after(ctx, io.println(msg));
+
+// _tap_print_diag prints a diagnostic message and returns the context
+func _tap_print_diag(ctx, msg) = _after(ctx, io.println(msg));
+
+func _after(a, _) = a;
+
+// ============================================
+// Summary / Done
+// ============================================
+
+// done prints the final test summary and checks the plan
+func done(ctx) =
+    _done_check_plan(
+        _tap_print(
+            _tap_print(
+                _tap_print(ctx,
+                    concat("# Tests: ", to_string(ctx["total"]))),
+                concat("# Passed: ", to_string(ctx["passed"]))),
+            concat("# Failed: ", to_string(ctx["failed"]))));
+
+func _done_check_plan(ctx) =
+    match ctx["planned"]
+        0 => ctx
+        _ => _verify_plan(ctx, ctx["planned"]);
+
+func _verify_plan(ctx, planned) =
+    match ctx["total"] == planned
+        true => ctx
+        false => _tap_print(ctx,
+            concat("# Looks like you planned ", concat(to_string(planned),
+                concat(" tests but ran ", to_string(ctx["total"])))));

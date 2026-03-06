@@ -1,0 +1,171 @@
+// csv - RFC 4180 compliant CSV parser / builder for Calcium
+// Author: YTNOBODY
+// License: MIT
+
+namespace csv;
+
+use core.string;
+
+// ============================================
+// Public API
+// ============================================
+
+// parse converts a CSV string into a 2D array of strings
+// Each row is an array of field values
+func parse(text) = _parse_rows(_normalize_newlines(text));
+
+// parse_with_header converts a CSV string into an array of hashes
+// The first row is used as keys (header row)
+func parse_with_header(text) = _make_hash_rows(parse(text));
+
+// stringify converts a 2D array into a CSV string
+func stringify(data) = data
+    |> map(row => _stringify_row(row))
+    |> string.join("\r\n");
+
+// ============================================
+// Newline Normalization
+// ============================================
+
+func _normalize_newlines(text) = text
+    |> string.replace("\r\n", "\n")
+    |> string.replace("\r", "\n");
+
+// ============================================
+// Row Parsing
+// ============================================
+
+func _parse_rows(text) = _filter_empty_rows(_split_rows(text, 0, 0, [], false));
+
+func _filter_empty_rows(rows) = rows |> filter(row => len(row) > 1 || (len(row) == 1 && row[0] != ""));
+
+func _split_rows(text, pos, row_start, acc, in_quote) =
+    _split_rows_bound(text, pos, row_start, acc, in_quote, pos >= len(text));
+
+func _split_rows_bound(text, pos, row_start, acc, in_quote, at_end) =
+    match at_end
+        true => _finish_rows(text, row_start, acc)
+        false => _split_rows_char(text, pos, row_start, acc, in_quote, string.char_at(text, pos));
+
+func _split_rows_char(text, pos, row_start, acc, in_quote, c) =
+    match in_quote
+        true => _split_rows_in_quote(text, pos, row_start, acc, c)
+        false => _split_rows_out_quote(text, pos, row_start, acc, c);
+
+func _split_rows_in_quote(text, pos, row_start, acc, c) =
+    match c
+        '"' => _split_rows(text, pos + 1, row_start, acc, false)
+        _ => _split_rows(text, pos + 1, row_start, acc, true);
+
+func _split_rows_out_quote(text, pos, row_start, acc, c) =
+    match c
+        '"' => _split_rows(text, pos + 1, row_start, acc, true)
+        '\n' => _split_rows(text, pos + 1, pos + 1, push(acc, _parse_row(string.substring(text, row_start, pos))), false)
+        _ => _split_rows(text, pos + 1, row_start, acc, false);
+
+func _finish_rows(text, row_start, acc) =
+    push(acc, _parse_row(string.substring(text, row_start, len(text))));
+
+// ============================================
+// Single Row Parsing
+// ============================================
+
+func _parse_row(line) = _parse_fields(line, 0, 0, [], false);
+
+func _parse_fields(line, pos, field_start, fields, in_quote) =
+    _parse_fields_bound(line, pos, field_start, fields, in_quote, pos >= len(line));
+
+func _parse_fields_bound(line, pos, field_start, fields, in_quote, at_end) =
+    match at_end
+        true => push(fields, _extract_field(line, field_start, pos))
+        false => _parse_fields_char(line, pos, field_start, fields, in_quote, string.char_at(line, pos));
+
+func _parse_fields_char(line, pos, field_start, fields, in_quote, c) =
+    match in_quote
+        true => _parse_field_in_quote(line, pos, field_start, fields, c)
+        false => _parse_field_out_quote(line, pos, field_start, fields, c);
+
+func _parse_field_in_quote(line, pos, field_start, fields, c) =
+    match c
+        '"' => _parse_fields(line, pos + 1, field_start, fields, false)
+        _ => _parse_fields(line, pos + 1, field_start, fields, true);
+
+func _parse_field_out_quote(line, pos, field_start, fields, c) =
+    match c
+        ',' => _parse_fields(line, pos + 1, pos + 1, push(fields, _extract_field(line, field_start, pos)), false)
+        '"' => _parse_fields(line, pos + 1, field_start, fields, true)
+        _ => _parse_fields(line, pos + 1, field_start, fields, false);
+
+// ============================================
+// Field Extraction (unquoting + unescape)
+// ============================================
+
+func _extract_field(line, start, end) =
+    _unquote_field(string.substring(line, start, end));
+
+func _unquote_field(s) = _check_quoted(s, len(s));
+
+func _check_quoted(s, l) =
+    match l >= 2
+        true => _check_quotes(s, l, string.char_at(s, 0), string.char_at(s, l - 1))
+        false => s;
+
+func _check_quotes(s, l, first, last) =
+    match first == '"' && last == '"'
+        true => _unescape_field(string.substring(s, 1, l - 1))
+        false => s;
+
+func _unescape_field(s) = string.replace(s, '""', '"');
+
+// ============================================
+// Hash Row Construction (parse_with_header)
+// ============================================
+
+func _make_hash_rows(rows) = _make_hash_rows_check(rows, len(rows));
+
+func _make_hash_rows_check(rows, l) =
+    match l
+        0 => []
+        _ => _make_hash_rows_with_header(rows[0], tail(rows));
+
+func _make_hash_rows_with_header(headers, data_rows) =
+    data_rows |> map(row => _row_to_hash(headers, row));
+
+func _row_to_hash(headers, row) =
+    _build_hash(headers, row, 0, {});
+
+func _build_hash(headers, row, i, acc) =
+    _build_hash_bound(headers, row, i, acc, i >= len(headers));
+
+func _build_hash_bound(headers, row, i, acc, done) =
+    match done
+        true => acc
+        false => _build_hash(headers, row, i + 1,
+            hash_set(acc, headers[i], _get_row_value(row, i)));
+
+func _get_row_value(row, i) =
+    match i < len(row)
+        true => row[i]
+        false => "";
+
+// ============================================
+// Stringify Implementation
+// ============================================
+
+func _stringify_row(row) = row
+    |> map(field => _stringify_field(to_string(field)))
+    |> string.join(",");
+
+func _stringify_field(s) = _needs_quoting(s, s);
+
+func _needs_quoting(original, s) =
+    _check_needs_quote(s,
+        string.contains(s, ',') ||
+        string.contains(s, '"') ||
+        string.contains(s, '\n') ||
+        string.contains(s, '\r'));
+
+func _check_needs_quote(s, needs) =
+    match needs
+        true => concat('"', concat(string.replace(s, '"', '""'), '"'))
+        false => s;

@@ -1,0 +1,12 @@
+name = "csv"
+author = "ytnobody"
+description = "RFC 4180 compliant CSV parser / builder"
+license = "MIT"
+keywords = ["csv", "data", "parser"]
+entry = "mod.ca"
+
+# Dependencies - only external modules need to be listed here
+# Core modules (core.*) are part of stdlib and don't need to be declared
+#
+# [dependencies]
+# "author/module" = "^1.0.0"

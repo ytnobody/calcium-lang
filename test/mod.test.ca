@@ -1,0 +1,48 @@
+// Test Module Self-Test Suite
+// Tests the test module using itself
+use core.io!;
+use test;
+
+io.println("Test Module Self-Test Suite");
+io.println("===========================");
+io.println("");
+
+// ============================================
+// Basic assertions
+// ============================================
+
+ctx = test.new();
+ctx = test.plan(ctx, 15);
+
+// ok: truthy values
+ctx = test.ok(ctx, "ok with true", true);
+ctx = test.ok(ctx, "ok with number", 42);
+ctx = test.ok(ctx, "ok with string", "hello");
+ctx = test.ok(ctx, "ok with array", [1, 2, 3]);
+
+// is: equality
+ctx = test.is(ctx, "is: numbers equal", 1 + 1, 2);
+ctx = test.is(ctx, "is: strings equal", "hello", "hello");
+ctx = test.is(ctx, "is: booleans equal", true, true);
+// isnt: inequality
+ctx = test.isnt(ctx, "isnt: different numbers", 1, 2);
+ctx = test.isnt(ctx, "isnt: different strings", "hello", "world");
+ctx = test.isnt(ctx, "isnt: different types", 1, "1");
+
+// pass: always succeeds
+ctx = test.pass(ctx, "pass always succeeds");
+
+// ============================================
+// Context tracking
+// ============================================
+
+ctx = test.is(ctx, "total count is correct", ctx["total"], 11);
+ctx = test.is(ctx, "passed count is correct", ctx["passed"], 12);
+ctx = test.is(ctx, "failed count is correct", ctx["failed"], 0);
+ctx = test.is(ctx, "planned count is correct", ctx["planned"], 15);
+
+// ============================================
+// Done / Summary
+// ============================================
+
+test.done(ctx);

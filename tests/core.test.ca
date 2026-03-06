@@ -5,6 +5,7 @@ use test;
 io.println("# Core Language Tests");
 
 ctx = test.new();
+ctx = test.plan(ctx, 22);
 
 // === Variables ===
 io.println("# Variables");

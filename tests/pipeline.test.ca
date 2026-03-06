@@ -5,6 +5,7 @@ use test;
 io.println("# Pipeline Tests");
 
 ctx = test.new();
+ctx = test.plan(ctx, 10);
 
 // === Basic Pipeline ===
 io.println("# Basic pipeline");

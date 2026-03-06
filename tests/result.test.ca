@@ -6,6 +6,7 @@ use core.types;
 io.println("# Result Handling Tests");
 
 ctx = test.new();
+ctx = test.plan(ctx, 13);
 
 // === Success/Failure Creation ===
 io.println("# Success/Failure creation");

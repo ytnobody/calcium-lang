@@ -6,6 +6,7 @@ use core.string;
 io.println("# String Tests");
 
 ctx = test.new();
+ctx = test.plan(ctx, 42);
 
 // === Basic Operations ===
 io.println("# Basic operations");

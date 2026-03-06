@@ -5,6 +5,7 @@ use test;
 io.println("# Hash Tests");
 
 ctx = test.new();
+ctx = test.plan(ctx, 28);
 
 // Helper: check if array contains a value
 func arr_contains(arr, val) = len(filter(arr, x => x == val)) > 0;

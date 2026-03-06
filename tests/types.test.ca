@@ -6,6 +6,7 @@ use core.types;
 io.println("# Type System Tests");
 
 ctx = test.new();
+ctx = test.plan(ctx, 26);
 
 // === Type Detection ===
 io.println("# type_of");

@@ -5,6 +5,7 @@ use test;
 io.println("# Pattern Matching Tests");
 
 ctx = test.new();
+ctx = test.plan(ctx, 18);
 
 // === Literal Matching ===
 io.println("# Literal matching");

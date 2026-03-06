@@ -5,6 +5,7 @@ use test;
 io.println("# Array Tests");
 
 ctx = test.new();
+ctx = test.plan(ctx, 25);
 
 // === Basic Operations ===
 io.println("# Basic operations");

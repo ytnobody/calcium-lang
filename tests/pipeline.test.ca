@@ -1,68 +1,69 @@
 // Pipeline Operator Test
 use core.io!;
-use core.assert!;
+use test;
 
-io.println("Pipeline Tests");
-io.println("==============");
+io.println("# Pipeline Tests");
+
+ctx = test.new();
+ctx = test.plan(ctx, 10);
 
 // === Basic Pipeline ===
-assert.section("Basic pipeline");
+io.println("# Basic pipeline");
 result = 5 |> (x => x * 2);
-assert.eq("simple pipe", result, 10);
+ctx = test.is(ctx, "simple pipe", result, 10);
 
 // === Chained Pipeline ===
-assert.section("Chained pipeline");
+io.println("# Chained pipeline");
 result2 = 5
     |> (x => x * 2)
     |> (x => x + 3)
     |> (x => x * x);
-assert.eq("chained transforms", result2, 169);
+ctx = test.is(ctx, "chained transforms", result2, 169);
 
 // === Pipeline with Named Functions ===
-assert.section("Pipeline with named functions");
+io.println("# Pipeline with named functions");
 func double(x) = x * 2;
 func add_ten(x) = x + 10;
 func square(x) = x * x;
 
 result3 = 3 |> double |> add_ten |> square;
-assert.eq("named functions", result3, 256);
+ctx = test.is(ctx, "named functions", result3, 256);
 
 // === Pipeline with Arrays ===
-assert.section("Pipeline with arrays");
+io.println("# Pipeline with arrays");
 nums = [1, 2, 3, 4, 5];
 sum_of_squares = nums
     |> map(x => x * x)
     |> reduce((acc, x) => acc + x, 0);
-assert.eq("sum of squares", sum_of_squares, 55);
+ctx = test.is(ctx, "sum of squares", sum_of_squares, 55);
 
 // === Pipeline with Filter ===
-assert.section("Pipeline with filter");
+io.println("# Pipeline with filter");
 evens_doubled = [1, 2, 3, 4, 5, 6]
     |> filter(x => x % 2 == 0)
     |> map(x => x * 2);
-assert.len_eq("filtered length", evens_doubled, 3);
-assert.eq("first doubled even", evens_doubled[0], 4);
-assert.eq("second doubled even", evens_doubled[1], 8);
-assert.eq("third doubled even", evens_doubled[2], 12);
+ctx = test.is(ctx, "filtered length", len(evens_doubled), 3);
+ctx = test.is(ctx, "first doubled even", evens_doubled[0], 4);
+ctx = test.is(ctx, "second doubled even", evens_doubled[1], 8);
+ctx = test.is(ctx, "third doubled even", evens_doubled[2], 12);
 
 // === Complex Pipeline ===
-assert.section("Complex pipeline");
+io.println("# Complex pipeline");
 result4 = range(1, 101)
     |> filter(x => x % 3 == 0)
     |> filter(x => x % 5 == 0)
     |> map(x => x / 15)
     |> reduce((acc, x) => acc + x, 0);
-assert.eq("multiples of 15", result4, 21);
+ctx = test.is(ctx, "multiples of 15", result4, 21);
 
 // === Pipeline with String ===
-assert.section("Pipeline with string operations");
+io.println("# Pipeline with string operations");
 use core.string;
 text = "  HELLO WORLD  ";
 processed = text
     |> string.trim
     |> string.to_lower
     |> string.replace("world", "calcium");
-assert.eq("string pipeline", processed, "hello calcium");
+ctx = test.is(ctx, "string pipeline", processed, "hello calcium");
 
-io.println("\n==============");
-io.println("Pipeline tests complete!");
+test.done(ctx);

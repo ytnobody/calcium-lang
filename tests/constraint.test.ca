@@ -1,57 +1,59 @@
 // Constraint Test
 use core.io!;
-use core.assert!;
+use test;
 use core.string;
 
-io.println("Constraint Tests");
-io.println("================");
+io.println("# Constraint Tests");
+
+ctx = test.new();
+ctx = test.plan(ctx, 31);
 
 // === Basic Constraint ===
-assert.section("Basic constraint");
+io.println("# Basic constraint");
 constraint Positive(x) = x > 0;
-assert.ok("5 is positive", 5 |> Positive?);
-assert.succeeds("5 passes Positive", 5 |> Positive?);
-assert.throws("-3 fails Positive", -3 |> Positive?);
-assert.throws("0 fails Positive", 0 |> Positive?);
+ctx = test.ok(ctx, "5 is positive", Positive(5));
+ctx = test.ok(ctx, "5 passes Positive", Positive(5));
+ctx = test.is(ctx, "-3 fails Positive", Positive(-3), false);
+ctx = test.is(ctx, "0 fails Positive", Positive(0), false);
 
 // === String Constraint ===
-assert.section("String constraint");
+io.println("# String constraint");
 constraint NonEmpty(s) = len(s) > 0;
-assert.ok("hello is non-empty", "hello" |> NonEmpty?);
-assert.throws("empty fails NonEmpty", "" |> NonEmpty?);
+ctx = test.ok(ctx, "hello is non-empty", NonEmpty("hello"));
+ctx = test.is(ctx, "empty fails NonEmpty", NonEmpty(""), false);
 
 // === Compound Constraint ===
-assert.section("Compound constraint");
+io.println("# Compound constraint");
 constraint InRange(x) = x >= 0 && x <= 100;
-assert.ok("50 in range", 50 |> InRange?);
-assert.ok("0 in range", 0 |> InRange?);
-assert.ok("100 in range", 100 |> InRange?);
-assert.throws("-1 out of range", -1 |> InRange?);
-assert.throws("101 out of range", 101 |> InRange?);
+ctx = test.ok(ctx, "50 in range", InRange(50));
+ctx = test.ok(ctx, "0 in range", InRange(0));
+ctx = test.ok(ctx, "100 in range", InRange(100));
+ctx = test.is(ctx, "-1 out of range", InRange(-1), false);
+ctx = test.is(ctx, "101 out of range", InRange(101), false);
 
 // === Constraint with Contains ===
-assert.section("Constraint with string.contains");
+io.println("# Constraint with string.contains");
 constraint Digit(c) = string.contains("0123456789", c);
-assert.ok("5 is digit", "5" |> Digit?);
-assert.throws("a is not digit", "a" |> Digit?);
+ctx = test.ok(ctx, "5 is digit", Digit("5"));
+ctx = test.is(ctx, "a is not digit", Digit("a"), false);
 
 constraint Letter(c) = string.contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", c);
-assert.ok("a is letter", "a" |> Letter?);
-assert.ok("Z is letter", "Z" |> Letter?);
-assert.throws("5 is not letter", "5" |> Letter?);
+ctx = test.ok(ctx, "a is letter", Letter("a"));
+ctx = test.ok(ctx, "Z is letter", Letter("Z"));
+ctx = test.is(ctx, "5 is not letter", Letter("5"), false);
 
 // === Constraint in Match ===
 // Note: Using Constraint(value) returns boolean, useful for match branching
-assert.section("Constraint in match");
+io.println("# Constraint in match");
 func classify_char(c) = match Digit(c)
     true => "digit"
     false => match Letter(c)
         true => "letter"
         false => "other";
 
-assert.eq("classify 5", classify_char("5"), "digit");
-assert.eq("classify a", classify_char("a"), "letter");
-assert.eq("classify @", classify_char("@"), "other");
+ctx = test.is(ctx, "classify 5", classify_char("5"), "digit");
+ctx = test.is(ctx, "classify a", classify_char("a"), "letter");
+ctx = test.is(ctx, "classify @", classify_char("@"), "other");
 
 // Alternative: Using !? for result handling
 func is_digit(c) = c |> Digit? !? { success(_) => true  failure(_) => false };
@@ -61,35 +63,34 @@ func classify_with_result(c) = match is_digit(c)
     false => match is_letter(c)
         true => "letter"
         false => "other";
-assert.eq("result classify 5", classify_with_result("5"), "digit");
-assert.eq("result classify a", classify_with_result("a"), "letter");
+ctx = test.is(ctx, "result classify 5", classify_with_result("5"), "digit");
+ctx = test.is(ctx, "result classify a", classify_with_result("a"), "letter");
 
 // === Multiple Constraints ===
-assert.section("Multiple constraints");
+io.println("# Multiple constraints");
 constraint Even(n) = n % 2 == 0;
 constraint Odd(n) = n % 2 == 1;
 
-assert.ok("4 is even", 4 |> Even?);
-assert.ok("7 is odd", 7 |> Odd?);
-assert.throws("7 is not even", 7 |> Even?);
+ctx = test.ok(ctx, "4 is even", Even(4));
+ctx = test.ok(ctx, "7 is odd", Odd(7));
+ctx = test.is(ctx, "7 is not even", Even(7), false);
 
 func describe_parity(n) = match Even(n)
     true => "even"
     false => "odd";
 
-assert.eq("parity 4", describe_parity(4), "even");
-assert.eq("parity 7", describe_parity(7), "odd");
+ctx = test.is(ctx, "parity 4", describe_parity(4), "even");
+ctx = test.is(ctx, "parity 7", describe_parity(7), "odd");
 
 // === Constraint Composition ===
-assert.section("Constraint composition");
+io.println("# Constraint composition");
 constraint PositiveEven(x) = Positive(x) && Even(x);
-assert.ok("4 is positive and even", 4 |> PositiveEven?);
-assert.throws("3 is not positive-even", 3 |> PositiveEven?);
-assert.throws("-4 is not positive-even", -4 |> PositiveEven?);
+ctx = test.ok(ctx, "4 is positive and even", PositiveEven(4));
+ctx = test.is(ctx, "3 is not positive-even", PositiveEven(3), false);
+ctx = test.is(ctx, "-4 is not positive-even", PositiveEven(-4), false);
 
-// Composing with && on Result types
-assert.ok("4 passes both", (4 |> Positive?) && (4 |> Even?));
-assert.throws("3 fails composition", (3 |> Positive?) && (3 |> Even?));
+// Composing with && on boolean constraint results
+ctx = test.ok(ctx, "4 passes both", Positive(4) && Even(4));
+ctx = test.is(ctx, "3 fails composition", Positive(3) && Even(3), false);
 
-io.println("\n================");
-io.println("Constraint tests complete!");
+test.done(ctx);

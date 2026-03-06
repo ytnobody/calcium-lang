@@ -1,65 +1,72 @@
 // Type System Test
 use core.io!;
-use core.assert!;
+use test;
 use core.types;
 
-io.println("Type System Tests");
-io.println("=================");
+io.println("# Type System Tests");
+
+ctx = test.new();
+ctx = test.plan(ctx, 26);
 
 // === Type Detection ===
-assert.section("type_of");
-assert.eq("int type", types.type_of(42), "int");
-assert.eq("float type", types.type_of(3.14), "float");
-assert.eq("string type", types.type_of("hello"), "string");
-assert.eq("bool true type", types.type_of(true), "bool");
-assert.eq("bool false type", types.type_of(false), "bool");
-assert.eq("array type", types.type_of([1, 2, 3]), "array");
-assert.eq("hash type", types.type_of({a: 1}), "hash");
-assert.eq("null type", types.type_of(types.null), "null");
+io.println("# type_of");
+ctx = test.is(ctx, "int type", types.type_of(42), "int");
+ctx = test.is(ctx, "float type", types.type_of(3.14), "float");
+ctx = test.is(ctx, "string type", types.type_of("hello"), "string");
+ctx = test.is(ctx, "bool true type", types.type_of(true), "bool");
+ctx = test.is(ctx, "bool false type", types.type_of(false), "bool");
+ctx = test.is(ctx, "array type", types.type_of([1, 2, 3]), "array");
+ctx = test.is(ctx, "hash type", types.type_of({a: 1}), "hash");
+ctx = test.is(ctx, "null type", types.type_of(types.null), "null");
 
 // === Type Predicates ===
-assert.section("Type predicates");
-assert.is_true("is_int positive", types.is_int(42));
-assert.is_false("is_int negative", types.is_int(3.14));
-assert.is_true("is_float", types.is_float(3.14));
-assert.is_true("is_string", types.is_string("hello"));
-assert.is_true("is_bool", types.is_bool(true));
-assert.is_true("is_array", types.is_array([1, 2]));
-assert.is_true("is_hash", types.is_hash({a: 1}));
-assert.is_true("is_null", types.is_null(types.null));
-assert.is_true("is_number int", types.is_number(42));
-assert.is_true("is_number float", types.is_number(3.14));
-assert.is_false("is_number string", types.is_number("42"));
+io.println("# Type predicates");
+ctx = test.ok(ctx, "is_int positive", types.is_int(42));
+ctx = test.is(ctx, "is_int negative", types.is_int(3.14), false);
+ctx = test.ok(ctx, "is_float", types.is_float(3.14));
+ctx = test.ok(ctx, "is_string", types.is_string("hello"));
+ctx = test.ok(ctx, "is_bool", types.is_bool(true));
+ctx = test.ok(ctx, "is_array", types.is_array([1, 2]));
+ctx = test.ok(ctx, "is_hash", types.is_hash({a: 1}));
+ctx = test.ok(ctx, "is_null", types.is_null(types.null));
+ctx = test.ok(ctx, "is_number int", types.is_number(42));
+ctx = test.ok(ctx, "is_number float", types.is_number(3.14));
+ctx = test.is(ctx, "is_number string", types.is_number("42"), false);
 
 // === Type Conversion ===
-assert.section("to_int");
-types.to_int("42") !? {
-    success(v) => assert.eq("from string", v, 42)
-    failure(e) => assert.fail("to_int from string failed")
+io.println("# to_int");
+ctx = types.to_int("42") !? {
+    success(v) => test.is(ctx, "from string", v, 42)
+    failure(e) => test.fail(ctx, "to_int from string failed")
 };
-types.to_int(3.7) !? {
-    success(v) => assert.eq("from float", v, 3)
-    failure(e) => assert.fail("to_int from float failed")
+ctx = types.to_int(3.7) !? {
+    success(v) => test.is(ctx, "from float", v, 3)
+    failure(e) => test.fail(ctx, "to_int from float failed")
 };
-types.to_int(true) !? {
-    success(v) => assert.eq("from bool", v, 1)
-    failure(e) => assert.fail("to_int from bool failed")
+ctx = types.to_int(true) !? {
+    success(v) => test.is(ctx, "from bool", v, 1)
+    failure(e) => test.fail(ctx, "to_int from bool failed")
 };
 
-assert.section("to_float");
-types.to_float("3.14") !? {
-    success(v) => assert.eq("from string", v, 3.14)
-    failure(e) => assert.fail("to_float from string failed")
+io.println("# to_float");
+ctx = types.to_float("3.14") !? {
+    success(v) => test.is(ctx, "from string", v, 3.14)
+    failure(e) => test.fail(ctx, "to_float from string failed")
 };
-types.to_float(42) !? {
-    success(v) => assert.eq("from int", v, 42.0)
-    failure(e) => assert.fail("to_float from int failed")
+ctx = types.to_float(42) !? {
+    success(v) => test.is(ctx, "from int", v, 42.0)
+    failure(e) => test.fail(ctx, "to_float from int failed")
 };
 
 // === Conversion Errors ===
-assert.section("Conversion errors");
-assert.throws("to_int invalid", types.to_int("not a number"));
-assert.throws("to_float invalid", types.to_float("not a number"));
+io.println("# Conversion errors");
+ctx = types.to_int("not a number") !? {
+    success(v) => test.fail(ctx, "to_int invalid")
+    failure(e) => test.pass(ctx, "to_int invalid")
+};
+ctx = types.to_float("not a number") !? {
+    success(v) => test.fail(ctx, "to_float invalid")
+    failure(e) => test.pass(ctx, "to_float invalid")
+};
 
-io.println("\n=================");
-io.println("Type tests complete!");
+test.done(ctx);

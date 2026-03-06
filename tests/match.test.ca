@@ -1,63 +1,65 @@
 // Pattern Matching Test
 use core.io!;
-use core.assert!;
+use test;
 
-io.println("Pattern Matching Tests");
-io.println("=====================");
+io.println("# Pattern Matching Tests");
+
+ctx = test.new();
+ctx = test.plan(ctx, 18);
 
 // === Literal Matching ===
-assert.section("Literal matching");
+io.println("# Literal matching");
 func describe_num(n) = match n
     0 => "zero"
     1 => "one"
     2 => "two"
     _ => "many";
 
-assert.eq("match 0", describe_num(0), "zero");
-assert.eq("match 1", describe_num(1), "one");
-assert.eq("match 2", describe_num(2), "two");
-assert.eq("match wildcard", describe_num(100), "many");
+ctx = test.is(ctx, "match 0", describe_num(0), "zero");
+ctx = test.is(ctx, "match 1", describe_num(1), "one");
+ctx = test.is(ctx, "match 2", describe_num(2), "two");
+ctx = test.is(ctx, "match wildcard", describe_num(100), "many");
 
 // === Boolean Matching ===
-assert.section("Boolean matching");
+io.println("# Boolean matching");
 func bool_to_str(b) = match b
     true => "yes"
     false => "no";
 
-assert.eq("match true", bool_to_str(true), "yes");
-assert.eq("match false", bool_to_str(false), "no");
+ctx = test.is(ctx, "match true", bool_to_str(true), "yes");
+ctx = test.is(ctx, "match false", bool_to_str(false), "no");
 
 // === String Matching ===
-assert.section("String matching");
+io.println("# String matching");
 func greet(name) = match name
     "Alice" => "Hello, Alice!"
     "Bob" => "Hi, Bob!"
     _ => concat("Welcome, ", name);
 
-assert.eq("match Alice", greet("Alice"), "Hello, Alice!");
-assert.eq("match Bob", greet("Bob"), "Hi, Bob!");
-assert.eq("match other", greet("Charlie"), "Welcome, Charlie");
+ctx = test.is(ctx, "match Alice", greet("Alice"), "Hello, Alice!");
+ctx = test.is(ctx, "match Bob", greet("Bob"), "Hi, Bob!");
+ctx = test.is(ctx, "match other", greet("Charlie"), "Welcome, Charlie");
 
 // === Wildcard ===
-assert.section("Wildcard");
+io.println("# Wildcard");
 func always_default(x) = match x
     _ => "default";
 
-assert.eq("wildcard int", always_default(1), "default");
-assert.eq("wildcard string", always_default("hello"), "default");
-assert.eq("wildcard bool", always_default(true), "default");
+ctx = test.is(ctx, "wildcard int", always_default(1), "default");
+ctx = test.is(ctx, "wildcard string", always_default("hello"), "default");
+ctx = test.is(ctx, "wildcard bool", always_default(true), "default");
 
 // === Recursive Pattern Matching ===
-assert.section("Recursive with match");
+io.println("# Recursive with match");
 func sum_list(lst) = match len(lst)
     0 => 0
     _ => head(lst) + sum_list(tail(lst));
 
-assert.eq("sum empty list", sum_list([]), 0);
-assert.eq("sum [1..5]", sum_list([1, 2, 3, 4, 5]), 15);
+ctx = test.is(ctx, "sum empty list", sum_list([]), 0);
+ctx = test.is(ctx, "sum [1..5]", sum_list([1, 2, 3, 4, 5]), 15);
 
 // === Nested Match ===
-assert.section("Nested match");
+io.println("# Nested match");
 func classify_positive(x) = match x > 100
     true => "large positive"
     false => "small positive";
@@ -70,10 +72,9 @@ func classify(x) = match x > 0
     true => classify_positive(x)
     false => classify_non_positive(x);
 
-assert.eq("classify 500", classify(500), "large positive");
-assert.eq("classify 50", classify(50), "small positive");
-assert.eq("classify 0", classify(0), "zero");
-assert.eq("classify -10", classify(-10), "negative");
+ctx = test.is(ctx, "classify 500", classify(500), "large positive");
+ctx = test.is(ctx, "classify 50", classify(50), "small positive");
+ctx = test.is(ctx, "classify 0", classify(0), "zero");
+ctx = test.is(ctx, "classify -10", classify(-10), "negative");
 
-io.println("\n=====================");
-io.println("Match tests complete!");
+test.done(ctx);

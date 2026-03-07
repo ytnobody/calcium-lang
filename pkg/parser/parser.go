@@ -188,35 +188,88 @@ func (p *Parser) formatErrorWithContext(line, column int, message string) string
 		return fmt.Sprintf("line %d, column %d: %s", line, column, message)
 	}
 
-	// Build caret indicator
+	// Build caret indicator with underline
 	caretLine := strings.Repeat(" ", column-1) + "^"
 
 	return fmt.Sprintf("line %d, column %d:\n  %s\n  %s\n%s", line, column, sourceLine, caretLine, message)
 }
 
+// formatErrorWithHint creates a detailed error message with source context and a help hint
+func (p *Parser) formatErrorWithHint(line, column int, message, hint string) string {
+	base := p.formatErrorWithContext(line, column, message)
+	if hint != "" {
+		return base + "\nhint: " + hint
+	}
+	return base
+}
+
 func (p *Parser) peekError(t token.TokenType) {
-	msg := p.formatErrorWithContext(
+	hint := p.getExpectationHint(t, p.peekToken)
+	msg := p.formatErrorWithHint(
 		p.peekToken.Line,
 		p.peekToken.Column,
 		fmt.Sprintf("expected '%s' but found '%s'", t, p.peekToken.Type),
+		hint,
 	)
 	p.errors = append(p.errors, msg)
 }
 
+// getExpectationHint returns a helpful hint based on what was expected vs what was found
+func (p *Parser) getExpectationHint(expected token.TokenType, found token.Token) string {
+	switch expected {
+	case token.RPAREN:
+		return "you may have an unclosed '(' — check for matching parentheses"
+	case token.RBRACKET:
+		return "you may have an unclosed '[' — check for matching brackets"
+	case token.RBRACE:
+		return "you may have an unclosed '{' — check for matching braces"
+	case token.ASSIGN:
+		if found.Type == token.EQ {
+			return "use '=' for assignment, not '==' (which is comparison)"
+		}
+		return "variable binding requires '=' after the name"
+	case token.LBRACE:
+		if found.Type == token.IDENT {
+			return "a block '{' ... '}' is expected here"
+		}
+	case token.ARROW:
+		return "lambda syntax requires '=>' (e.g., (x) => x + 1)"
+	}
+	return ""
+}
+
 func (p *Parser) noPrefixParseFnError(t token.TokenType) {
 	errMsg := fmt.Sprintf("unexpected token '%s'", t)
+	hint := ""
 
-	// If it's an identifier, check for keyword typo
-	if t == token.IDENT {
+	switch t {
+	case token.IDENT:
+		// Check for keyword typo
 		if suggestion := token.SuggestKeyword(p.curToken.Literal, 2); suggestion != "" {
 			errMsg += fmt.Sprintf(" (did you mean '%s'?)", suggestion)
 		}
+	case token.ASSIGN:
+		hint = "assignment '=' cannot appear here — did you forget a variable name?"
+	case token.RBRACE:
+		hint = "unexpected '}' — you may have an extra closing brace"
+	case token.RBRACKET:
+		hint = "unexpected ']' — you may have an extra closing bracket"
+	case token.RPAREN:
+		hint = "unexpected ')' — you may have an extra closing parenthesis"
+	case token.COMMA:
+		hint = "unexpected ',' — check for a missing expression before the comma"
+	case token.SEMICOLON:
+		hint = "unexpected ';' — there may be an empty statement"
+	case token.EOF:
+		errMsg = "unexpected end of input"
+		hint = "the expression or statement may be incomplete"
 	}
 
-	msg := p.formatErrorWithContext(
+	msg := p.formatErrorWithHint(
 		p.curToken.Line,
 		p.curToken.Column,
 		errMsg,
+		hint,
 	)
 	p.errors = append(p.errors, msg)
 }
@@ -645,7 +698,11 @@ func (p *Parser) parseTypeDeclaration() *ast.TypeDeclaration {
 		variant := &ast.VariantDef{}
 
 		if !p.curTokenIs(token.IDENT) {
-			p.errors = append(p.errors, fmt.Sprintf("expected variant name, got %s", p.curToken.Type))
+			p.errors = append(p.errors, p.formatErrorWithHint(
+				p.curToken.Line, p.curToken.Column,
+				fmt.Sprintf("expected variant name, got '%s'", p.curToken.Type),
+				"type variants must start with a name (e.g., type Color = Red | Green | Blue)",
+			))
 			return nil
 		}
 		variant.Name = p.curToken.Literal

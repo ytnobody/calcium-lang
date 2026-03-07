@@ -479,7 +479,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		case value.TYPE_FLOAT:
 			vm.push(value.Float(-operand.AsFloat()))
 		default:
-			return fmt.Errorf("unsupported type for negation: %s", operand.Type)
+			return fmt.Errorf("type error: cannot negate value of type %s\nhint: negation '-' is only supported for int and float types", operand.Type)
 		}
 
 	case bytecode.OpEqual:
@@ -737,7 +737,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		switch left.Type {
 		case value.TYPE_ARRAY:
 			if index.Type != value.TYPE_INT {
-				return fmt.Errorf("array index must be integer, got %s", index.Type)
+				return fmt.Errorf("type error: array index must be an integer, got %s\nhint: use an integer value to access array elements (e.g., arr[0])", index.Type)
 			}
 			arr := left.AsArray()
 			idx := int(index.AsInt())
@@ -748,7 +748,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			}
 		case value.TYPE_TUPLE:
 			if index.Type != value.TYPE_INT {
-				return fmt.Errorf("tuple index must be integer, got %s", index.Type)
+				return fmt.Errorf("type error: tuple index must be an integer, got %s\nhint: use an integer value to access tuple elements (e.g., tup[0])", index.Type)
 			}
 			tup := left.AsTuple()
 			idx := int(index.AsInt())
@@ -759,7 +759,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			}
 		case value.TYPE_ADT:
 			if index.Type != value.TYPE_INT {
-				return fmt.Errorf("ADT index must be integer, got %s", index.Type)
+				return fmt.Errorf("type error: ADT field index must be an integer, got %s", index.Type)
 			}
 			adt := left.AsADT()
 			idx := int(index.AsInt())
@@ -777,13 +777,13 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 				vm.push(val)
 			}
 		default:
-			return fmt.Errorf("index operator not supported for %s", left.Type)
+			return fmt.Errorf("type error: index operator '[]' is not supported for type %s\nhint: indexing is only supported for arrays, tuples, hashes, and ADT values", left.Type)
 		}
 
 	case bytecode.OpSpread:
 		val := vm.pop()
 		if val.Type != value.TYPE_ARRAY {
-			return fmt.Errorf("spread operator requires array, got %s", val.Type)
+			return fmt.Errorf("type error: spread operator '...' requires an array, got %s\nhint: only arrays can be spread into function arguments or other arrays", val.Type)
 		}
 		arr := val.AsArray()
 		for _, elem := range arr {
@@ -828,7 +828,8 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			if val, ok := module.Exports[propName]; ok {
 				vm.push(val)
 			} else {
-				return fmt.Errorf("module %s has no export %s", module.Name, propName)
+				return fmt.Errorf("module error: module '%s' has no export '%s'%s\nhint: check the module's exported names with 'use'",
+					module.Name, propName, suggestSimilarName(propName, mapKeys(module.Exports)))
 			}
 		case value.TYPE_HASH:
 			hash := obj.AsHash()
@@ -860,7 +861,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 				}
 				vm.push(value.String(statusStr))
 			default:
-				return fmt.Errorf("task has no property %s", propName)
+				return fmt.Errorf("property error: task has no property '%s'\nhint: available task properties are: done, result, status", propName)
 			}
 		case value.TYPE_HANDLER:
 			handler := obj.AsHandler()
@@ -934,10 +935,10 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 				}
 				vm.push(value.String(statusStr))
 			default:
-				return fmt.Errorf("handler has no property %s", propName)
+				return fmt.Errorf("property error: handler has no property '%s'\nhint: available handler properties are: ready, pause, resume, reset, status", propName)
 			}
 		default:
-			return fmt.Errorf("cannot access member of %s", obj.Type)
+			return fmt.Errorf("type error: cannot access property '%s' on value of type %s\nhint: member access with '.' is supported for modules, hashes, tasks, and handlers", propName, obj.Type)
 		}
 
 	case bytecode.OpWrapSuccess:
@@ -1008,7 +1009,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 					module = extMod
 					vm.modules[modulePath] = module // Cache it
 				} else {
-					return fmt.Errorf("module not found: %s", modulePath)
+					return fmt.Errorf("module error: module '%s' not found\nhint: check the module name and ensure it is installed or available in the load path", modulePath)
 				}
 			}
 		}
@@ -1129,7 +1130,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 
 func (vm *VM) push(v value.Value) error {
 	if vm.sp >= StackSize {
-		return fmt.Errorf("stack overflow")
+		return fmt.Errorf("runtime error: stack overflow\nhint: this is often caused by infinite recursion — check your recursive function for a proper base case")
 	}
 	vm.stack[vm.sp] = v
 	vm.sp++
@@ -1169,7 +1170,7 @@ func (vm *VM) executeBinaryOp(op bytecode.OpCode) error {
 		return vm.executeFloatBinaryOp(op, leftVal, rightVal)
 	}
 
-	return fmt.Errorf("unsupported types for binary operation: %s and %s", leftType, rightType)
+	return fmt.Errorf("type error: cannot apply binary operator to %s and %s\nhint: both operands must be numeric (int or float), or use '+' with at least one string for concatenation", leftType, rightType)
 }
 
 func (vm *VM) executeIntegerBinaryOp(op bytecode.OpCode, left, right int64) error {
@@ -1202,7 +1203,7 @@ func (vm *VM) executeFloatBinaryOp(op bytecode.OpCode, left, right float64) erro
 		result = left * right
 	case bytecode.OpDiv:
 		if right == 0 {
-			return fmt.Errorf("division by zero")
+			return fmt.Errorf("runtime error: division by zero\nhint: ensure the divisor is not zero before dividing")
 		}
 		result = left / right
 	case bytecode.OpMod:
@@ -1223,7 +1224,7 @@ func (vm *VM) executeComparison(op bytecode.OpCode) error {
 	rightVal, rightOk := right.ToNumber()
 
 	if !leftOk || !rightOk {
-		return fmt.Errorf("comparison requires numeric types")
+		return fmt.Errorf("type error: comparison operators (<, >, <=, >=) require numeric types, got %s and %s\nhint: use '==' or '!=' for equality comparison of non-numeric types", left.Type, right.Type)
 	}
 
 	var result bool
@@ -1260,13 +1261,13 @@ func (vm *VM) executeCall(numArgs int) error {
 	case value.TYPE_PARTIAL_BUILTIN:
 		return vm.callPartialBuiltin(callee.AsPartialBuiltin(), numArgs)
 	default:
-		return fmt.Errorf("calling non-function: %s", callee.Type)
+		return fmt.Errorf("type error: cannot call value of type %s as a function\nhint: only functions, closures, and builtins can be called with '()'", callee.Type)
 	}
 }
 
 func (vm *VM) callClosure(cl *value.Closure, numArgs int) error {
 	if numArgs != len(cl.Fn.Parameters) {
-		return fmt.Errorf("wrong number of arguments: want=%d, got=%d",
+		return fmt.Errorf("argument error: function expects %d argument(s) but received %d\nhint: check the function definition for the correct number of parameters",
 			len(cl.Fn.Parameters), numArgs)
 	}
 
@@ -1296,14 +1297,14 @@ func (vm *VM) executeTailCall(numArgs int) error {
 	case value.TYPE_PARTIAL_BUILTIN:
 		return vm.callPartialBuiltin(callee.AsPartialBuiltin(), numArgs)
 	default:
-		return fmt.Errorf("calling non-function: %s", callee.Type)
+		return fmt.Errorf("type error: cannot call value of type %s as a function\nhint: only functions, closures, and builtins can be called with '()'", callee.Type)
 	}
 }
 
 // tailCallClosure reuses the current frame for tail calls to closures.
 func (vm *VM) tailCallClosure(cl *value.Closure, numArgs int) error {
 	if numArgs != len(cl.Fn.Parameters) {
-		return fmt.Errorf("wrong number of arguments: want=%d, got=%d",
+		return fmt.Errorf("argument error: function expects %d argument(s) but received %d\nhint: check the function definition for the correct number of parameters",
 			len(cl.Fn.Parameters), numArgs)
 	}
 
@@ -3576,4 +3577,73 @@ func builtinCapture(args ...value.Value) value.Value {
 		result[i] = value.String(m)
 	}
 	return value.Success(value.Array(result))
+}
+
+// suggestSimilarName returns a "did you mean" suggestion if a similar name is found
+func suggestSimilarName(name string, candidates []string) string {
+	bestMatch := ""
+	bestDist := 3 // max edit distance
+
+	for _, c := range candidates {
+		dist := editDistance(name, c)
+		if dist < bestDist {
+			bestDist = dist
+			bestMatch = c
+		}
+	}
+
+	if bestMatch != "" {
+		return fmt.Sprintf(" (did you mean '%s'?)", bestMatch)
+	}
+	return ""
+}
+
+// editDistance computes the Levenshtein distance between two strings
+func editDistance(a, b string) int {
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+
+	matrix := make([][]int, len(a)+1)
+	for i := range matrix {
+		matrix[i] = make([]int, len(b)+1)
+		matrix[i][0] = i
+	}
+	for j := 0; j <= len(b); j++ {
+		matrix[0][j] = j
+	}
+
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			del := matrix[i-1][j] + 1
+			ins := matrix[i][j-1] + 1
+			sub := matrix[i-1][j-1] + cost
+			min := del
+			if ins < min {
+				min = ins
+			}
+			if sub < min {
+				min = sub
+			}
+			matrix[i][j] = min
+		}
+	}
+
+	return matrix[len(a)][len(b)]
+}
+
+// mapKeys returns the keys of a map[string]value.Value
+func mapKeys(m map[string]value.Value) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

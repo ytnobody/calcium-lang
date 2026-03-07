@@ -59,6 +59,18 @@ func formatParseErrors(filename string, errors []string, useColor bool) string {
 			sb.WriteString(fmt.Sprintf("%s: error\n%s", filename, e))
 		}
 	}
+
+	// Add error count summary
+	if len(errors) > 1 {
+		sb.WriteString("\n\n")
+		if useColor {
+			sb.WriteString(fmt.Sprintf("%s%serror: aborting due to %d previous errors%s",
+				colorBold, colorRed, len(errors), colorReset))
+		} else {
+			sb.WriteString(fmt.Sprintf("error: aborting due to %d previous errors", len(errors)))
+		}
+	}
+
 	return sb.String()
 }
 

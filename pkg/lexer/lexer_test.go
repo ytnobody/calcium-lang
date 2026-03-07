@@ -383,6 +383,28 @@ func TestRegexLiteral(t *testing.T) {
 	}
 }
 
+func TestPropPipeToken(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []token.TokenType
+	}{
+		{`a |>? validate`, []token.TokenType{token.IDENT, token.PROP_PIPE, token.IDENT}},
+		{`a |>? validate |>? save`, []token.TokenType{token.IDENT, token.PROP_PIPE, token.IDENT, token.PROP_PIPE, token.IDENT}},
+		// Regular pipe should still work
+		{`a |> f`, []token.TokenType{token.IDENT, token.PIPE, token.IDENT}},
+	}
+
+	for _, tt := range tests {
+		l := New(tt.input)
+		for i, expectedType := range tt.expected {
+			tok := l.NextToken()
+			if tok.Type != expectedType {
+				t.Errorf("input %q, token %d: expected %q, got %q", tt.input, i, expectedType, tok.Type)
+			}
+		}
+	}
+}
+
 func TestRegexVsDivision(t *testing.T) {
 	// Test context detection: regex vs division
 	tests := []struct {

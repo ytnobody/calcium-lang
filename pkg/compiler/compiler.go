@@ -755,9 +755,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 					NumLocals:  numLocals,
 					IsEffect:   false,
 				}
-				for i, field := range variant.Fields {
-					fn.Parameters[i] = field
-				}
+				copy(fn.Parameters, variant.Fields)
 
 				fnIndex := c.addConstant(value.Func(fn))
 				c.emit(bytecode.OpClosure, fnIndex, 0)

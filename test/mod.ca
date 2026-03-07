@@ -65,6 +65,115 @@ func pass(ctx, label) = _record_pass(ctx, label);
 func fail(ctx, label) = _record_fail(ctx, label, "explicitly failed");
 
 // ============================================
+// Extended Assertions
+// ============================================
+
+// like asserts that a string contains a substring
+func like(ctx, label, actual, pattern) =
+    match __str_contains(to_string(actual), pattern)
+        true => _record_pass(ctx, label)
+        false => _record_fail(ctx, label,
+            concat("expected string containing '", concat(pattern, concat("' but got '", concat(to_string(actual), "'")))));
+
+// unlike asserts that a string does NOT contain a substring
+func unlike(ctx, label, actual, pattern) =
+    match __str_contains(to_string(actual), pattern)
+        false => _record_pass(ctx, label)
+        true => _record_fail(ctx, label,
+            concat("expected string NOT containing '", concat(pattern, concat("' but got '", concat(to_string(actual), "'")))));
+
+// cmp_ok compares actual and expected with a given operator string
+func cmp_ok(ctx, label, actual, op, expected) =
+    match op
+        "==" => _cmp_check(ctx, label, actual == expected, actual, op, expected)
+        "!=" => _cmp_check(ctx, label, actual != expected, actual, op, expected)
+        ">" => _cmp_check(ctx, label, actual > expected, actual, op, expected)
+        ">=" => _cmp_check(ctx, label, actual >= expected, actual, op, expected)
+        "<" => _cmp_check(ctx, label, actual < expected, actual, op, expected)
+        "<=" => _cmp_check(ctx, label, actual <= expected, actual, op, expected)
+        _ => _record_fail(ctx, label, concat("unknown operator: ", op));
+
+func _cmp_check(ctx, label, result, actual, op, expected) =
+    match result
+        true => _record_pass(ctx, label)
+        false => _record_fail(ctx, label,
+            concat(to_string(actual), concat(" ", concat(op, concat(" ", concat(to_string(expected), " is not true"))))));
+
+// throws asserts that a value is a failure (error result)
+func throws(ctx, label, result) =
+    match __type_of(result)
+        "failure" => _record_pass(ctx, label)
+        _ => _record_fail(ctx, label,
+            concat("expected failure, got ", concat(__type_of(result), concat(": ", to_string(result)))));
+
+// throws_like asserts that a value is a failure containing a specific message
+func throws_like(ctx, label, result, pattern) =
+    match __type_of(result)
+        "failure" => _check_failure_message(ctx, label, result, pattern)
+        _ => _record_fail(ctx, label,
+            concat("expected failure, got ", concat(__type_of(result), concat(": ", to_string(result)))));
+
+func _check_failure_message(ctx, label, result, pattern) =
+    match __str_contains(to_string(result), pattern)
+        true => _record_pass(ctx, label)
+        false => _record_fail(ctx, label,
+            concat("failure message '", concat(to_string(result), concat("' does not contain '", concat(pattern, "'")))));
+
+// lives asserts that a value is NOT a failure
+func lives(ctx, label, result) =
+    match __type_of(result)
+        "failure" => _record_fail(ctx, label,
+            concat("expected success, got failure: ", to_string(result)))
+        _ => _record_pass(ctx, label);
+
+// near asserts that two numbers are approximately equal (within epsilon)
+func near(ctx, label, actual, expected, epsilon) =
+    _near_check(ctx, label, actual, expected, epsilon, _abs(actual - expected));
+
+func _near_check(ctx, label, actual, expected, epsilon, diff) =
+    match diff <= epsilon
+        true => _record_pass(ctx, label)
+        false => _record_fail(ctx, label,
+            concat(to_string(actual), concat(" is not near ", concat(to_string(expected),
+                concat(" (diff: ", concat(to_string(diff), concat(", epsilon: ", concat(to_string(epsilon), ")"))))))));
+
+func _abs(n) =
+    match n >= 0
+        true => n
+        false => 0 - n;
+
+// between asserts that value is in the range [low, high] inclusive
+func between(ctx, label, value, low, high) =
+    match value >= low
+        true => match value <= high
+            true => _record_pass(ctx, label)
+            false => _between_fail(ctx, label, value, low, high)
+        false => _between_fail(ctx, label, value, low, high);
+
+func _between_fail(ctx, label, value, low, high) =
+    _record_fail(ctx, label,
+        concat(to_string(value), concat(" is not between ", concat(to_string(low), concat(" and ", to_string(high))))));
+
+// is_type asserts that value has the expected type
+func is_type(ctx, label, value, expected_type) =
+    match __type_of(value) == expected_type
+        true => _record_pass(ctx, label)
+        false => _record_fail(ctx, label,
+            concat("expected type ", concat(expected_type, concat(", got ", __type_of(value)))));
+
+// skip records a skipped test with a reason
+func skip(ctx, label, reason) =
+    _tap_print(
+        _increment_total(_increment_passed(ctx)),
+        concat("ok ", concat(to_string(ctx["total"] + 1), concat(" - # SKIP ", concat(label, concat(": ", reason))))));
+
+// todo records a test that is expected to fail (TODO)
+func todo(ctx, label, reason) =
+    _tap_print(
+        _increment_total(ctx),
+        concat("not ok ", concat(to_string(ctx["total"] + 1), concat(" - # TODO ", concat(label, concat(": ", reason))))));
+
+// ============================================
 // Internal: Recording Results
 // ============================================
 

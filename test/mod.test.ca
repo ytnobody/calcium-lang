@@ -12,7 +12,8 @@ io.println("");
 // ============================================
 
 test.new()
-    |> test.plan(15)
+    |> test.plan(30)
+    // --- Basic Assertions ---
     // ok: truthy values
     |> test.ok("ok with true", true)
     |> test.ok("ok with number", 42)
@@ -28,9 +29,32 @@ test.new()
     |> test.isnt("isnt: different types", 1, "1")
     // pass: always succeeds
     |> test.pass("pass always succeeds")
-    // Context tracking (these check internal state at test 12-15)
-    |> test.is("total count is correct", 11, 11)
-    |> test.is("passed count is correct", 12, 12)
-    |> test.is("failed count is correct", 0, 0)
-    |> test.is("planned count is correct", 15, 15)
+
+    // --- Extended Assertions ---
+    // like / unlike: substring matching
+    |> test.like("like: contains substring", "hello world", "world")
+    |> test.unlike("unlike: does not contain", "hello world", "xyz")
+    // cmp_ok: comparison operators
+    |> test.cmp_ok("cmp_ok: greater than", 10, ">", 5)
+    |> test.cmp_ok("cmp_ok: less than", 3, "<", 7)
+    |> test.cmp_ok("cmp_ok: equal", 42, "==", 42)
+    |> test.cmp_ok("cmp_ok: not equal", 1, "!=", 2)
+    |> test.cmp_ok("cmp_ok: gte", 5, ">=", 5)
+    |> test.cmp_ok("cmp_ok: lte", 3, "<=", 5)
+    // lives: success check
+    |> test.lives("lives: number is not failure", 42)
+    |> test.lives("lives: string is not failure", "ok")
+    // near: approximate equality
+    |> test.near("near: close floats", 3.14159, 3.14, 0.01)
+    |> test.near("near: exact match", 1.0, 1.0, 0.001)
+    // between: range check
+    |> test.between("between: in range", 5, 1, 10)
+    |> test.between("between: at lower bound", 1, 1, 10)
+    |> test.between("between: at upper bound", 10, 1, 10)
+    // is_type: type checking
+    |> test.is_type("is_type: int", 42, "int")
+    |> test.is_type("is_type: string", "hello", "string")
+    |> test.is_type("is_type: bool", true, "bool")
+    // skip and todo
+    |> test.skip("skip: not implemented yet", "feature pending")
     |> test.done();

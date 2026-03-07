@@ -1110,8 +1110,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		// Now the result is on the stack. Check if it is a failure.
 		// Stack: [..., result]
-		c.emit(bytecode.OpDup)           // Stack: [..., result, result]
-		c.emit(bytecode.OpIsFailure)     // Stack: [..., result, bool]
+		c.emit(bytecode.OpDup)       // Stack: [..., result, result]
+		c.emit(bytecode.OpIsFailure) // Stack: [..., result, bool]
 		// If NOT failure (bool is false), jump past the early return
 		skipReturn := c.emit(bytecode.OpJumpIfFalse, 9999) // Stack: [..., result]
 		// It's a failure: return it immediately from the enclosing function

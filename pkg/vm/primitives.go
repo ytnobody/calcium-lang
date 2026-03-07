@@ -1390,6 +1390,10 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__toml_parse":     {Name: "__toml_parse", Fn: primitiveTomlParse},
 		"__toml_stringify": {Name: "__toml_stringify", Fn: primitiveTomlStringify},
 
+		// JSON
+		"__json_parse":     {Name: "__json_parse", Fn: primitiveJSONParse},
+		"__json_stringify": {Name: "__json_stringify", Fn: primitiveJSONStringify},
+
 		// HTTP
 		"__http_get":     {Name: "__http_get", Fn: primitiveHttpGet},
 		"__http_post":    {Name: "__http_post", Fn: primitiveHttpPost},

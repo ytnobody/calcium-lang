@@ -1010,36 +1010,37 @@ func (p *Parser) parseGroupedOrLambda() ast.Expression {
 		return firstExpr
 	}
 
-	// Check for comma (lambda with multiple params)
+	// Check for comma (lambda with multiple params OR tuple literal)
 	if p.peekTokenIs(token.COMMA) {
-		// It's a lambda: (x, y, ...) => expr
-		params := []*ast.Identifier{}
-		ident := p.exprToIdentifiers(firstExpr)
-		if ident == nil {
-			return nil
-		}
-		params = append(params, ident...)
+		// Collect all comma-separated expressions
+		elements := []ast.Expression{firstExpr}
 
 		for p.peekTokenIs(token.COMMA) {
 			p.nextToken() // consume ','
 			p.nextToken()
-			paramExpr := p.parseExpression(LOWEST)
-			ident := p.exprToIdentifiers(paramExpr)
-			if ident == nil {
-				return nil
-			}
-			params = append(params, ident...)
+			elements = append(elements, p.parseExpression(LOWEST))
 		}
 
 		if !p.expectPeek(token.RPAREN) {
 			return nil
 		}
 
-		if !p.expectPeek(token.ARROW) {
-			return nil
+		// If followed by =>, it's a lambda
+		if p.peekTokenIs(token.ARROW) {
+			p.nextToken() // consume '=>'
+			params := []*ast.Identifier{}
+			for _, elem := range elements {
+				ident := p.exprToIdentifiers(elem)
+				if ident == nil {
+					return nil
+				}
+				params = append(params, ident...)
+			}
+			return p.parseLambdaBody(tok, params)
 		}
 
-		return p.parseLambdaBody(tok, params)
+		// Otherwise it's a tuple literal
+		return &ast.TupleLiteral{Token: tok, Elements: elements}
 	}
 
 	// It's a grouped expression, but we need to continue parsing

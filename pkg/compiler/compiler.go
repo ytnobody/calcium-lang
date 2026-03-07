@@ -863,6 +863,15 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.emit(bytecode.OpArray, len(node.Elements))
 		}
 
+	case *ast.TupleLiteral:
+		for _, elem := range node.Elements {
+			err := c.Compile(elem)
+			if err != nil {
+				return err
+			}
+		}
+		c.emit(bytecode.OpTuple, len(node.Elements))
+
 	case *ast.HashLiteral:
 		// Compile each key-value pair
 		for _, pair := range node.Pairs {

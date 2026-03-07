@@ -25,6 +25,7 @@ const (
 	TYPE_SUCCESS
 	TYPE_FAILURE
 	TYPE_MODULE
+	TYPE_TUPLE        // Tuple (fixed-length, heterogeneous)
 	TYPE_REGEX        // Compiled regular expression
 	TYPE_TASK         // Return value of async.spawn
 	TYPE_HANDLER      // Return value of async.expects
@@ -61,6 +62,8 @@ func (t Type) String() string {
 		return "failure"
 	case TYPE_MODULE:
 		return "module"
+	case TYPE_TUPLE:
+		return "tuple"
 	case TYPE_REGEX:
 		return "regex"
 	case TYPE_TASK:
@@ -326,6 +329,11 @@ func EventSourceVal(es *EventSource) Value {
 	return Value{Type: TYPE_EVENT_SOURCE, Data: es}
 }
 
+// Tuple creates a tuple value
+func Tuple(elements []Value) Value {
+	return Value{Type: TYPE_TUPLE, Data: elements}
+}
+
 // RegexVal creates a regex value
 func RegexVal(r *Regex) Value {
 	return Value{Type: TYPE_REGEX, Data: r}
@@ -461,6 +469,11 @@ func (v Value) AsEventSource() *EventSource {
 	return v.Data.(*EventSource)
 }
 
+// AsTuple returns the tuple elements
+func (v Value) AsTuple() []Value {
+	return v.Data.([]Value)
+}
+
 // AsRegex returns the regex value
 func (v Value) AsRegex() *Regex {
 	return v.Data.(*Regex)
@@ -493,6 +506,8 @@ func (v Value) IsTruthy() bool {
 		return v.AsString() != ""
 	case TYPE_ARRAY:
 		return len(v.AsArray()) > 0
+	case TYPE_TUPLE:
+		return len(v.AsTuple()) > 0
 	case TYPE_SUCCESS:
 		return true
 	case TYPE_FAILURE:
@@ -547,6 +562,17 @@ func (v Value) Equals(other Value) bool {
 			}
 		}
 		return true
+	case TYPE_TUPLE:
+		t1, t2 := v.AsTuple(), other.AsTuple()
+		if len(t1) != len(t2) {
+			return false
+		}
+		for i := range t1 {
+			if !t1[i].Equals(t2[i]) {
+				return false
+			}
+		}
+		return true
 	case TYPE_HASH:
 		h1, h2 := v.AsHash(), other.AsHash()
 		if len(h1.Pairs) != len(h2.Pairs) {
@@ -591,6 +617,13 @@ func (v Value) String() string {
 			strs[i] = e.String()
 		}
 		return "[" + strings.Join(strs, ", ") + "]"
+	case TYPE_TUPLE:
+		elements := v.AsTuple()
+		strs := make([]string, len(elements))
+		for i, e := range elements {
+			strs[i] = e.String()
+		}
+		return "(" + strings.Join(strs, ", ") + ")"
 	case TYPE_HASH:
 		h := v.AsHash()
 		strs := make([]string, len(h.Pairs))

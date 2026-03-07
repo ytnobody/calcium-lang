@@ -61,6 +61,9 @@ const (
 	OpSpread      // Spread array to stack
 	OpCallSpread  // Call function with spread array as arguments
 
+	// Tuples
+	OpTuple // Create tuple from N elements
+
 	// Hash
 	OpHash // Create hash from N key-value pairs
 
@@ -162,7 +165,8 @@ var definitions = map[OpCode]*Definition{
 	OpSpread:      {"OpSpread", []int{}},
 	OpCallSpread:  {"OpCallSpread", []int{}}, // Call with spread array
 
-	OpHash: {"OpHash", []int{2}}, // 2-byte pair count
+	OpTuple: {"OpTuple", []int{2}}, // 2-byte element count
+	OpHash:  {"OpHash", []int{2}},  // 2-byte pair count
 
 	OpGetMember: {"OpGetMember", []int{2}}, // 2-byte property name index
 

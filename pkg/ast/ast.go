@@ -218,6 +218,15 @@ type BooleanLiteral struct {
 func (bl *BooleanLiteral) expressionNode()      {}
 func (bl *BooleanLiteral) TokenLiteral() string { return bl.Token.Literal }
 
+// TupleLiteral represents (elem1, elem2, ...)
+type TupleLiteral struct {
+	Token    token.Token // the '(' token
+	Elements []Expression
+}
+
+func (tl *TupleLiteral) expressionNode()      {}
+func (tl *TupleLiteral) TokenLiteral() string { return tl.Token.Literal }
+
 // ArrayLiteral represents [elem1, elem2] or [elem1 elem2]
 type ArrayLiteral struct {
 	Token    token.Token // the '[' token

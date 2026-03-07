@@ -656,6 +656,18 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			return err
 		}
 
+	case bytecode.OpTuple:
+		numElements := int(binary.BigEndian.Uint16(ins[ip+1:]))
+		vm.currentFrame().ip += 2
+		elements := make([]value.Value, numElements)
+		for i := numElements - 1; i >= 0; i-- {
+			elements[i] = vm.pop()
+		}
+		err := vm.push(value.Tuple(elements))
+		if err != nil {
+			return err
+		}
+
 	case bytecode.OpHash:
 		numPairs := int(binary.BigEndian.Uint16(ins[ip+1:]))
 		vm.currentFrame().ip += 2
@@ -691,6 +703,17 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 				vm.push(value.Null())
 			} else {
 				vm.push(arr[idx])
+			}
+		case value.TYPE_TUPLE:
+			if index.Type != value.TYPE_INT {
+				return fmt.Errorf("tuple index must be integer, got %s", index.Type)
+			}
+			tup := left.AsTuple()
+			idx := int(index.AsInt())
+			if idx < 0 || idx >= len(tup) {
+				vm.push(value.Null())
+			} else {
+				vm.push(tup[idx])
 			}
 		case value.TYPE_HASH:
 			hash := left.AsHash()
@@ -2155,6 +2178,8 @@ func builtinLen(args ...value.Value) value.Value {
 		return value.Int(int64(len(args[0].AsString())))
 	case value.TYPE_ARRAY:
 		return value.Int(int64(len(args[0].AsArray())))
+	case value.TYPE_TUPLE:
+		return value.Int(int64(len(args[0].AsTuple())))
 	case value.TYPE_HASH:
 		return value.Int(int64(len(args[0].AsHash().Pairs)))
 	default:

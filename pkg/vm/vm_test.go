@@ -1687,6 +1687,95 @@ func TestDoExpression(t *testing.T) {
 	runVmTests(t, tests)
 }
 
+func TestTupleLiteral(t *testing.T) {
+	tests := []vmTestCase{
+		// Basic tuple creation
+		{
+			input:    `(1, 2, 3);`,
+			expected: "(1, 2, 3)",
+		},
+		// Tuple with mixed types
+		{
+			input:    `(1, "hello", true);`,
+			expected: "(1, hello, true)",
+		},
+		// Tuple index access
+		{
+			input:    `t = (10, 20, 30); t[0];`,
+			expected: int64(10),
+		},
+		{
+			input:    `t = (10, 20, 30); t[1];`,
+			expected: int64(20),
+		},
+		{
+			input:    `t = (10, 20, 30); t[2];`,
+			expected: int64(30),
+		},
+		// Tuple out-of-bounds returns null
+		{
+			input:    `t = (1, 2); t[5];`,
+			expected: nil,
+		},
+		// Tuple length
+		{
+			input:    `len((1, 2, 3));`,
+			expected: int64(3),
+		},
+		// Nested tuple
+		{
+			input:    `t = ((1, 2), (3, 4)); t[0];`,
+			expected: "(1, 2)",
+		},
+		// Tuple equality check
+		{
+			input:    `t = (1, 2); t == (1, 2);`,
+			expected: "true",
+		},
+		// Tuple in function return
+		{
+			input:    `func pair(a, b) = (a, b); p = pair(10, 20); p[0];`,
+			expected: int64(10),
+		},
+	}
+
+	// Special handling: convert string-expected tests
+	for _, tt := range tests {
+		program := parse(tt.input)
+		comp := compiler.New()
+		err := comp.Compile(program)
+		if err != nil {
+			t.Fatalf("compiler error for %q: %s", tt.input, err)
+		}
+
+		machine := New(comp.Constants())
+		err = machine.Run(comp.Bytecode().Instructions)
+		if err != nil {
+			t.Fatalf("vm error for %q: %s", tt.input, err)
+		}
+
+		stackElem := machine.LastPoppedStackElem()
+
+		switch expected := tt.expected.(type) {
+		case int64:
+			if stackElem.Type != value.TYPE_INT || stackElem.AsInt() != expected {
+				t.Errorf("for %q: expected %d, got %s", tt.input, expected, stackElem.String())
+			}
+		case string:
+			actual := stackElem.String()
+			if actual != expected {
+				t.Errorf("for %q: expected %q, got %q", tt.input, expected, actual)
+			}
+		case nil:
+			if stackElem.Type != value.TYPE_NULL {
+				t.Errorf("for %q: expected null, got %s", tt.input, stackElem.String())
+			}
+		default:
+			t.Fatalf("unhandled expected type for %q", tt.input)
+		}
+	}
+}
+
 // TestCoreIOFSFunctions tests the filesystem functions added to core.io
 func TestCoreIOFSFunctions(t *testing.T) {
 	// Create a temporary directory for testing

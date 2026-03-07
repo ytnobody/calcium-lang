@@ -245,6 +245,11 @@ func (vm *VM) initModulesNoStdin() {
 	ioModule.Exports["read_file"] = value.BuiltinFunc(&value.Builtin{Name: "read_file", Fn: builtinReadFile})
 	ioModule.Exports["write_file"] = value.BuiltinFunc(&value.Builtin{Name: "write_file", Fn: builtinWriteFile})
 	ioModule.Exports["format"] = value.BuiltinFunc(&value.Builtin{Name: "format", Fn: builtinFormat})
+	ioModule.Exports["list_dir"] = value.BuiltinFunc(&value.Builtin{Name: "list_dir", Fn: builtinListDir})
+	ioModule.Exports["mkdir"] = value.BuiltinFunc(&value.Builtin{Name: "mkdir", Fn: builtinMkdir})
+	ioModule.Exports["exists"] = value.BuiltinFunc(&value.Builtin{Name: "exists", Fn: builtinExists})
+	ioModule.Exports["delete_file"] = value.BuiltinFunc(&value.Builtin{Name: "delete_file", Fn: builtinDeleteFile})
+	ioModule.Exports["file_info"] = value.BuiltinFunc(&value.Builtin{Name: "file_info", Fn: builtinFileInfo})
 	// stdin/eof not available in REPL mode
 	vm.modules["core.io"] = ioModule
 }
@@ -284,6 +289,11 @@ func (vm *VM) initModules() {
 	ioModule.Exports["read_file"] = value.BuiltinFunc(&value.Builtin{Name: "read_file", Fn: builtinReadFile})
 	ioModule.Exports["write_file"] = value.BuiltinFunc(&value.Builtin{Name: "write_file", Fn: builtinWriteFile})
 	ioModule.Exports["format"] = value.BuiltinFunc(&value.Builtin{Name: "format", Fn: builtinFormat})
+	ioModule.Exports["list_dir"] = value.BuiltinFunc(&value.Builtin{Name: "list_dir", Fn: builtinListDir})
+	ioModule.Exports["mkdir"] = value.BuiltinFunc(&value.Builtin{Name: "mkdir", Fn: builtinMkdir})
+	ioModule.Exports["exists"] = value.BuiltinFunc(&value.Builtin{Name: "exists", Fn: builtinExists})
+	ioModule.Exports["delete_file"] = value.BuiltinFunc(&value.Builtin{Name: "delete_file", Fn: builtinDeleteFile})
+	ioModule.Exports["file_info"] = value.BuiltinFunc(&value.Builtin{Name: "file_info", Fn: builtinFileInfo})
 	// Initialize stdin/eof event sources
 	vm.initStdinSource()
 	ioModule.Exports["stdin"] = value.EventSourceVal(vm.stdinSource)
@@ -2502,6 +2512,93 @@ func builtinWriteFile(args ...value.Value) value.Value {
 		return value.Failure(value.String(fmt.Sprintf("write_file: %v", err)))
 	}
 	return value.Success(value.Null())
+}
+
+// list_dir - lists files/directories in a directory (core.io)
+func builtinListDir(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("list_dir: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("list_dir: path must be string"))
+	}
+	entries, err := os.ReadDir(args[0].AsString())
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("list_dir: %v", err)))
+	}
+	result := make([]value.Value, len(entries))
+	for i, entry := range entries {
+		result[i] = value.String(entry.Name())
+	}
+	return value.Success(value.Array(result))
+}
+
+// mkdir - creates a directory (and parents) (core.io!)
+func builtinMkdir(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("mkdir: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("mkdir: path must be string"))
+	}
+	err := os.MkdirAll(args[0].AsString(), 0755)
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("mkdir: %v", err)))
+	}
+	return value.Success(value.Null())
+}
+
+// exists - checks if a file or directory exists (core.io)
+func builtinExists(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("exists: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("exists: path must be string"))
+	}
+	_, err := os.Stat(args[0].AsString())
+	if err == nil {
+		return value.Bool(true)
+	}
+	if os.IsNotExist(err) {
+		return value.Bool(false)
+	}
+	return value.Failure(value.String(fmt.Sprintf("exists: %v", err)))
+}
+
+// delete_file - deletes a file (core.io!)
+func builtinDeleteFile(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("delete_file: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("delete_file: path must be string"))
+	}
+	err := os.Remove(args[0].AsString())
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("delete_file: %v", err)))
+	}
+	return value.Success(value.Null())
+}
+
+// file_info - returns file metadata as a hash (core.io)
+func builtinFileInfo(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("file_info: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("file_info: path must be string"))
+	}
+	info, err := os.Stat(args[0].AsString())
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("file_info: %v", err)))
+	}
+	h := value.NewHash()
+	h.Set(value.String("name"), value.String(info.Name()))
+	h.Set(value.String("size"), value.Int(info.Size()))
+	h.Set(value.String("is_dir"), value.Bool(info.IsDir()))
+	h.Set(value.String("modified"), value.String(info.ModTime().UTC().Format("2006-01-02T15:04:05Z")))
+	return value.Success(value.HashVal(h))
 }
 
 // format - formats a string with arguments (core.io)

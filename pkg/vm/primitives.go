@@ -77,6 +77,93 @@ func primitiveWriteFile(args ...value.Value) value.Value {
 	return value.Success(value.Null())
 }
 
+// __list_dir lists entries in a directory
+func primitiveListDir(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__list_dir: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__list_dir: path must be string"))
+	}
+	entries, err := os.ReadDir(args[0].AsString())
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("__list_dir: %v", err)))
+	}
+	result := make([]value.Value, len(entries))
+	for i, entry := range entries {
+		result[i] = value.String(entry.Name())
+	}
+	return value.Success(value.Array(result))
+}
+
+// __mkdir creates a directory (and parents)
+func primitiveMkdir(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__mkdir: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__mkdir: path must be string"))
+	}
+	err := os.MkdirAll(args[0].AsString(), 0755)
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("__mkdir: %v", err)))
+	}
+	return value.Success(value.Null())
+}
+
+// __exists checks whether a file or directory exists
+func primitiveExists(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__exists: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__exists: path must be string"))
+	}
+	_, err := os.Stat(args[0].AsString())
+	if err == nil {
+		return value.Bool(true)
+	}
+	if os.IsNotExist(err) {
+		return value.Bool(false)
+	}
+	return value.Failure(value.String(fmt.Sprintf("__exists: %v", err)))
+}
+
+// __delete_file deletes a file
+func primitiveDeleteFile(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__delete_file: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__delete_file: path must be string"))
+	}
+	err := os.Remove(args[0].AsString())
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("__delete_file: %v", err)))
+	}
+	return value.Success(value.Null())
+}
+
+// __file_info returns metadata about a file or directory as a hash
+func primitiveFileInfo(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__file_info: expected 1 argument (path)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__file_info: path must be string"))
+	}
+	info, err := os.Stat(args[0].AsString())
+	if err != nil {
+		return value.Failure(value.String(fmt.Sprintf("__file_info: %v", err)))
+	}
+	h := value.NewHash()
+	h.Set(value.String("name"), value.String(info.Name()))
+	h.Set(value.String("size"), value.Int(info.Size()))
+	h.Set(value.String("is_dir"), value.Bool(info.IsDir()))
+	h.Set(value.String("modified"), value.String(info.ModTime().UTC().Format("2006-01-02T15:04:05Z")))
+	return value.Success(value.HashVal(h))
+}
+
 // =============================================================================
 // Math Primitives
 // =============================================================================
@@ -1367,10 +1454,15 @@ func primitiveOsExit(args ...value.Value) value.Value {
 func GetPrimitives() map[string]*value.Builtin {
 	return map[string]*value.Builtin{
 		// I/O
-		"__print":      {Name: "__print", Fn: primitiveprint},
-		"__println":    {Name: "__println", Fn: primitivePrintln},
-		"__read_file":  {Name: "__read_file", Fn: primitiveReadFile},
-		"__write_file": {Name: "__write_file", Fn: primitiveWriteFile},
+		"__print":       {Name: "__print", Fn: primitiveprint},
+		"__println":     {Name: "__println", Fn: primitivePrintln},
+		"__read_file":   {Name: "__read_file", Fn: primitiveReadFile},
+		"__write_file":  {Name: "__write_file", Fn: primitiveWriteFile},
+		"__list_dir":    {Name: "__list_dir", Fn: primitiveListDir},
+		"__mkdir":       {Name: "__mkdir", Fn: primitiveMkdir},
+		"__exists":      {Name: "__exists", Fn: primitiveExists},
+		"__delete_file": {Name: "__delete_file", Fn: primitiveDeleteFile},
+		"__file_info":   {Name: "__file_info", Fn: primitiveFileInfo},
 
 		// Math
 		"__floor": {Name: "__floor", Fn: primitiveFloor},

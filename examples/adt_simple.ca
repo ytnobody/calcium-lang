@@ -1,0 +1,16 @@
+// Simple ADT test
+use core.io!;
+
+type Maybe = Some(value) | None;
+
+x = Some(42);
+y = None;
+
+x !> io.say;
+y !> io.say;
+
+// Direct match
+result = match x
+  Some(v) => v
+  _ => 0;
+result !> io.say;

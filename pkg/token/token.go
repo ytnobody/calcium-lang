@@ -90,6 +90,7 @@ const (
 	IN          TokenType = "IN"
 	DO          TokenType = "DO"
 	END         TokenType = "END"
+	TYPE        TokenType = "TYPE"
 
 	// Built-in function keywords
 	MAP    TokenType = "MAP"
@@ -119,6 +120,7 @@ var keywords = map[string]TokenType{
 	"return":     RETURN,
 	"in":         IN,
 	"do":         DO,
+	"type":       TYPE,
 	"map":        MAP,
 	"filter":     FILTER,
 	"reduce":     REDUCE,

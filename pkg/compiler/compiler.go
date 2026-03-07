@@ -431,6 +431,11 @@ func (c *Compiler) Compile(node ast.Node) error {
 				}
 			case *ast.ConstraintDeclaration:
 				c.symbolTable.Define(stmt.Name.Value)
+			case *ast.TypeDeclaration:
+				// Register all variant constructors
+				for _, v := range stmt.Variants {
+					c.symbolTable.Define(v.Name)
+				}
 			}
 		}
 
@@ -711,6 +716,59 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.emit(bytecode.OpSetGlobal, symbol.Index)
 		} else {
 			c.emit(bytecode.OpSetLocal, symbol.Index)
+		}
+
+	case *ast.TypeDeclaration:
+		// For each variant, create a constructor function or constant
+		typeName := node.Name.Value
+		for _, variant := range node.Variants {
+			if len(variant.Fields) == 0 {
+				// Zero-arity constructor: just create an ADT constant value
+				adtVal := value.ADTVal(&value.ADT{
+					TypeName: typeName,
+					Tag:      variant.Name,
+					Values:   []value.Value{},
+				})
+				constIdx := c.addConstant(adtVal)
+				c.emit(bytecode.OpConstant, constIdx)
+			} else {
+				// N-arity constructor: create a function that constructs the ADT value
+				c.enterScope()
+
+				// Define parameters
+				for _, field := range variant.Fields {
+					c.symbolTable.Define(field)
+				}
+
+				// Emit OpConstructADT with tag name and arity
+				tagIdx := c.addConstant(value.String(typeName + "." + variant.Name))
+				c.emit(bytecode.OpConstructADT, tagIdx, len(variant.Fields))
+				c.emit(bytecode.OpReturn)
+
+				numLocals := c.symbolTable.NumDefinitions()
+				instructions := c.leaveScope()
+
+				fn := &value.Function{
+					Name:       variant.Name,
+					Parameters: make([]string, len(variant.Fields)),
+					Body:       instructions,
+					NumLocals:  numLocals,
+					IsEffect:   false,
+				}
+				for i, field := range variant.Fields {
+					fn.Parameters[i] = field
+				}
+
+				fnIndex := c.addConstant(value.Func(fn))
+				c.emit(bytecode.OpClosure, fnIndex, 0)
+			}
+
+			symbol := c.symbolTable.Define(variant.Name)
+			if symbol.Scope == GlobalScope {
+				c.emit(bytecode.OpSetGlobal, symbol.Index)
+			} else {
+				c.emit(bytecode.OpSetLocal, symbol.Index)
+			}
 		}
 
 	case *ast.IntegerLiteral:
@@ -1400,6 +1458,58 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 			if !isLast {
 				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
 				// Patch jump to next case
+				afterPos := len(c.currentInstructions())
+				c.changeOperand(jumpToNextPos, afterPos)
+			}
+		} else if cp, ok := mc.Pattern.(*ast.ConstructorPattern); ok {
+			// Constructor pattern: Some(x) => body
+			// Duplicate subject for tag comparison
+			c.emit(bytecode.OpDup)
+
+			// Emit OpMatchADT which pops dup, checks tag, pushes true/false
+			tagIdx := c.addConstant(value.String(cp.Name))
+			c.emit(bytecode.OpMatchADT, tagIdx, len(cp.Fields))
+
+			var jumpToNextPos int
+			if !isLast {
+				// JumpIfFalse pops the bool
+				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
+			} else {
+				// Last case: pop the bool explicitly
+				c.emit(bytecode.OpPop)
+			}
+
+			// Stack now: [subject]
+			// Bind fields: extract values from the ADT and bind to local variables
+			for i, field := range cp.Fields {
+				if field.Value != "_" {
+					// Duplicate subject again to extract field
+					c.emit(bytecode.OpDup)
+					// Push index
+					idxConst := c.addConstant(value.Int(int64(i)))
+					c.emit(bytecode.OpConstant, idxConst)
+					c.emit(bytecode.OpIndex)
+					// Bind to variable
+					sym := c.symbolTable.Define(field.Value)
+					if sym.Scope == GlobalScope {
+						c.emit(bytecode.OpSetGlobal, sym.Index)
+					} else {
+						c.emit(bytecode.OpSetLocal, sym.Index)
+					}
+				}
+			}
+
+			// Pop subject
+			c.emit(bytecode.OpPop)
+
+			// Compile body
+			err = c.Compile(mc.Body)
+			if err != nil {
+				return err
+			}
+
+			if !isLast {
+				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
 				afterPos := len(c.currentInstructions())
 				c.changeOperand(jumpToNextPos, afterPos)
 			}

@@ -1,0 +1,43 @@
+// ADT (Algebraic Data Type) example
+use core.io!;
+
+// Define Maybe type
+type Maybe = Some(value) | None;
+
+// Define Tree type
+type Tree = Leaf(value) | Node(left, right);
+
+// Using Maybe
+x = Some(42);
+y = None;
+
+"=== Maybe Type ===" !> io.say;
+x !> io.say;
+y !> io.say;
+
+// Pattern matching on Maybe
+func describe(m) = match m
+  Some(v) => concat("Got: ", to_string(v))
+  None() => "Nothing";
+
+describe(x) !> io.say;
+describe(y) !> io.say;
+
+// Using Tree
+"=== Tree Type ===" !> io.say;
+tree = Node(Leaf(1), Node(Leaf(2), Leaf(3)));
+
+func sum_tree(t) = match t
+  Leaf(v) => v
+  Node(l, r) => sum_tree(l) + sum_tree(r);
+
+concat("Tree sum: ", to_string(sum_tree(tree))) !> io.say;
+
+// Equality
+"=== Equality ===" !> io.say;
+a = Some(10);
+b = Some(10);
+c = Some(20);
+to_string(a == b) !> io.say;
+to_string(a == c) !> io.say;
+to_string(None == None) !> io.say;

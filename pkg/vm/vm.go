@@ -556,6 +556,48 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			return err
 		}
 
+	case bytecode.OpConstructADT:
+		tagIdx := binary.BigEndian.Uint16(ins[ip+1:])
+		arity := int(ins[ip+3])
+		vm.currentFrame().ip += 3
+
+		tagStr := vm.getConstant(tagIdx).AsString()
+		// tagStr is "TypeName.VariantName"
+		parts := strings.SplitN(tagStr, ".", 2)
+		typeName := parts[0]
+		variantName := parts[1]
+
+		vals := make([]value.Value, arity)
+		for i := arity - 1; i >= 0; i-- {
+			vals[i] = vm.pop()
+		}
+
+		adtVal := value.ADTVal(&value.ADT{
+			TypeName: typeName,
+			Tag:      variantName,
+			Values:   vals,
+		})
+		err := vm.push(adtVal)
+		if err != nil {
+			return err
+		}
+
+	case bytecode.OpMatchADT:
+		tagIdx := binary.BigEndian.Uint16(ins[ip+1:])
+		_ = int(ins[ip+3]) // arity (for verification, not used in matching)
+		vm.currentFrame().ip += 3
+
+		expectedTag := vm.getConstant(tagIdx).AsString()
+
+		// Pop the duplicated subject and check tag; only push bool result
+		subject := vm.pop()
+
+		if subject.Type == value.TYPE_ADT && subject.AsADT().Tag == expectedTag {
+			vm.push(value.Bool(true))
+		} else {
+			vm.push(value.Bool(false))
+		}
+
 	case bytecode.OpCallEffect:
 		numArgs := int(ins[ip+1])
 		vm.currentFrame().ip += 1
@@ -714,6 +756,17 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 				vm.push(value.Null())
 			} else {
 				vm.push(tup[idx])
+			}
+		case value.TYPE_ADT:
+			if index.Type != value.TYPE_INT {
+				return fmt.Errorf("ADT index must be integer, got %s", index.Type)
+			}
+			adt := left.AsADT()
+			idx := int(index.AsInt())
+			if idx < 0 || idx >= len(adt.Values) {
+				vm.push(value.Null())
+			} else {
+				vm.push(adt.Values[idx])
 			}
 		case value.TYPE_HASH:
 			hash := left.AsHash()

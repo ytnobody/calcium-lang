@@ -235,8 +235,8 @@ type ADT struct {
 
 // ADTDef represents the definition of an algebraic data type
 type ADTDef struct {
-	Name     string            // e.g., "Maybe"
-	Variants map[string]int    // variant name -> arity
+	Name     string         // e.g., "Maybe"
+	Variants map[string]int // variant name -> arity
 }
 
 // Regex represents a compiled regular expression

@@ -461,8 +461,8 @@ func (de *DoExpression) TokenLiteral() string { return de.Token.Literal }
 
 // ConstructorPattern represents a pattern like Some(x) or Leaf(v) in match
 type ConstructorPattern struct {
-	Token  token.Token // the constructor name token
-	Name   string      // constructor name, e.g., "Some"
+	Token  token.Token   // the constructor name token
+	Name   string        // constructor name, e.g., "Some"
 	Fields []*Identifier // binding variables, e.g., [x]
 }
 

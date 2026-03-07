@@ -1251,6 +1251,21 @@ func (c *Compiler) Compile(node ast.Node) error {
 			return err
 		}
 
+	case *ast.DoExpression:
+		// Compile do...end block: execute all intermediate statements (each pops its value),
+		// then compile the final expression whose value remains on the stack.
+		for _, stmt := range node.Statements {
+			err := c.Compile(stmt)
+			if err != nil {
+				return err
+			}
+		}
+		// Compile the final expression (its value stays on the stack as the block result)
+		err := c.Compile(node.FinalExpression)
+		if err != nil {
+			return err
+		}
+
 	default:
 		// For unknown node types, we don't have a token, so use a basic error
 		return fmt.Errorf("unknown node type: %T", node)

@@ -103,6 +103,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.SUCCESS, p.parseSuccessExpression)
 	p.registerPrefix(token.FAILURE, p.parseFailureExpression)
 	p.registerPrefix(token.RETURN, p.parseReturnExpression)
+	p.registerPrefix(token.DO, p.parseDoExpression)
 	// Built-in functions as identifiers
 	p.registerPrefix(token.MAP, p.parseBuiltinAsIdentifier)
 	p.registerPrefix(token.FILTER, p.parseBuiltinAsIdentifier)
@@ -226,6 +227,13 @@ func (p *Parser) curTokenIs(t token.TokenType) bool {
 
 func (p *Parser) peekTokenIs(t token.TokenType) bool {
 	return p.peekToken.Type == t
+}
+
+// isEndToken checks if a token is the contextual "end" keyword.
+// "end" is treated as a contextual keyword (not a reserved word) so it can still
+// be used as an identifier (e.g., parameter names like "start, end") outside do blocks.
+func (p *Parser) isEndToken(tok token.Token) bool {
+	return (tok.Type == token.END) || (tok.Type == token.IDENT && tok.Literal == "end")
 }
 
 func (p *Parser) expectPeek(t token.TokenType) bool {
@@ -1492,4 +1500,60 @@ func (p *Parser) parseReturnExpression() ast.Expression {
 	exp.Value = p.parseExpression(LOWEST)
 
 	return exp
+}
+
+// parseDoExpression parses a do...end block expression.
+// Syntax: do <stmt1>; <stmt2>; ... <finalExpr> end
+// The block evaluates each statement in sequence and returns the value of the final expression.
+func (p *Parser) parseDoExpression() ast.Expression {
+	expr := &ast.DoExpression{Token: p.curToken}
+	expr.Statements = []ast.Statement{}
+
+	// Advance past 'do' to the first token of the block body
+	p.nextToken()
+
+	for !p.isEndToken(p.curToken) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			expr.Statements = append(expr.Statements, stmt)
+		}
+		// Check if the next token is 'end' or EOF (block terminator)
+		if p.isEndToken(p.peekToken) || p.peekTokenIs(token.EOF) {
+			p.nextToken() // advance to 'end' or EOF
+			break
+		}
+		p.nextToken() // advance to next statement
+	}
+
+	// If we exited because curToken == EOF, the block was not closed.
+	if p.curTokenIs(token.EOF) {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"unexpected end of file inside do block, expected 'end'"))
+		return nil
+	}
+
+	// curToken should be 'end' now
+	if len(expr.Statements) == 0 {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"do block must contain at least one expression"))
+		return nil
+	}
+
+	// The last statement must be an expression statement (provides the return value)
+	last := expr.Statements[len(expr.Statements)-1]
+	exprStmt, ok := last.(*ast.ExpressionStatement)
+	if !ok {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"last item in do block must be an expression (not an assignment or declaration)"))
+		return nil
+	}
+
+	// Split: intermediate statements stay in Statements, final expression in FinalExpression
+	expr.Statements = expr.Statements[:len(expr.Statements)-1]
+	expr.FinalExpression = exprStmt.Expression
+
+	return expr
 }

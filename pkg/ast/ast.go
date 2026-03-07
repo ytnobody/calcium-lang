@@ -420,6 +420,19 @@ type ConstraintCheckExpression struct {
 func (cc *ConstraintCheckExpression) expressionNode()      {}
 func (cc *ConstraintCheckExpression) TokenLiteral() string { return cc.Token.Literal }
 
+// DoExpression represents a do...end block expression.
+// It contains a sequence of statements followed by a final expression whose
+// value is the result of the entire block.
+// Syntax: do <stmt1>; <stmt2>; ... <finalExpr> end
+type DoExpression struct {
+	Token           token.Token // the DO token
+	Statements      []Statement // intermediate statements (assignments, expr statements)
+	FinalExpression Expression  // the last expression whose value is returned
+}
+
+func (de *DoExpression) expressionNode()      {}
+func (de *DoExpression) TokenLiteral() string { return de.Token.Literal }
+
 // ConstrainedParameter represents a parameter with constraint: param: Constraint?
 type ConstrainedParameter struct {
 	Name       *Identifier

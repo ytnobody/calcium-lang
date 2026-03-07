@@ -1626,3 +1626,24 @@ func TestCoreOSArgs(t *testing.T) {
 		t.Errorf("expected args() to return array with at least 1 element")
 	}
 }
+
+// TestDoExpression verifies do...end block execution
+func TestDoExpression(t *testing.T) {
+	tests := []vmTestCase{
+		// Simple do block returning a literal
+		{`do 42 end;`, 42},
+		// do block returning a string
+		{`do "hello" end;`, "hello"},
+		// do block with let binding and final expression
+		{`do x = 10; x + 5 end;`, 15},
+		// do block with multiple let bindings
+		{`do a = 3; b = 4; a + b end;`, 7},
+		// do block as function body
+		{`func f(n) = do x = n * 2; x + 1 end; f(5);`, 11},
+		// nested do blocks
+		{`do x = do 10 end; x * 2 end;`, 20},
+		// do block with expression statement (side-effect style)
+		{`do y = 7; y * y end;`, 49},
+	}
+	runVmTests(t, tests)
+}

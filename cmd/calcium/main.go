@@ -14,6 +14,7 @@ import (
 	"github.com/ytnobody/calcium-lang/pkg/ast"
 	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 	"github.com/ytnobody/calcium-lang/pkg/compiler"
+	"github.com/ytnobody/calcium-lang/pkg/formatter"
 	"github.com/ytnobody/calcium-lang/pkg/lexer"
 	"github.com/ytnobody/calcium-lang/pkg/optimizer"
 	"github.com/ytnobody/calcium-lang/pkg/parser"
@@ -174,6 +175,13 @@ func main() {
 		}
 		runTests(dir)
 
+	case "fmt":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: calcium fmt [--check] <file.ca> [...]")
+			os.Exit(1)
+		}
+		runFmt(args[1:])
+
 	case "cache":
 		runCacheCommand(args[1:])
 
@@ -207,6 +215,67 @@ func main() {
 	}
 }
 
+// runFmt formats one or more .ca source files.
+// With --check flag, it reports whether any file would be changed.
+// Without --check flag, it formats files in-place.
+func runFmt(args []string) {
+	checkOnly := false
+	var files []string
+
+	for _, arg := range args {
+		if arg == "--check" {
+			checkOnly = true
+		} else {
+			files = append(files, arg)
+		}
+	}
+
+	if len(files) == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: calcium fmt [--check] <file.ca> [...]")
+		os.Exit(1)
+	}
+
+	anyChanged := false
+	for _, file := range files {
+		if !strings.HasSuffix(file, ".ca") {
+			fmt.Fprintf(os.Stderr, "Skipping non-.ca file: %s\n", file)
+			continue
+		}
+
+		content, err := os.ReadFile(file)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", file, err)
+			os.Exit(1)
+		}
+
+		formatted, err := formatter.Format(string(content))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", file, err)
+			os.Exit(1)
+		}
+
+		if string(content) == formatted {
+			continue
+		}
+
+		anyChanged = true
+		if checkOnly {
+			fmt.Printf("%s\n", file)
+		} else {
+			err = os.WriteFile(file, []byte(formatted), 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", file, err)
+				os.Exit(1)
+			}
+			fmt.Printf("formatted %s\n", file)
+		}
+	}
+
+	if checkOnly && anyChanged {
+		os.Exit(1)
+	}
+}
+
 func printHelp() {
 	fmt.Println(`Calcium - A functional programming language
 
@@ -216,6 +285,7 @@ Usage:
   calcium run [options] <file>               Run a program
   calcium compile [-O0|-O1|-O2] <file> [-o out]  Compile to bytecode (.bone)
   calcium build [-O0|-O1|-O2] <file> [-o out]    Build standalone executable
+  calcium fmt [--check] <file.ca> [...]      Format source files
   calcium test [dir]                         Run all .test.ca files in directory
   calcium cache <file.ca>                    Pre-fetch dependencies recursively
   calcium cache --list                       List cached modules

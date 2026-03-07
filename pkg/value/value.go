@@ -90,12 +90,12 @@ type Value struct {
 type Function struct {
 	Name       string
 	Parameters []string
-	Body       []byte     // Bytecode
-	NumLocals  int        // Number of local variables
-	Constants  []Value    // Constants pool
-	Globals    []Value    // Globals pool (for module functions)
-	Builtins   []*Builtin // Builtins pool (for module functions)
-	IsEffect   bool       // true for func!
+	Body       []byte      // Bytecode
+	NumLocals  int         // Number of local variables
+	Constants  []Value     // Constants pool
+	Globals    []Value     // Globals pool (for module functions)
+	Builtins   []*Builtin  // Builtins pool (for module functions)
+	IsEffect   bool        // true for func!
 	SourceMap  interface{} // *bytecode.SourceMap (stored as interface to avoid circular import)
 }
 

@@ -5,86 +5,69 @@ use core.string;
 
 io.println("# String Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 42);
-
-// === Basic Operations ===
-io.println("# Basic operations");
-ctx = test.is(ctx, "len hello", len("hello"), 5);
-ctx = test.is(ctx, "len empty", len(""), 0);
-ctx = test.is(ctx, "concat", concat("hello", " world"), "hello world");
-
-// === Character Access ===
-io.println("# Character access");
-ctx = test.is(ctx, "char_at first", string.char_at("hello", 0), "h");
-ctx = test.is(ctx, "char_at last", string.char_at("hello", 4), "o");
-
-// === Substring ===
-io.println("# Substring");
-ctx = test.is(ctx, "substring first word", string.substring("hello world", 0, 5), "hello");
-ctx = test.is(ctx, "substring second word", string.substring("hello world", 6, 11), "world");
-
-// === Search ===
-io.println("# Search");
-ctx = test.is(ctx, "index_of found", string.index_of("hello", "l"), 2);
-ctx = test.is(ctx, "index_of not found", string.index_of("hello", "x"), -1);
-ctx = test.ok(ctx, "contains positive", string.contains("hello world", "world"));
-ctx = test.is(ctx, "contains negative", string.contains("hello", "x"), false);
-ctx = test.ok(ctx, "starts_with positive", string.starts_with("hello", "he"));
-ctx = test.is(ctx, "starts_with negative", string.starts_with("hello", "lo"), false);
-ctx = test.ok(ctx, "ends_with positive", string.ends_with("hello", "lo"));
-ctx = test.is(ctx, "ends_with negative", string.ends_with("hello", "he"), false);
-
-// === Transformation ===
-io.println("# Transformation");
-ctx = test.is(ctx, "to_upper", string.to_upper("hello"), "HELLO");
-ctx = test.is(ctx, "to_lower", string.to_lower("HELLO"), "hello");
-ctx = test.is(ctx, "trim", string.trim("  hello  "), "hello");
-ctx = test.is(ctx, "replace", string.replace("hello world", "world", "calcium"), "hello calcium");
-
-// === Split and Join ===
-io.println("# Split and Join");
+// === Pre-compute values ===
 parts = string.split("a,b,c", ",");
-ctx = test.is(ctx, "split length", len(parts), 3);
-ctx = test.is(ctx, "split first", head(parts), "a");
-ctx = test.is(ctx, "join", string.join(["a", "b", "c"], "-"), "a-b-c");
-
-// === Escape Sequences ===
-io.println("# Escape sequences");
-ctx = test.is(ctx, "newline length", len("\n"), 1);
-ctx = test.is(ctx, "tab length", len("\t"), 1);
-ctx = test.is(ctx, "quote length", len("\""), 1);
-ctx = test.is(ctx, "backslash length", len("\\"), 1);
-
-// === Single-quoted Strings ===
-io.println("# Single-quoted strings");
-ctx = test.is(ctx, "single quote basic", 'hello', "hello");
-ctx = test.is(ctx, "single quote with spaces", 'hello world', "hello world");
-ctx = test.is(ctx, "single quote empty", '', "");
-ctx = test.is(ctx, "single quote length", len('hello'), 5);
-ctx = test.is(ctx, "single quote concat", concat('hello', ' world'), "hello world");
-ctx = test.is(ctx, "single quote double inside", 'say "hello"', "say \"hello\"");
-ctx = test.is(ctx, "single quote escape", 'it\'s', "it's");
-ctx = test.is(ctx, "single quote newline", len('\n'), 1);
-ctx = test.is(ctx, "single quote tab", len('\t'), 1);
-ctx = test.is(ctx, "single quote backslash", len('\\'), 1);
-
-// === Heredoc (Triple-quoted Strings) ===
-io.println("# Heredoc strings");
-ctx = test.is(ctx, "heredoc basic", """hello""", "hello");
-ctx = test.is(ctx, "heredoc with quotes", """say "hello" and 'hi'""", "say \"hello\" and 'hi'");
 multiline = """
 line 1
 line 2
 line 3
 """;
-ctx = test.is(ctx, "heredoc multiline", string.contains(multiline, "line 2"), true);
 lines = string.split(multiline, "\n");
-ctx = test.is(ctx, "heredoc line count", len(lines), 3);
-ctx = test.is(ctx, "heredoc first line", lines[0], "line 1");
 json_heredoc = """
 {"name": "test", "value": 42}
 """;
-ctx = test.ok(ctx, "heredoc json contains name", string.contains(json_heredoc, '"name"'));
 
-test.done(ctx);
+test.new()
+    |> test.plan(42)
+    // Basic Operations
+    |> test.is("len hello", len("hello"), 5)
+    |> test.is("len empty", len(""), 0)
+    |> test.is("concat", concat("hello", " world"), "hello world")
+    // Character Access
+    |> test.is("char_at first", string.char_at("hello", 0), "h")
+    |> test.is("char_at last", string.char_at("hello", 4), "o")
+    // Substring
+    |> test.is("substring first word", string.substring("hello world", 0, 5), "hello")
+    |> test.is("substring second word", string.substring("hello world", 6, 11), "world")
+    // Search
+    |> test.is("index_of found", string.index_of("hello", "l"), 2)
+    |> test.is("index_of not found", string.index_of("hello", "x"), -1)
+    |> test.ok("contains positive", string.contains("hello world", "world"))
+    |> test.is("contains negative", string.contains("hello", "x"), false)
+    |> test.ok("starts_with positive", string.starts_with("hello", "he"))
+    |> test.is("starts_with negative", string.starts_with("hello", "lo"), false)
+    |> test.ok("ends_with positive", string.ends_with("hello", "lo"))
+    |> test.is("ends_with negative", string.ends_with("hello", "he"), false)
+    // Transformation
+    |> test.is("to_upper", string.to_upper("hello"), "HELLO")
+    |> test.is("to_lower", string.to_lower("HELLO"), "hello")
+    |> test.is("trim", string.trim("  hello  "), "hello")
+    |> test.is("replace", string.replace("hello world", "world", "calcium"), "hello calcium")
+    // Split and Join
+    |> test.is("split length", len(parts), 3)
+    |> test.is("split first", head(parts), "a")
+    |> test.is("join", string.join(["a", "b", "c"], "-"), "a-b-c")
+    // Escape Sequences
+    |> test.is("newline length", len("\n"), 1)
+    |> test.is("tab length", len("\t"), 1)
+    |> test.is("quote length", len("\""), 1)
+    |> test.is("backslash length", len("\\"), 1)
+    // Single-quoted Strings
+    |> test.is("single quote basic", 'hello', "hello")
+    |> test.is("single quote with spaces", 'hello world', "hello world")
+    |> test.is("single quote empty", '', "")
+    |> test.is("single quote length", len('hello'), 5)
+    |> test.is("single quote concat", concat('hello', ' world'), "hello world")
+    |> test.is("single quote double inside", 'say "hello"', "say \"hello\"")
+    |> test.is("single quote escape", 'it\'s', "it's")
+    |> test.is("single quote newline", len('\n'), 1)
+    |> test.is("single quote tab", len('\t'), 1)
+    |> test.is("single quote backslash", len('\\'), 1)
+    // Heredoc (Triple-quoted Strings)
+    |> test.is("heredoc basic", """hello""", "hello")
+    |> test.is("heredoc with quotes", """say "hello" and 'hi'""", "say \"hello\" and 'hi'")
+    |> test.is("heredoc multiline", string.contains(multiline, "line 2"), true)
+    |> test.is("heredoc line count", len(lines), 3)
+    |> test.is("heredoc first line", lines[0], "line 1")
+    |> test.ok("heredoc json contains name", string.contains(json_heredoc, '"name"'))
+    |> test.done();

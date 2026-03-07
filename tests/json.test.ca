@@ -5,196 +5,89 @@ use test;
 
 io.println("# core.json Module Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 30);
-
-// ============================================
-// parse: Numbers
-// ============================================
-
-io.println("# parse: Numbers");
-
-json.parse("42") !? {
-    success(v) => ctx = test.is(ctx, "parse integer", v, 42)
-    failure(e) => ctx = test.fail(ctx, "parse integer")
-};
-json.parse("-17") !? {
-    success(v) => ctx = test.is(ctx, "parse negative integer", v, -17)
-    failure(e) => ctx = test.fail(ctx, "parse negative integer")
-};
-json.parse("3.14") !? {
-    success(v) => ctx = test.is(ctx, "parse float", v, 3.14)
-    failure(e) => ctx = test.fail(ctx, "parse float")
-};
-json.parse("0") !? {
-    success(v) => ctx = test.is(ctx, "parse zero", v, 0)
-    failure(e) => ctx = test.fail(ctx, "parse zero")
+// === Helper ===
+func unwrap_or(result, default_val) = result !? {
+    success(v) => v
+    failure(_) => default_val
 };
 
-// ============================================
-// parse: Booleans and Null
-// ============================================
+// === Pre-compute parsed values ===
+p_int = unwrap_or(json.parse("42"), -999);
+p_neg = unwrap_or(json.parse("-17"), -999);
+p_float = unwrap_or(json.parse("3.14"), -999.0);
+p_zero = unwrap_or(json.parse("0"), -999);
+p_true = unwrap_or(json.parse("true"), -999);
+p_false = unwrap_or(json.parse("false"), -999);
+p_str = unwrap_or(json.parse('"hello"'), "");
+p_empty_str = unwrap_or(json.parse('""'), "FAIL");
+p_str_space = unwrap_or(json.parse('"hello world"'), "");
+p_empty_arr = unwrap_or(json.parse("[]"), []);
+p_arr = unwrap_or(json.parse("[1, 2, 3]"), []);
+p_arr2 = unwrap_or(json.parse("[1, 2, 3]"), []);
+p_obj = unwrap_or(json.parse('{"name": "Alice", "age": 30}'), {});
+p_obj2 = unwrap_or(json.parse('{"name": "Alice", "age": 30}'), {});
+p_nested = unwrap_or(json.parse('{"numbers": [1, 2, 3]}'), {});
+p_arr_obj = unwrap_or(json.parse('[{"id": 1}, {"id": 2}]'), []);
 
-io.println("# parse: Booleans and Null");
+// === Pre-compute stringified values ===
+s_int = unwrap_or(json.stringify(42), "");
+s_true = unwrap_or(json.stringify(true), "");
+s_false = unwrap_or(json.stringify(false), "");
+s_str = unwrap_or(json.stringify("hello"), "");
+s_empty_arr = unwrap_or(json.stringify([]), "");
+s_int_arr = unwrap_or(json.stringify([1, 2, 3]), "");
 
-json.parse("true") !? {
-    success(v) => ctx = test.is(ctx, "parse true", v, true)
-    failure(e) => ctx = test.fail(ctx, "parse true")
-};
-json.parse("false") !? {
-    success(v) => ctx = test.is(ctx, "parse false", v, false)
-    failure(e) => ctx = test.fail(ctx, "parse false")
-};
+// === Round-trip ===
+rt_int = unwrap_or(json.parse(unwrap_or(json.stringify(42), "")), -999);
+rt_arr = unwrap_or(json.parse(unwrap_or(json.stringify([1, 2, 3]), "")), []);
 
-// ============================================
-// parse: Strings
-// ============================================
+// === Error cases ===
+empty_fails = json.parse("") !? { success(_) => false  failure(_) => true };
+invalid_fails = json.parse("invalid") !? { success(_) => false  failure(_) => true };
 
-io.println("# parse: Strings");
+// === Aliases ===
+decode_val = unwrap_or(json.decode("42"), -999);
+encode_val = unwrap_or(json.encode(42), "");
 
-json.parse('"hello"') !? {
-    success(v) => ctx = test.is(ctx, "parse string", v, "hello")
-    failure(e) => ctx = test.fail(ctx, "parse string")
-};
-json.parse('""') !? {
-    success(v) => ctx = test.is(ctx, "parse empty string", v, "")
-    failure(e) => ctx = test.fail(ctx, "parse empty string")
-};
-json.parse('"hello world"') !? {
-    success(v) => ctx = test.is(ctx, "parse string with space", v, "hello world")
-    failure(e) => ctx = test.fail(ctx, "parse string with space")
-};
-
-// ============================================
-// parse: Arrays
-// ============================================
-
-io.println("# parse: Arrays");
-
-json.parse("[]") !? {
-    success(v) => ctx = test.is(ctx, "parse empty array length", len(v), 0)
-    failure(e) => ctx = test.fail(ctx, "parse empty array")
-};
-json.parse("[1, 2, 3]") !? {
-    success(v) => ctx = test.is(ctx, "parse array first", v[0], 1)
-    failure(e) => ctx = test.fail(ctx, "parse array first")
-};
-json.parse("[1, 2, 3]") !? {
-    success(v) => ctx = test.is(ctx, "parse array length", len(v), 3)
-    failure(e) => ctx = test.fail(ctx, "parse array length")
-};
-
-// ============================================
-// parse: Objects
-// ============================================
-
-io.println("# parse: Objects");
-
-json.parse('{"name": "Alice", "age": 30}') !? {
-    success(v) => ctx = test.is(ctx, "parse object string value", v["name"], "Alice")
-    failure(e) => ctx = test.fail(ctx, "parse object string value")
-};
-json.parse('{"name": "Alice", "age": 30}') !? {
-    success(v) => ctx = test.is(ctx, "parse object number value", v["age"], 30)
-    failure(e) => ctx = test.fail(ctx, "parse object number value")
-};
-
-// ============================================
-// parse: Nested structures
-// ============================================
-
-io.println("# parse: Nested structures");
-
-json.parse('{"numbers": [1, 2, 3]}') !? {
-    success(v) => ctx = test.is(ctx, "parse object with array length", len(v["numbers"]), 3)
-    failure(e) => ctx = test.fail(ctx, "parse object with array")
-};
-json.parse('[{"id": 1}, {"id": 2}]') !? {
-    success(v) => ctx = test.is(ctx, "parse array of objects", v[1]["id"], 2)
-    failure(e) => ctx = test.fail(ctx, "parse array of objects")
-};
-
-// ============================================
-// stringify: Primitives
-// ============================================
-
-io.println("# stringify: Primitives");
-
-json.stringify(42) !? {
-    success(v) => ctx = test.is(ctx, "stringify int", v, "42")
-    failure(e) => ctx = test.fail(ctx, "stringify int")
-};
-json.stringify(true) !? {
-    success(v) => ctx = test.is(ctx, "stringify true", v, "true")
-    failure(e) => ctx = test.fail(ctx, "stringify true")
-};
-json.stringify(false) !? {
-    success(v) => ctx = test.is(ctx, "stringify false", v, "false")
-    failure(e) => ctx = test.fail(ctx, "stringify false")
-};
-json.stringify("hello") !? {
-    success(v) => ctx = test.is(ctx, "stringify string", v, '"hello"')
-    failure(e) => ctx = test.fail(ctx, "stringify string")
-};
-
-// ============================================
-// stringify: Arrays
-// ============================================
-
-io.println("# stringify: Arrays");
-
-json.stringify([]) !? {
-    success(v) => ctx = test.is(ctx, "stringify empty array", v, "[]")
-    failure(e) => ctx = test.fail(ctx, "stringify empty array")
-};
-json.stringify([1, 2, 3]) !? {
-    success(v) => ctx = test.is(ctx, "stringify int array", v, "[1,2,3]")
-    failure(e) => ctx = test.fail(ctx, "stringify int array")
-};
-
-// ============================================
-// Round-trip
-// ============================================
-
-io.println("# Round-trip");
-
-json.parse(json.stringify(42) !? { success(v) => v failure(_) => "" }) !? {
-    success(v) => ctx = test.is(ctx, "round-trip integer", v, 42)
-    failure(e) => ctx = test.fail(ctx, "round-trip integer")
-};
-json.parse(json.stringify([1, 2, 3]) !? { success(v) => v failure(_) => "" }) !? {
-    success(v) => ctx = test.is(ctx, "round-trip array first", v[0], 1)
-    failure(e) => ctx = test.fail(ctx, "round-trip array")
-};
-
-// ============================================
-// Error cases
-// ============================================
-
-io.println("# Error cases");
-
-json.parse("") !? {
-    success(_) => ctx = test.fail(ctx, "empty input should fail")
-    failure(e) => ctx = test.pass(ctx, "empty input returns failure")
-};
-json.parse("invalid") !? {
-    success(_) => ctx = test.fail(ctx, "invalid input should fail")
-    failure(e) => ctx = test.pass(ctx, "invalid input returns failure")
-};
-
-// ============================================
-// Aliases
-// ============================================
-
-io.println("# Aliases");
-
-json.decode("42") !? {
-    success(v) => ctx = test.is(ctx, "decode alias", v, 42)
-    failure(e) => ctx = test.fail(ctx, "decode alias")
-};
-json.encode(42) !? {
-    success(v) => ctx = test.is(ctx, "encode alias", v, "42")
-    failure(e) => ctx = test.fail(ctx, "encode alias")
-};
-
-test.done(ctx);
+test.new()
+    |> test.plan(30)
+    // parse: Numbers
+    |> test.is("parse integer", p_int, 42)
+    |> test.is("parse negative integer", p_neg, -17)
+    |> test.is("parse float", p_float, 3.14)
+    |> test.is("parse zero", p_zero, 0)
+    // parse: Booleans
+    |> test.is("parse true", p_true, true)
+    |> test.is("parse false", p_false, false)
+    // parse: Strings
+    |> test.is("parse string", p_str, "hello")
+    |> test.is("parse empty string", p_empty_str, "")
+    |> test.is("parse string with space", p_str_space, "hello world")
+    // parse: Arrays
+    |> test.is("parse empty array length", len(p_empty_arr), 0)
+    |> test.is("parse array first", p_arr[0], 1)
+    |> test.is("parse array length", len(p_arr2), 3)
+    // parse: Objects
+    |> test.is("parse object string value", p_obj["name"], "Alice")
+    |> test.is("parse object number value", p_obj2["age"], 30)
+    // parse: Nested structures
+    |> test.is("parse object with array length", len(p_nested["numbers"]), 3)
+    |> test.is("parse array of objects", p_arr_obj[1]["id"], 2)
+    // stringify: Primitives
+    |> test.is("stringify int", s_int, "42")
+    |> test.is("stringify true", s_true, "true")
+    |> test.is("stringify false", s_false, "false")
+    |> test.is("stringify string", s_str, '"hello"')
+    // stringify: Arrays
+    |> test.is("stringify empty array", s_empty_arr, "[]")
+    |> test.is("stringify int array", s_int_arr, "[1,2,3]")
+    // Round-trip
+    |> test.is("round-trip integer", rt_int, 42)
+    |> test.is("round-trip array first", rt_arr[0], 1)
+    // Error cases
+    |> test.ok("empty input returns failure", empty_fails)
+    |> test.ok("invalid input returns failure", invalid_fails)
+    // Aliases
+    |> test.is("decode alias", decode_val, 42)
+    |> test.is("encode alias", encode_val, "42")
+    |> test.done();

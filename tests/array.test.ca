@@ -4,76 +4,56 @@ use test;
 
 io.println("# Array Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 25);
-
-// === Basic Operations ===
-io.println("# Basic operations");
+// === Pre-compute values ===
 arr = [1, 2, 3, 4, 5];
-ctx = test.is(ctx, "array length", len(arr), 5);
-ctx = test.is(ctx, "head", head(arr), 1);
-ctx = test.is(ctx, "tail length", len(tail(arr)), 4);
-ctx = test.is(ctx, "head of tail", head(tail(arr)), 2);
-
-// === Index Access ===
-io.println("# Index access");
-ctx = test.is(ctx, "index 0", arr[0], 1);
-ctx = test.is(ctx, "index 2", arr[2], 3);
-ctx = test.is(ctx, "index 4", arr[4], 5);
-
-// === Push ===
-io.println("# Push");
 arr2 = push([1, 2], 3);
-ctx = test.is(ctx, "after push", len(arr2), 3);
-ctx = test.is(ctx, "pushed element", arr2[2], 3);
-
-// === Empty Array ===
-io.println("# Empty array");
 empty = [];
-ctx = test.is(ctx, "empty array", len(empty), 0);
-
-// === Nested Arrays ===
-io.println("# Nested arrays");
 nested = [[1, 2], [3, 4]];
-ctx = test.is(ctx, "nested length", len(nested), 2);
-ctx = test.is(ctx, "nested[0][0]", nested[0][0], 1);
-ctx = test.is(ctx, "nested[1][1]", nested[1][1], 4);
-
-// === Map ===
-io.println("# Map");
 doubled = map([1, 2, 3], x => x * 2);
-ctx = test.is(ctx, "map first", doubled[0], 2);
-ctx = test.is(ctx, "map second", doubled[1], 4);
-ctx = test.is(ctx, "map third", doubled[2], 6);
-
-// === Filter ===
-io.println("# Filter");
 evens = filter([1, 2, 3, 4, 5], x => x % 2 == 0);
-ctx = test.is(ctx, "filter count", len(evens), 2);
-ctx = test.is(ctx, "filter first", evens[0], 2);
-ctx = test.is(ctx, "filter second", evens[1], 4);
-
-// === Reduce ===
-io.println("# Reduce");
 sum = reduce([1, 2, 3, 4, 5], (acc, x) => acc + x, 0);
-ctx = test.is(ctx, "reduce sum", sum, 15);
-
 product = reduce([1, 2, 3, 4], (acc, x) => acc * x, 1);
-ctx = test.is(ctx, "reduce product", product, 24);
-
-// === Range ===
-io.println("# Range");
 r = range(1, 5);
-ctx = test.is(ctx, "range length", len(r), 4);
-ctx = test.is(ctx, "range first", r[0], 1);
-ctx = test.is(ctx, "range last", r[3], 4);
-
-// === Combination ===
-io.println("# Combination (map + filter + reduce)");
-result = range(1, 11)
+combo_result = range(1, 11)
     |> filter(x => x % 2 == 0)
     |> map(x => x * x)
     |> reduce((acc, x) => acc + x, 0);
-ctx = test.is(ctx, "sum of squared evens", result, 220);
 
-test.done(ctx);
+test.new()
+    |> test.plan(25)
+    // Basic Operations
+    |> test.is("array length", len(arr), 5)
+    |> test.is("head", head(arr), 1)
+    |> test.is("tail length", len(tail(arr)), 4)
+    |> test.is("head of tail", head(tail(arr)), 2)
+    // Index Access
+    |> test.is("index 0", arr[0], 1)
+    |> test.is("index 2", arr[2], 3)
+    |> test.is("index 4", arr[4], 5)
+    // Push
+    |> test.is("after push", len(arr2), 3)
+    |> test.is("pushed element", arr2[2], 3)
+    // Empty Array
+    |> test.is("empty array", len(empty), 0)
+    // Nested Arrays
+    |> test.is("nested length", len(nested), 2)
+    |> test.is("nested[0][0]", nested[0][0], 1)
+    |> test.is("nested[1][1]", nested[1][1], 4)
+    // Map
+    |> test.is("map first", doubled[0], 2)
+    |> test.is("map second", doubled[1], 4)
+    |> test.is("map third", doubled[2], 6)
+    // Filter
+    |> test.is("filter count", len(evens), 2)
+    |> test.is("filter first", evens[0], 2)
+    |> test.is("filter second", evens[1], 4)
+    // Reduce
+    |> test.is("reduce sum", sum, 15)
+    |> test.is("reduce product", product, 24)
+    // Range
+    |> test.is("range length", len(r), 4)
+    |> test.is("range first", r[0], 1)
+    |> test.is("range last", r[3], 4)
+    // Combination
+    |> test.is("sum of squared evens", combo_result, 220)
+    |> test.done();

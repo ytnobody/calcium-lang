@@ -4,63 +4,55 @@ use test;
 
 io.println("# Core Language Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 22);
-
 // === Variables ===
-io.println("# Variables");
 x = 42;
-ctx = test.is(ctx, "simple assignment", x, 42);
 y = x + 8;
-ctx = test.is(ctx, "expression assignment", y, 50);
-
-// === Arithmetic ===
-io.println("# Arithmetic");
-ctx = test.is(ctx, "addition", 1 + 2, 3);
-ctx = test.is(ctx, "subtraction", 10 - 3, 7);
-ctx = test.is(ctx, "multiplication", 4 * 5, 20);
-ctx = test.is(ctx, "division", 15 / 3, 5);
-ctx = test.is(ctx, "modulo", 17 % 5, 2);
-ctx = test.is(ctx, "negation", -5, 0 - 5);
-
-// === Comparison ===
-io.println("# Comparison");
-ctx = test.ok(ctx, "less than", 1 < 2);
-ctx = test.ok(ctx, "less or equal", 2 <= 2);
-ctx = test.ok(ctx, "greater than", 3 > 2);
-ctx = test.ok(ctx, "greater or equal", 3 >= 3);
-ctx = test.ok(ctx, "equal", 5 == 5);
-ctx = test.ok(ctx, "not equal", 5 != 6);
-
-// === Boolean Logic ===
-io.println("# Boolean Logic");
-ctx = test.ok(ctx, "and true", true && true);
-ctx = test.is(ctx, "and false", true && false, false);
-ctx = test.ok(ctx, "or true", true || false);
-ctx = test.is(ctx, "or false", false || false, false);
 
 // === Functions ===
-io.println("# Functions");
 func add(a, b) = a + b;
-ctx = test.is(ctx, "function call", add(2, 3), 5);
-
 func factorial(n) = match n
     0 => 1
     _ => n * factorial(n - 1);
-ctx = test.is(ctx, "recursive factorial", factorial(5), 120);
 
 // === Closures ===
-io.println("# Closures");
 func make_adder(x) = y => x + y;
 add5 = make_adder(5);
-ctx = test.is(ctx, "closure call", add5(10), 15);
 
 // === Recursion ===
-io.println("# Recursion");
 func fib(n) = match n
     0 => 0
     1 => 1
     _ => fib(n - 1) + fib(n - 2);
-ctx = test.is(ctx, "fibonacci(10)", fib(10), 55);
 
-test.done(ctx);
+test.new()
+    |> test.plan(22)
+    // Variables
+    |> test.is("simple assignment", x, 42)
+    |> test.is("expression assignment", y, 50)
+    // Arithmetic
+    |> test.is("addition", 1 + 2, 3)
+    |> test.is("subtraction", 10 - 3, 7)
+    |> test.is("multiplication", 4 * 5, 20)
+    |> test.is("division", 15 / 3, 5)
+    |> test.is("modulo", 17 % 5, 2)
+    |> test.is("negation", -5, 0 - 5)
+    // Comparison
+    |> test.ok("less than", 1 < 2)
+    |> test.ok("less or equal", 2 <= 2)
+    |> test.ok("greater than", 3 > 2)
+    |> test.ok("greater or equal", 3 >= 3)
+    |> test.ok("equal", 5 == 5)
+    |> test.ok("not equal", 5 != 6)
+    // Boolean Logic
+    |> test.ok("and true", true && true)
+    |> test.is("and false", true && false, false)
+    |> test.ok("or true", true || false)
+    |> test.is("or false", false || false, false)
+    // Functions
+    |> test.is("function call", add(2, 3), 5)
+    |> test.is("recursive factorial", factorial(5), 120)
+    // Closures
+    |> test.is("closure call", add5(10), 15)
+    // Recursion
+    |> test.is("fibonacci(10)", fib(10), 55)
+    |> test.done();

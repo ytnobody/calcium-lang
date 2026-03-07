@@ -4,76 +4,23 @@ use test;
 
 io.println("# Hash Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 28);
-
 // Helper: check if array contains a value
 func arr_contains(arr, val) = len(filter(arr, x => x == val)) > 0;
 
-// === Basic Operations ===
-io.println("# Basic operations");
+// === Pre-compute values ===
 h = {a: 1, b: 2, c: 3};
-ctx = test.is(ctx, "dot access a", h.a, 1);
-ctx = test.is(ctx, "bracket access b", h["b"], 2);
-ctx = test.is(ctx, "dot access c", h.c, 3);
-
-// === Keys and Values ===
-io.println("# Keys and values");
-ctx = test.is(ctx, "keys count", len(keys(h)), 3);
-ctx = test.is(ctx, "values count", len(values(h)), 3);
-ctx = test.ok(ctx, "has key a", arr_contains(keys(h), "a"));
-ctx = test.ok(ctx, "has key b", arr_contains(keys(h), "b"));
-ctx = test.ok(ctx, "has value 1", arr_contains(values(h), 1));
-ctx = test.ok(ctx, "has value 2", arr_contains(values(h), 2));
-
-// === Empty Hash ===
-io.println("# Empty hash");
 empty = {};
-ctx = test.is(ctx, "empty keys", len(keys(empty)), 0);
-
-// === Nested Hash ===
-io.println("# Nested hash");
 nested = {
     outer: {
         inner: 42
     }
 };
-ctx = test.is(ctx, "nested dot access", nested.outer.inner, 42);
-ctx = test.is(ctx, "nested bracket access", nested["outer"]["inner"], 42);
-
-// === hash_set ===
-io.println("# hash_set");
 h1 = {a: 1};
 h2 = hash_set(h1, "b", 2);
-ctx = test.is(ctx, "original key", h2.a, 1);
-ctx = test.is(ctx, "added key", h2.b, 2);
-ctx = test.is(ctx, "keys after add", len(keys(h2)), 2);
-
-// hash_set replaces existing key
 h3 = hash_set(h2, "a", 100);
-ctx = test.is(ctx, "replaced key", h3.a, 100);
-ctx = test.is(ctx, "unchanged key", h3.b, 2);
-
-// === hash_merge ===
-io.println("# hash_merge");
 left = {a: 1, b: 2};
 right = {b: 20, c: 3};
 merged = hash_merge(left, right);
-ctx = test.is(ctx, "left only key", merged.a, 1);
-ctx = test.is(ctx, "overwritten key", merged.b, 20);
-ctx = test.is(ctx, "right only key", merged.c, 3);
-
-// === has ===
-io.println("# has");
-ctx = test.ok(ctx, "has existing key", has(h, "a"));
-ctx = test.is(ctx, "has missing key", has(h, "x"), false);
-
-// === get ===
-io.println("# get");
-ctx = test.is(ctx, "get existing", get(h, "a"), 1);
-
-// === Mixed Value Types ===
-io.println("# Mixed value types");
 mixed = {
     num: 42,
     str: "hello",
@@ -81,10 +28,44 @@ mixed = {
     arr: [1, 2, 3],
     nested: {x: 1}
 };
-ctx = test.is(ctx, "num value", mixed.num, 42);
-ctx = test.is(ctx, "str value", mixed.str, "hello");
-ctx = test.ok(ctx, "bool value", mixed.bool);
-ctx = test.is(ctx, "arr value", len(mixed.arr), 3);
-ctx = test.is(ctx, "nested value", mixed.nested.x, 1);
 
-test.done(ctx);
+test.new()
+    |> test.plan(28)
+    // Basic Operations
+    |> test.is("dot access a", h.a, 1)
+    |> test.is("bracket access b", h["b"], 2)
+    |> test.is("dot access c", h.c, 3)
+    // Keys and Values
+    |> test.is("keys count", len(keys(h)), 3)
+    |> test.is("values count", len(values(h)), 3)
+    |> test.ok("has key a", arr_contains(keys(h), "a"))
+    |> test.ok("has key b", arr_contains(keys(h), "b"))
+    |> test.ok("has value 1", arr_contains(values(h), 1))
+    |> test.ok("has value 2", arr_contains(values(h), 2))
+    // Empty Hash
+    |> test.is("empty keys", len(keys(empty)), 0)
+    // Nested Hash
+    |> test.is("nested dot access", nested.outer.inner, 42)
+    |> test.is("nested bracket access", nested["outer"]["inner"], 42)
+    // hash_set
+    |> test.is("original key", h2.a, 1)
+    |> test.is("added key", h2.b, 2)
+    |> test.is("keys after add", len(keys(h2)), 2)
+    |> test.is("replaced key", h3.a, 100)
+    |> test.is("unchanged key", h3.b, 2)
+    // hash_merge
+    |> test.is("left only key", merged.a, 1)
+    |> test.is("overwritten key", merged.b, 20)
+    |> test.is("right only key", merged.c, 3)
+    // has
+    |> test.ok("has existing key", has(h, "a"))
+    |> test.is("has missing key", has(h, "x"), false)
+    // get
+    |> test.is("get existing", get(h, "a"), 1)
+    // Mixed Value Types
+    |> test.is("num value", mixed.num, 42)
+    |> test.is("str value", mixed.str, "hello")
+    |> test.ok("bool value", mixed.bool)
+    |> test.is("arr value", len(mixed.arr), 3)
+    |> test.is("nested value", mixed.nested.x, 1)
+    |> test.done();

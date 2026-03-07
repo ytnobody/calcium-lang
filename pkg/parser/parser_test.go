@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"
@@ -860,4 +861,92 @@ func exprToString(exp ast.Expression) string {
 	default:
 		return ""
 	}
+}
+
+func TestErrorMessagesWithHints(t *testing.T) {
+	t.Run("unclosed parenthesis hint", func(t *testing.T) {
+		input := `(1 + 2;`
+		l := lexer.New(input)
+		p := New(l)
+		p.ParseProgram()
+		errors := p.Errors()
+		if len(errors) == 0 {
+			t.Fatal("expected parse errors, got none")
+		}
+		found := false
+		for _, e := range errors {
+			if containsString(e, "unclosed '('") || containsString(e, "parenthes") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected hint about unclosed parenthesis, got: %v", errors)
+		}
+	})
+
+	t.Run("unexpected EOF hint", func(t *testing.T) {
+		input := `1 +`
+		l := lexer.New(input)
+		p := New(l)
+		p.ParseProgram()
+		errors := p.Errors()
+		if len(errors) == 0 {
+			t.Fatal("expected parse errors, got none")
+		}
+		found := false
+		for _, e := range errors {
+			if containsString(e, "end of input") || containsString(e, "incomplete") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected hint about unexpected end of input, got: %v", errors)
+		}
+	})
+
+	t.Run("source context in error", func(t *testing.T) {
+		input := "x = 1;\ny = (2 + 3;\n"
+		l := lexer.New(input)
+		p := New(l)
+		p.ParseProgram()
+		errors := p.Errors()
+		if len(errors) == 0 {
+			t.Fatal("expected parse errors, got none")
+		}
+		// Error messages should contain source context (caret indicator)
+		found := false
+		for _, e := range errors {
+			if containsString(e, "^") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected caret indicator in error message, got: %v", errors)
+		}
+	})
+
+	t.Run("formatErrorWithHint adds hint", func(t *testing.T) {
+		l := lexer.New("x = 1;")
+		p := New(l)
+		msg := p.formatErrorWithHint(1, 1, "some error", "try this fix")
+		if !containsString(msg, "hint: try this fix") {
+			t.Errorf("expected hint in message, got: %s", msg)
+		}
+	})
+
+	t.Run("formatErrorWithHint without hint", func(t *testing.T) {
+		l := lexer.New("x = 1;")
+		p := New(l)
+		msg := p.formatErrorWithHint(1, 1, "some error", "")
+		if containsString(msg, "hint:") {
+			t.Errorf("expected no hint in message, got: %s", msg)
+		}
+	})
+}
+
+func containsString(s, substr string) bool {
+	return strings.Contains(s, substr)
 }

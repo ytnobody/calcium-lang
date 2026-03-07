@@ -538,6 +538,14 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			return err
 		}
 
+	case bytecode.OpTailCall:
+		numArgs := int(ins[ip+1])
+		vm.currentFrame().ip += 1
+		err := vm.executeTailCall(numArgs)
+		if err != nil {
+			return err
+		}
+
 	case bytecode.OpCallEffect:
 		numArgs := int(ins[ip+1])
 		vm.currentFrame().ip += 1
@@ -1181,6 +1189,54 @@ func (vm *VM) callClosure(cl *value.Closure, numArgs int) error {
 
 	// Allocate space for locals
 	vm.sp = frame.basePointer + cl.Fn.NumLocals
+
+	return nil
+}
+
+// executeTailCall handles tail call optimization by reusing the current frame
+// instead of pushing a new one, preventing stack overflow in recursive calls.
+func (vm *VM) executeTailCall(numArgs int) error {
+	callee := vm.stack[vm.sp-1-numArgs]
+
+	switch callee.Type {
+	case value.TYPE_CLOSURE:
+		return vm.tailCallClosure(callee.AsClosure(), numArgs)
+	case value.TYPE_FUNCTION:
+		cl := &value.Closure{Fn: callee.AsFunction()}
+		return vm.tailCallClosure(cl, numArgs)
+	case value.TYPE_BUILTIN:
+		// Builtins don't benefit from TCO; execute normally
+		return vm.callBuiltin(callee.AsBuiltin(), numArgs)
+	case value.TYPE_PARTIAL_BUILTIN:
+		return vm.callPartialBuiltin(callee.AsPartialBuiltin(), numArgs)
+	default:
+		return fmt.Errorf("calling non-function: %s", callee.Type)
+	}
+}
+
+// tailCallClosure reuses the current frame for tail calls to closures.
+func (vm *VM) tailCallClosure(cl *value.Closure, numArgs int) error {
+	if numArgs != len(cl.Fn.Parameters) {
+		return fmt.Errorf("wrong number of arguments: want=%d, got=%d",
+			len(cl.Fn.Parameters), numArgs)
+	}
+
+	frame := vm.currentFrame()
+
+	// Copy arguments to the current frame's base pointer position
+	// Arguments are at stack[sp-1-numArgs .. sp-1] (callee is at sp-1-numArgs)
+	// We need to place them at frame.basePointer .. frame.basePointer+numArgs
+	argStart := vm.sp - 1 - numArgs + 1 // skip the callee, args start after it
+	for i := 0; i < numArgs; i++ {
+		vm.stack[frame.basePointer+i] = vm.stack[argStart+i]
+	}
+
+	// Reset stack pointer: base pointer + number of locals
+	vm.sp = frame.basePointer + cl.Fn.NumLocals
+
+	// Update the frame to use the new closure (may be a different function in mutual recursion)
+	frame.cl = cl
+	frame.ip = -1 // Will be incremented to 0 at the start of the next iteration
 
 	return nil
 }

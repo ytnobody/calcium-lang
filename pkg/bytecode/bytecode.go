@@ -105,6 +105,9 @@ const (
 	OpAll           // async.all (wait for all tasks)
 	OpTimeout       // schedule.timeout (timeout event source)
 	OpInterval      // schedule.interval (interval event source)
+
+	// Tail call optimization
+	OpTailCall // Tail call (reuse current frame)
 )
 
 // Definition describes an opcode
@@ -196,6 +199,9 @@ var definitions = map[OpCode]*Definition{
 	OpAll:           {"OpAll", []int{}},           // No operands (array of tasks on stack)
 	OpTimeout:       {"OpTimeout", []int{}},       // No operands (ms on stack)
 	OpInterval:      {"OpInterval", []int{}},      // No operands (ms on stack)
+
+	// Tail call optimization
+	OpTailCall: {"OpTailCall", []int{1}}, // 1-byte argument count
 }
 
 // Lookup returns the definition for an opcode

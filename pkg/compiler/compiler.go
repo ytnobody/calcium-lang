@@ -1561,9 +1561,27 @@ func (c *Compiler) removeLastPop() {
 func (c *Compiler) replaceLastPopWithReturn() {
 	if c.lastInstructionIs(bytecode.OpPop) {
 		c.removeLastPop()
-		c.emit(bytecode.OpReturn)
-	} else {
-		c.emit(bytecode.OpReturn)
+	}
+	// Check if the last instruction (before Return) is OpCall
+	// If so, replace it with OpTailCall for tail call optimization
+	c.replaceLastCallWithTailCall()
+	c.emit(bytecode.OpReturn)
+}
+
+// replaceLastCallWithTailCall replaces the last OpCall with OpTailCall
+// for tail call optimization. This is called when the call is in tail position
+// (i.e., the last expression in a function body, right before OpReturn).
+func (c *Compiler) replaceLastCallWithTailCall() {
+	// Only optimize if we're inside a function scope (not global)
+	if c.scopeIndex == 0 {
+		return
+	}
+
+	last := c.scopes[c.scopeIndex].lastInstruction
+	if last.Opcode == bytecode.OpCall {
+		// Replace OpCall with OpTailCall in-place
+		c.currentInstructions()[last.Position] = byte(bytecode.OpTailCall)
+		c.scopes[c.scopeIndex].lastInstruction.Opcode = bytecode.OpTailCall
 	}
 }
 

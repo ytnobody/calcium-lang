@@ -285,6 +285,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseNamespaceDeclaration()
 	case token.USE:
 		return p.parseUseStatement()
+	case token.TYPE:
+		return p.parseTypeDeclaration()
 	case token.IDENT:
 		// Check if this is an assignment: ident = expr
 		if p.peekTokenIs(token.ASSIGN) {
@@ -614,6 +616,67 @@ func (p *Parser) parseConstraintDeclaration() *ast.ConstraintDeclaration {
 
 	p.nextToken()
 	stmt.Body = p.parseExpression(LOWEST)
+
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseTypeDeclaration() *ast.TypeDeclaration {
+	stmt := &ast.TypeDeclaration{Token: p.curToken}
+
+	// Expect type name (must start with uppercase by convention)
+	if !p.expectPeek(token.IDENT) {
+		return nil
+	}
+	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	// Expect =
+	if !p.expectPeek(token.ASSIGN) {
+		return nil
+	}
+
+	// Parse variants: Variant1(field1, field2) | Variant2 | Variant3(field)
+	stmt.Variants = []*ast.VariantDef{}
+	for {
+		p.nextToken()
+		variant := &ast.VariantDef{}
+
+		if !p.curTokenIs(token.IDENT) {
+			p.errors = append(p.errors, fmt.Sprintf("expected variant name, got %s", p.curToken.Type))
+			return nil
+		}
+		variant.Name = p.curToken.Literal
+
+		// Check if variant has fields: Variant(field1, field2)
+		if p.peekTokenIs(token.LPAREN) {
+			p.nextToken() // consume (
+			variant.Fields = []string{}
+			if !p.peekTokenIs(token.RPAREN) {
+				p.nextToken()
+				variant.Fields = append(variant.Fields, p.curToken.Literal)
+				for p.peekTokenIs(token.COMMA) {
+					p.nextToken() // consume ,
+					p.nextToken() // move to next field
+					variant.Fields = append(variant.Fields, p.curToken.Literal)
+				}
+			}
+			if !p.expectPeek(token.RPAREN) {
+				return nil
+			}
+		}
+
+		stmt.Variants = append(stmt.Variants, variant)
+
+		// Check for | (more variants) or end
+		if p.peekTokenIs(token.PIPE_CHAR) {
+			p.nextToken() // consume |
+		} else {
+			break
+		}
+	}
 
 	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
@@ -1387,6 +1450,9 @@ func (p *Parser) parseMatchCase() *ast.MatchCase {
 	if p.curTokenIs(token.UNDERSCORE) {
 		mc.IsDefault = true
 		mc.Pattern = &ast.WildcardExpression{Token: p.curToken}
+	} else if p.curTokenIs(token.IDENT) && p.peekTokenIs(token.LPAREN) && isUpperCase(p.curToken.Literal) {
+		// Constructor pattern: Name(x, y) where Name starts with uppercase
+		mc.Pattern = p.parseConstructorPattern()
 	} else {
 		// Parse pattern/condition - use LAMBDA precedence to stop before =>
 		mc.Pattern = p.parseExpression(LAMBDA)
@@ -1411,6 +1477,39 @@ func (p *Parser) parseMatchCase() *ast.MatchCase {
 	mc.Body = p.parseExpression(LAMBDA)
 
 	return mc
+}
+
+func (p *Parser) parseConstructorPattern() ast.Expression {
+	cp := &ast.ConstructorPattern{
+		Token: p.curToken,
+		Name:  p.curToken.Literal,
+	}
+
+	p.nextToken() // consume (
+	cp.Fields = []*ast.Identifier{}
+
+	if !p.peekTokenIs(token.RPAREN) {
+		p.nextToken()
+		cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+		for p.peekTokenIs(token.COMMA) {
+			p.nextToken() // consume ,
+			p.nextToken() // move to next field
+			cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+		}
+	}
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	return cp
+}
+
+func isUpperCase(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	return s[0] >= 'A' && s[0] <= 'Z'
 }
 
 func (p *Parser) parseEffectHandleExpression(subject ast.Expression) ast.Expression {

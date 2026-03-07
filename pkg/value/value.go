@@ -30,6 +30,7 @@ const (
 	TYPE_TASK         // Return value of async.spawn
 	TYPE_HANDLER      // Return value of async.expects
 	TYPE_EVENT_SOURCE // Event source (stdin, timeout, interval, task.done)
+	TYPE_ADT          // Algebraic data type variant value
 )
 
 func (t Type) String() string {
@@ -72,6 +73,8 @@ func (t Type) String() string {
 		return "handler"
 	case TYPE_EVENT_SOURCE:
 		return "event_source"
+	case TYPE_ADT:
+		return "adt"
 	default:
 		return "unknown"
 	}
@@ -223,6 +226,19 @@ type EventSource struct {
 	Closed  bool
 }
 
+// ADT represents an algebraic data type variant value
+type ADT struct {
+	TypeName string  // e.g., "Maybe", "Tree"
+	Tag      string  // e.g., "Some", "None"
+	Values   []Value // contained values
+}
+
+// ADTDef represents the definition of an algebraic data type
+type ADTDef struct {
+	Name     string         // e.g., "Maybe"
+	Variants map[string]int // variant name -> arity
+}
+
 // Regex represents a compiled regular expression
 type Regex struct {
 	Pattern string         // Original pattern string
@@ -337,6 +353,11 @@ func Tuple(elements []Value) Value {
 // RegexVal creates a regex value
 func RegexVal(r *Regex) Value {
 	return Value{Type: TYPE_REGEX, Data: r}
+}
+
+// ADTVal creates an ADT variant value
+func ADTVal(adt *ADT) Value {
+	return Value{Type: TYPE_ADT, Data: adt}
 }
 
 // NewHash creates a new empty hash
@@ -479,6 +500,11 @@ func (v Value) AsRegex() *Regex {
 	return v.Data.(*Regex)
 }
 
+// AsADT returns the ADT variant value
+func (v Value) AsADT() *ADT {
+	return v.Data.(*ADT)
+}
+
 // ToNumber converts value to a numeric type for arithmetic
 func (v Value) ToNumber() (float64, bool) {
 	switch v.Type {
@@ -589,6 +615,17 @@ func (v Value) Equals(other Value) bool {
 		return v.AsSuccess().Equals(other.AsSuccess())
 	case TYPE_FAILURE:
 		return v.AsFailure().Equals(other.AsFailure())
+	case TYPE_ADT:
+		a1, a2 := v.AsADT(), other.AsADT()
+		if a1.Tag != a2.Tag || a1.TypeName != a2.TypeName || len(a1.Values) != len(a2.Values) {
+			return false
+		}
+		for i := range a1.Values {
+			if !a1.Values[i].Equals(a2.Values[i]) {
+				return false
+			}
+		}
+		return true
 	default:
 		return false
 	}
@@ -682,6 +719,16 @@ func (v Value) String() string {
 			statusStr = "cancelled"
 		}
 		return fmt.Sprintf("<handler %d:%s>", h.ID, statusStr)
+	case TYPE_ADT:
+		adt := v.AsADT()
+		if len(adt.Values) == 0 {
+			return adt.Tag
+		}
+		strs := make([]string, len(adt.Values))
+		for i, val := range adt.Values {
+			strs[i] = val.String()
+		}
+		return fmt.Sprintf("%s(%s)", adt.Tag, strings.Join(strs, ", "))
 	case TYPE_EVENT_SOURCE:
 		es := v.AsEventSource()
 		kindStr := "unknown"

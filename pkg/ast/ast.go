@@ -122,6 +122,22 @@ type UseStatement struct {
 func (us *UseStatement) statementNode()       {}
 func (us *UseStatement) TokenLiteral() string { return us.Token.Literal }
 
+// TypeDeclaration represents: type Name = Variant1(params) | Variant2(params);
+type TypeDeclaration struct {
+	Token    token.Token // the TYPE token
+	Name     *Identifier
+	Variants []*VariantDef
+}
+
+func (td *TypeDeclaration) statementNode()       {}
+func (td *TypeDeclaration) TokenLiteral() string { return td.Token.Literal }
+
+// VariantDef represents a variant definition in a type declaration
+type VariantDef struct {
+	Name   string   // e.g., "Some", "None"
+	Fields []string // e.g., ["value"] for Some(value), empty for None
+}
+
 // ---------------------------------------------------------------------
 // Expressions
 // ---------------------------------------------------------------------
@@ -442,6 +458,16 @@ type DoExpression struct {
 
 func (de *DoExpression) expressionNode()      {}
 func (de *DoExpression) TokenLiteral() string { return de.Token.Literal }
+
+// ConstructorPattern represents a pattern like Some(x) or Leaf(v) in match
+type ConstructorPattern struct {
+	Token  token.Token   // the constructor name token
+	Name   string        // constructor name, e.g., "Some"
+	Fields []*Identifier // binding variables, e.g., [x]
+}
+
+func (cp *ConstructorPattern) expressionNode()      {}
+func (cp *ConstructorPattern) TokenLiteral() string { return cp.Token.Literal }
 
 // ConstrainedParameter represents a parameter with constraint: param: Constraint?
 type ConstrainedParameter struct {

@@ -1870,3 +1870,95 @@ func runVmExpr(t *testing.T, input string) value.Value {
 	}
 	return machine.LastPoppedStackElem()
 }
+
+func TestADT(t *testing.T) {
+	tests := []vmTestCase{
+		// Zero-arity constructor
+		{
+			input:    `type Maybe = Some(value) | None; None;`,
+			expected: "None",
+		},
+		// Single-arity constructor
+		{
+			input:    `type Maybe = Some(value) | None; Some(42);`,
+			expected: "Some(42)",
+		},
+		// Pattern match on ADT - match first case
+		{
+			input:    `type Maybe = Some(value) | None; x = Some(10); match x Some(v) => v _ => 0;`,
+			expected: int64(10),
+		},
+		// Pattern match on ADT - match second case (None)
+		{
+			input:    `type Maybe = Some(value) | None; x = None; match x Some(v) => v _ => 0;`,
+			expected: int64(0),
+		},
+		// ADT equality
+		{
+			input:    `type Maybe = Some(value) | None; Some(1) == Some(1);`,
+			expected: "true",
+		},
+		{
+			input:    `type Maybe = Some(value) | None; Some(1) == Some(2);`,
+			expected: "false",
+		},
+		{
+			input:    `type Maybe = Some(value) | None; None == None;`,
+			expected: "true",
+		},
+		// Multi-field constructor
+		{
+			input:    `type Pair = MkPair(a, b); p = MkPair(1, 2); match p MkPair(x, y) => x + y _ => 0;`,
+			expected: int64(3),
+		},
+		// Recursive ADT (Tree)
+		{
+			input: `type Tree = Leaf(v) | Node(l, r);
+				func sum_tree(t) = match t
+					Leaf(v) => v
+					Node(l, r) => sum_tree(l) + sum_tree(r);
+				sum_tree(Node(Leaf(1), Node(Leaf(2), Leaf(3))));`,
+			expected: int64(6),
+		},
+		// Index access on ADT values
+		{
+			input:    `type Maybe = Some(value) | None; x = Some(42); x[0];`,
+			expected: int64(42),
+		},
+	}
+
+	for _, tt := range tests {
+		program := parse(tt.input)
+		comp := compiler.New()
+		err := comp.Compile(program)
+		if err != nil {
+			t.Fatalf("compiler error for %q: %s", tt.input, err)
+		}
+
+		machine := New(comp.Constants())
+		err = machine.Run(comp.Bytecode().Instructions)
+		if err != nil {
+			t.Fatalf("vm error for %q: %s", tt.input, err)
+		}
+
+		stackElem := machine.LastPoppedStackElem()
+
+		switch expected := tt.expected.(type) {
+		case int64:
+			if stackElem.Type != value.TYPE_INT || stackElem.AsInt() != expected {
+				t.Errorf("for %q: expected %d, got %s", tt.input, expected, stackElem.String())
+			}
+		case string:
+			actual := stackElem.String()
+			if actual != expected {
+				t.Errorf("for %q: expected %q, got %q", tt.input, expected, actual)
+			}
+		case nil:
+			if stackElem.Type != value.TYPE_NULL {
+				t.Errorf("for %q: expected null, got %s", tt.input, stackElem.String())
+			}
+		default:
+			t.Fatalf("unhandled expected type for %q", tt.input)
+		}
+	}
+}

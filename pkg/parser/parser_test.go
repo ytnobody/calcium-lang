@@ -950,3 +950,190 @@ func TestErrorMessagesWithHints(t *testing.T) {
 func containsString(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
+
+// ---- gradual typing tests ----
+
+func TestTypedAssignmentStatement(t *testing.T) {
+	input := `x: Int = 42;`
+	l := lexer.New(input)
+	p := New(l)
+	prog := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(prog.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(prog.Statements))
+	}
+
+	stmt, ok := prog.Statements[0].(*ast.AssignmentStatement)
+	if !ok {
+		t.Fatalf("expected *ast.AssignmentStatement, got %T", prog.Statements[0])
+	}
+
+	if stmt.Name.Value != "x" {
+		t.Errorf("expected name 'x', got %q", stmt.Name.Value)
+	}
+
+	if stmt.TypeAnnot == nil {
+		t.Fatal("expected type annotation, got nil")
+	}
+
+	if stmt.TypeAnnot.Name != "Int" {
+		t.Errorf("expected type annotation 'Int', got %q", stmt.TypeAnnot.Name)
+	}
+}
+
+func TestTypedAssignmentMultiple(t *testing.T) {
+	input := `
+x: Int = 1;
+name: String = "hello";
+flag: Bool = true;
+`
+	l := lexer.New(input)
+	p := New(l)
+	prog := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(prog.Statements) != 3 {
+		t.Fatalf("expected 3 statements, got %d", len(prog.Statements))
+	}
+
+	expected := []struct {
+		name     string
+		typeName string
+	}{
+		{"x", "Int"},
+		{"name", "String"},
+		{"flag", "Bool"},
+	}
+
+	for i, ex := range expected {
+		stmt, ok := prog.Statements[i].(*ast.AssignmentStatement)
+		if !ok {
+			t.Fatalf("[%d] expected *ast.AssignmentStatement, got %T", i, prog.Statements[i])
+		}
+		if stmt.Name.Value != ex.name {
+			t.Errorf("[%d] expected name %q, got %q", i, ex.name, stmt.Name.Value)
+		}
+		if stmt.TypeAnnot == nil {
+			t.Fatalf("[%d] expected type annotation, got nil", i)
+		}
+		if stmt.TypeAnnot.Name != ex.typeName {
+			t.Errorf("[%d] expected type %q, got %q", i, ex.typeName, stmt.TypeAnnot.Name)
+		}
+	}
+}
+
+func TestUntypedAssignmentUnchanged(t *testing.T) {
+	// Plain assignment without type annotation should still work.
+	input := `x = 42;`
+	l := lexer.New(input)
+	p := New(l)
+	prog := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := prog.Statements[0].(*ast.AssignmentStatement)
+	if !ok {
+		t.Fatalf("expected *ast.AssignmentStatement, got %T", prog.Statements[0])
+	}
+	if stmt.TypeAnnot != nil {
+		t.Errorf("expected no type annotation, got %q", stmt.TypeAnnot.Name)
+	}
+}
+
+func TestFunctionDeclarationWithTypes(t *testing.T) {
+	input := `func add(a: Int, b: Int): Int = a + b;`
+	l := lexer.New(input)
+	p := New(l)
+	prog := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(prog.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(prog.Statements))
+	}
+
+	fd, ok := prog.Statements[0].(*ast.FunctionDeclaration)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionDeclaration, got %T", prog.Statements[0])
+	}
+
+	if fd.Name.Value != "add" {
+		t.Errorf("expected function name 'add', got %q", fd.Name.Value)
+	}
+
+	if len(fd.Parameters) != 2 {
+		t.Fatalf("expected 2 parameters, got %d", len(fd.Parameters))
+	}
+
+	if len(fd.ParamTypes) != 2 {
+		t.Fatalf("expected 2 param type annotations, got %d", len(fd.ParamTypes))
+	}
+
+	if fd.ParamTypes[0] == nil || fd.ParamTypes[0].Name != "Int" {
+		t.Errorf("expected param 0 type 'Int', got %v", fd.ParamTypes[0])
+	}
+	if fd.ParamTypes[1] == nil || fd.ParamTypes[1].Name != "Int" {
+		t.Errorf("expected param 1 type 'Int', got %v", fd.ParamTypes[1])
+	}
+
+	if fd.ReturnType == nil {
+		t.Fatal("expected return type annotation, got nil")
+	}
+	if fd.ReturnType.Name != "Int" {
+		t.Errorf("expected return type 'Int', got %q", fd.ReturnType.Name)
+	}
+}
+
+func TestFunctionDeclarationWithTypedParamsNoReturn(t *testing.T) {
+	input := `func double(n: Int) = n + n;`
+	l := lexer.New(input)
+	p := New(l)
+	prog := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	fd, ok := prog.Statements[0].(*ast.FunctionDeclaration)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionDeclaration, got %T", prog.Statements[0])
+	}
+
+	if fd.ReturnType != nil {
+		t.Error("expected no return type annotation")
+	}
+	if len(fd.ParamTypes) != 1 || fd.ParamTypes[0] == nil {
+		t.Fatalf("expected 1 non-nil param type annotation, got %v", fd.ParamTypes)
+	}
+	if fd.ParamTypes[0].Name != "Int" {
+		t.Errorf("expected param type 'Int', got %q", fd.ParamTypes[0].Name)
+	}
+}
+
+func TestConstraintAnnotationUnchanged(t *testing.T) {
+	// Constraints with '?' should still work as before.
+	input := `
+constraint Positive(x) = x > 0;
+func square(n: Positive?) = n * n;
+`
+	l := lexer.New(input)
+	p := New(l)
+	prog := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(prog.Statements) != 2 {
+		t.Fatalf("expected 2 statements, got %d", len(prog.Statements))
+	}
+
+	fd, ok := prog.Statements[1].(*ast.FunctionDeclaration)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionDeclaration, got %T", prog.Statements[1])
+	}
+
+	// Should have a constraint, not a type annotation
+	if len(fd.Constraints) != 1 {
+		t.Fatalf("expected 1 constraint, got %d", len(fd.Constraints))
+	}
+	if fd.Constraints[0] == nil {
+		t.Error("expected non-nil constraint")
+	}
+	if len(fd.ParamTypes) != 1 || fd.ParamTypes[0] != nil {
+		t.Error("expected no type annotation for constrained param")
+	}
+}

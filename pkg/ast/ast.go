@@ -6,6 +6,14 @@ import (
 	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
+// TypeAnnotation represents an optional type annotation in the source code.
+// It is used in variable assignments, function parameters, and return types.
+// Examples: `: Int`, `: String`, `: Array`
+type TypeAnnotation struct {
+	Token token.Token // the IDENT token of the type name
+	Name  string      // e.g., "Int", "String", "Any"
+}
+
 // Node is the base interface for all AST nodes
 type Node interface {
 	TokenLiteral() string
@@ -49,10 +57,12 @@ func (es *ExpressionStatement) statementNode()       {}
 func (es *ExpressionStatement) TokenLiteral() string { return es.Token.Literal }
 
 // AssignmentStatement represents variable binding: x = expr;
+// Optionally typed: x: Int = expr;
 type AssignmentStatement struct {
-	Token token.Token // the IDENT token
-	Name  *Identifier
-	Value Expression
+	Token      token.Token     // the IDENT token
+	Name       *Identifier
+	TypeAnnot  *TypeAnnotation // optional type annotation (nil if not annotated)
+	Value      Expression
 }
 
 func (as *AssignmentStatement) statementNode()       {}
@@ -80,11 +90,14 @@ func (ht *HeadTailDestructuringStatement) statementNode()       {}
 func (ht *HeadTailDestructuringStatement) TokenLiteral() string { return ht.Token.Literal }
 
 // FunctionDeclaration represents: func name(params) = body;
+// Optionally typed: func name(a: Int, b: Int): Int = body;
 type FunctionDeclaration struct {
-	Token       token.Token // the FUNC token
+	Token       token.Token      // the FUNC token
 	Name        *Identifier
 	Parameters  []*Identifier
-	Constraints []*Identifier // constraint for each parameter (nil if none)
+	Constraints []*Identifier    // constraint for each parameter (nil if none)
+	ParamTypes  []*TypeAnnotation // optional type annotation for each parameter (nil if not annotated)
+	ReturnType  *TypeAnnotation  // optional return type annotation (nil if not annotated)
 	Body        Expression
 	IsEffect    bool // true for func! (side-effect function)
 }
@@ -320,9 +333,11 @@ func (me *MemberExpression) expressionNode()      {}
 func (me *MemberExpression) TokenLiteral() string { return me.Token.Literal }
 
 // LambdaExpression represents (params) => expr or x => expr
+// Optionally typed: (a: Int, b: Int) => a + b
 type LambdaExpression struct {
-	Token      token.Token // the '=>' token
+	Token      token.Token      // the '=>' token
 	Parameters []*Identifier
+	ParamTypes []*TypeAnnotation // optional type annotation for each parameter (nil if not annotated)
 	Body       Expression
 }
 

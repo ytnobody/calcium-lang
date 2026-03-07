@@ -8,6 +8,7 @@ import (
 	"github.com/ytnobody/calcium-lang/pkg/ast"
 	"github.com/ytnobody/calcium-lang/pkg/lexer"
 	"github.com/ytnobody/calcium-lang/pkg/token"
+	"github.com/ytnobody/calcium-lang/pkg/types"
 )
 
 // Precedence levels
@@ -345,6 +346,10 @@ func (p *Parser) parseStatement() ast.Statement {
 		if p.peekTokenIs(token.ASSIGN) {
 			return p.parseAssignmentStatement()
 		}
+		// Check if this is a typed assignment: ident: TypeName = expr
+		if p.peekTokenIs(token.COLON) {
+			return p.parseTypedAssignmentStatement()
+		}
 		return p.parseExpressionStatement()
 	case token.LBRACKET:
 		// Could be array destructuring or array literal expression
@@ -556,6 +561,56 @@ func (p *Parser) parseAssignmentStatement() *ast.AssignmentStatement {
 	return stmt
 }
 
+// parseTypedAssignmentStatement parses: ident: TypeName = expr
+// This is a type-annotated variable binding introduced by gradual typing.
+// If the token after ':' is not a built-in type name, it falls back to a
+// plain expression statement (preserving backward compatibility with constraint
+// notation in other contexts).
+func (p *Parser) parseTypedAssignmentStatement() *ast.AssignmentStatement {
+	stmt := &ast.AssignmentStatement{Token: p.curToken}
+	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	// consume ':'
+	p.nextToken()
+
+	// get type name
+	p.nextToken()
+	typeTok := p.curToken
+	typeName := typeTok.Literal
+
+	// Only accept known built-in type names; otherwise treat as expression statement
+	if !types.IsBuiltinTypeName(typeName) {
+		// Not a type annotation — fall back to expression statement
+		// We can't easily "unread" tokens so we report an error.
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			typeTok.Line, typeTok.Column,
+			fmt.Sprintf("unknown type name %q in type annotation; expected a built-in type (Int, Float, String, Bool, Null, Array, Hash, Tuple, Func, Regex, Any, Success, Failure)", typeName),
+		))
+		return nil
+	}
+
+	stmt.TypeAnnot = &ast.TypeAnnotation{Token: typeTok, Name: typeName}
+
+	if !p.expectPeek(token.ASSIGN) {
+		return nil
+	}
+
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
+	// Handle !? error handling
+	if p.peekTokenIs(token.EFFECT_END) {
+		p.nextToken()
+		stmt.Value = p.parseEffectHandleExpression(stmt.Value)
+	}
+
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
 func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 	stmt := &ast.FunctionDeclaration{Token: p.curToken}
 	stmt.IsEffect = p.curToken.Type == token.FUNC_EFFECT
@@ -570,7 +625,25 @@ func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 		return nil
 	}
 
-	stmt.Parameters, stmt.Constraints = p.parseFunctionParametersWithConstraints()
+	stmt.Parameters, stmt.Constraints, stmt.ParamTypes = p.parseFunctionParametersWithConstraints()
+
+	// Optional return type annotation: ): ReturnType =
+	// Syntax: func add(a: Int, b: Int): Int = a + b
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken() // consume ':'
+		p.nextToken() // get return type name
+		retTypeTok := p.curToken
+		retTypeName := retTypeTok.Literal
+		if types.IsBuiltinTypeName(retTypeName) {
+			stmt.ReturnType = &ast.TypeAnnotation{Token: retTypeTok, Name: retTypeName}
+		} else {
+			p.errors = append(p.errors, p.formatErrorWithContext(
+				retTypeTok.Line, retTypeTok.Column,
+				fmt.Sprintf("unknown return type %q; expected a built-in type (Int, Float, String, Bool, Null, Array, Hash, Tuple, Func, Regex, Any, Success, Failure)", retTypeName),
+			))
+			return nil
+		}
+	}
 
 	if !p.expectPeek(token.ASSIGN) {
 		return nil
@@ -593,59 +666,82 @@ func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 }
 
 func (p *Parser) parseFunctionParameters() []*ast.Identifier {
-	params, _ := p.parseFunctionParametersWithConstraints()
+	params, _, _ := p.parseFunctionParametersWithConstraints()
 	return params
 }
 
-func (p *Parser) parseFunctionParametersWithConstraints() ([]*ast.Identifier, []*ast.Identifier) {
+// parseFunctionParametersWithConstraints parses function parameters, returning:
+//   - the list of parameter identifiers
+//   - the list of constraint annotations (nil element = no constraint for that param)
+//   - the list of type annotations (nil element = no type annotation for that param)
+//
+// Each parameter may carry a type annotation OR a constraint (not both):
+//   - param: Int          → type annotation (built-in type name, no trailing '?')
+//   - param: Positive?    → constraint (trailing '?')
+//   - param: Positive     → constraint (user-defined name without '?', backward compat)
+func (p *Parser) parseFunctionParametersWithConstraints() ([]*ast.Identifier, []*ast.Identifier, []*ast.TypeAnnotation) {
 	identifiers := []*ast.Identifier{}
 	constraints := []*ast.Identifier{}
+	typeAnnots := []*ast.TypeAnnotation{}
 
 	if p.peekTokenIs(token.RPAREN) {
 		p.nextToken()
-		return identifiers, constraints
+		return identifiers, constraints, typeAnnots
 	}
 
 	p.nextToken()
 
-	ident, constraint := p.parseParameterWithConstraint()
+	ident, constraint, typeAnnot := p.parseParameterWithConstraint()
 	identifiers = append(identifiers, ident)
 	constraints = append(constraints, constraint)
+	typeAnnots = append(typeAnnots, typeAnnot)
 
 	for p.peekTokenIs(token.COMMA) {
 		p.nextToken()
 		p.nextToken()
-		ident, constraint := p.parseParameterWithConstraint()
+		ident, constraint, typeAnnot := p.parseParameterWithConstraint()
 		identifiers = append(identifiers, ident)
 		constraints = append(constraints, constraint)
+		typeAnnots = append(typeAnnots, typeAnnot)
 	}
 
 	if !p.expectPeek(token.RPAREN) {
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	return identifiers, constraints
+	return identifiers, constraints, typeAnnots
 }
 
-func (p *Parser) parseParameterWithConstraint() (*ast.Identifier, *ast.Identifier) {
+// parseParameterWithConstraint parses a single parameter, which may have:
+//   - a type annotation:  param: Int
+//   - a constraint:       param: Positive?  or  param: Positive
+//   - nothing:            param
+func (p *Parser) parseParameterWithConstraint() (*ast.Identifier, *ast.Identifier, *ast.TypeAnnotation) {
 	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
-	// Check for constraint: param: Constraint?
+	// Check for annotation after ':'
 	if p.peekTokenIs(token.COLON) {
 		p.nextToken() // consume ':'
-		p.nextToken() // get constraint name
+		p.nextToken() // get annotation name
 
-		constraint := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		annotTok := p.curToken
+		annotName := annotTok.Literal
 
-		// Expect '?' after constraint name
+		// If it's a known built-in type name and NOT followed by '?', treat as type annotation.
+		if types.IsBuiltinTypeName(annotName) && !p.peekTokenIs(token.QUESTION) {
+			typeAnnot := &ast.TypeAnnotation{Token: annotTok, Name: annotName}
+			return ident, nil, typeAnnot
+		}
+
+		// Otherwise treat as a constraint (legacy behaviour)
+		constraint := &ast.Identifier{Token: annotTok, Value: annotName}
 		if p.peekTokenIs(token.QUESTION) {
 			p.nextToken() // consume '?'
 		}
-
-		return ident, constraint
+		return ident, constraint, nil
 	}
 
-	return ident, nil
+	return ident, nil, nil
 }
 
 func (p *Parser) parseConstraintDeclaration() *ast.ConstraintDeclaration {

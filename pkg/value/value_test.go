@@ -30,6 +30,8 @@ func TestTypeString(t *testing.T) {
 		{TYPE_TASK, "task"},
 		{TYPE_HANDLER, "handler"},
 		{TYPE_EVENT_SOURCE, "event_source"},
+		{TYPE_ADT, "adt"},
+		{TYPE_TUPLE, "tuple"},
 		{Type(999), "unknown"},
 	}
 
@@ -730,4 +732,149 @@ type testError struct {
 
 func (e *testError) Error() string {
 	return e.msg
+}
+
+// TestADTTypeString tests that TYPE_ADT has the correct string representation.
+func TestADTTypeString(t *testing.T) {
+	if TYPE_ADT.String() != "adt" {
+		t.Errorf("TYPE_ADT.String() = %q, want %q", TYPE_ADT.String(), "adt")
+	}
+}
+
+// TestADTVal tests the ADTVal constructor.
+func TestADTVal(t *testing.T) {
+	t.Run("ZeroArity", func(t *testing.T) {
+		adt := &ADT{
+			TypeName: "Maybe",
+			Tag:      "None",
+			Values:   []Value{},
+		}
+		v := ADTVal(adt)
+		if v.Type != TYPE_ADT {
+			t.Errorf("Type = %v, want TYPE_ADT", v.Type)
+		}
+		got := v.AsADT()
+		if got.TypeName != "Maybe" {
+			t.Errorf("TypeName = %q, want %q", got.TypeName, "Maybe")
+		}
+		if got.Tag != "None" {
+			t.Errorf("Tag = %q, want %q", got.Tag, "None")
+		}
+		if len(got.Values) != 0 {
+			t.Errorf("Values should be empty, got %d elements", len(got.Values))
+		}
+	})
+
+	t.Run("OneArity", func(t *testing.T) {
+		adt := &ADT{
+			TypeName: "Maybe",
+			Tag:      "Some",
+			Values:   []Value{Int(42)},
+		}
+		v := ADTVal(adt)
+		if v.Type != TYPE_ADT {
+			t.Errorf("Type = %v, want TYPE_ADT", v.Type)
+		}
+		got := v.AsADT()
+		if got.Tag != "Some" {
+			t.Errorf("Tag = %q, want %q", got.Tag, "Some")
+		}
+		if len(got.Values) != 1 {
+			t.Fatalf("expected 1 value, got %d", len(got.Values))
+		}
+		if got.Values[0].AsInt() != 42 {
+			t.Errorf("Values[0] = %d, want 42", got.Values[0].AsInt())
+		}
+	})
+
+	t.Run("MultiArity", func(t *testing.T) {
+		adt := &ADT{
+			TypeName: "Either",
+			Tag:      "Right",
+			Values:   []Value{String("ok"), Int(1)},
+		}
+		v := ADTVal(adt)
+		got := v.AsADT()
+		if len(got.Values) != 2 {
+			t.Fatalf("expected 2 values, got %d", len(got.Values))
+		}
+		if got.Values[0].AsString() != "ok" {
+			t.Errorf("Values[0] = %q, want ok", got.Values[0].AsString())
+		}
+	})
+}
+
+// TestADTString tests the string representation of ADT values.
+func TestADTString(t *testing.T) {
+	tests := []struct {
+		adt  *ADT
+		want string
+	}{
+		{
+			adt:  &ADT{TypeName: "Maybe", Tag: "None", Values: []Value{}},
+			want: "None",
+		},
+		{
+			adt:  &ADT{TypeName: "Maybe", Tag: "Some", Values: []Value{Int(42)}},
+			want: "Some(42)",
+		},
+		{
+			adt:  &ADT{TypeName: "Tree", Tag: "Leaf", Values: []Value{Int(1)}},
+			want: "Leaf(1)",
+		},
+		{
+			adt: &ADT{TypeName: "Pair", Tag: "MkPair", Values: []Value{Int(1), Int(2)}},
+			want: "MkPair(1, 2)",
+		},
+		{
+			adt: &ADT{
+				TypeName: "Tree",
+				Tag:      "Node",
+				Values: []Value{
+					ADTVal(&ADT{TypeName: "Tree", Tag: "Leaf", Values: []Value{Int(1)}}),
+					ADTVal(&ADT{TypeName: "Tree", Tag: "Leaf", Values: []Value{Int(2)}}),
+				},
+			},
+			want: "Node(Leaf(1), Leaf(2))",
+		},
+	}
+
+	for _, tt := range tests {
+		v := ADTVal(tt.adt)
+		got := v.String()
+		if got != tt.want {
+			t.Errorf("ADTVal(%+v).String() = %q, want %q", tt.adt, got, tt.want)
+		}
+	}
+}
+
+// TestADTEquals tests equality of ADT values.
+func TestADTEquals(t *testing.T) {
+	noneA := ADTVal(&ADT{TypeName: "Maybe", Tag: "None", Values: []Value{}})
+	noneB := ADTVal(&ADT{TypeName: "Maybe", Tag: "None", Values: []Value{}})
+	someA := ADTVal(&ADT{TypeName: "Maybe", Tag: "Some", Values: []Value{Int(42)}})
+	someB := ADTVal(&ADT{TypeName: "Maybe", Tag: "Some", Values: []Value{Int(42)}})
+	someC := ADTVal(&ADT{TypeName: "Maybe", Tag: "Some", Values: []Value{Int(99)}})
+
+	// Different type - same tag: should not be equal (TypeName differs)
+	leftA := ADTVal(&ADT{TypeName: "Either", Tag: "Some", Values: []Value{Int(42)}})
+
+	tests := []struct {
+		a, b Value
+		want bool
+	}{
+		{noneA, noneB, true},            // same tag, same type, no values
+		{someA, someB, true},            // same tag, same type, same value
+		{someA, someC, false},           // same tag, same type, different value
+		{noneA, someA, false},           // different tag
+		{someA, leftA, false},           // same tag, different TypeName
+		{someA, Int(42), false},         // ADT vs non-ADT
+	}
+
+	for _, tt := range tests {
+		got := tt.a.Equals(tt.b)
+		if got != tt.want {
+			t.Errorf("%s.Equals(%s) = %v, want %v", tt.a.String(), tt.b.String(), got, tt.want)
+		}
+	}
 }

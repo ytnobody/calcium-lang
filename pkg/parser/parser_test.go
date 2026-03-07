@@ -861,3 +861,222 @@ func exprToString(exp ast.Expression) string {
 		return ""
 	}
 }
+
+// TestTypeDeclaration tests parsing of algebraic data type declarations.
+func TestTypeDeclaration(t *testing.T) {
+	tests := []struct {
+		input            string
+		typeName         string
+		expectedVariants []struct {
+			name   string
+			fields []string
+		}
+	}{
+		{
+			// Zero-arity and one-arity variants (Maybe)
+			input:    `type Maybe = Some(value) | None;`,
+			typeName: "Maybe",
+			expectedVariants: []struct {
+				name   string
+				fields []string
+			}{
+				{name: "Some", fields: []string{"value"}},
+				{name: "None", fields: []string{}},
+			},
+		},
+		{
+			// Tree with two fields
+			input:    `type Tree = Leaf(v) | Node(l, r);`,
+			typeName: "Tree",
+			expectedVariants: []struct {
+				name   string
+				fields []string
+			}{
+				{name: "Leaf", fields: []string{"v"}},
+				{name: "Node", fields: []string{"l", "r"}},
+			},
+		},
+		{
+			// Either with two one-arity variants
+			input:    `type Either = Left(value) | Right(value);`,
+			typeName: "Either",
+			expectedVariants: []struct {
+				name   string
+				fields []string
+			}{
+				{name: "Left", fields: []string{"value"}},
+				{name: "Right", fields: []string{"value"}},
+			},
+		},
+		{
+			// Single variant with no fields (unit type)
+			input:    `type Unit = Nil;`,
+			typeName: "Unit",
+			expectedVariants: []struct {
+				name   string
+				fields []string
+			}{
+				{name: "Nil", fields: []string{}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("input %q: program.Statements should have 1 statement, got=%d",
+				tt.input, len(program.Statements))
+		}
+
+		stmt, ok := program.Statements[0].(*ast.TypeDeclaration)
+		if !ok {
+			t.Fatalf("input %q: program.Statements[0] not *ast.TypeDeclaration, got=%T",
+				tt.input, program.Statements[0])
+		}
+
+		if stmt.Name.Value != tt.typeName {
+			t.Errorf("input %q: TypeDeclaration.Name = %q, want %q",
+				tt.input, stmt.Name.Value, tt.typeName)
+		}
+
+		if len(stmt.Variants) != len(tt.expectedVariants) {
+			t.Fatalf("input %q: expected %d variants, got %d",
+				tt.input, len(tt.expectedVariants), len(stmt.Variants))
+		}
+
+		for i, ev := range tt.expectedVariants {
+			variant := stmt.Variants[i]
+			if variant.Name != ev.name {
+				t.Errorf("input %q: variant[%d].Name = %q, want %q",
+					tt.input, i, variant.Name, ev.name)
+			}
+
+			if len(variant.Fields) != len(ev.fields) {
+				t.Errorf("input %q: variant[%d] %q: expected %d fields, got %d",
+					tt.input, i, variant.Name, len(ev.fields), len(variant.Fields))
+				continue
+			}
+
+			for j, field := range ev.fields {
+				if variant.Fields[j] != field {
+					t.Errorf("input %q: variant[%d] %q: field[%d] = %q, want %q",
+						tt.input, i, variant.Name, j, variant.Fields[j], field)
+				}
+			}
+		}
+	}
+}
+
+// TestTypeDeclarationToken tests that the TypeDeclaration token is correctly set.
+func TestTypeDeclarationToken(t *testing.T) {
+	input := `type Color = Red | Green | Blue;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Statements[0].(*ast.TypeDeclaration)
+	if !ok {
+		t.Fatalf("not *ast.TypeDeclaration. got=%T", program.Statements[0])
+	}
+	if stmt.TokenLiteral() != "type" {
+		t.Errorf("TokenLiteral() = %q, want %q", stmt.TokenLiteral(), "type")
+	}
+	if len(stmt.Variants) != 3 {
+		t.Fatalf("expected 3 variants, got %d", len(stmt.Variants))
+	}
+	for i, name := range []string{"Red", "Green", "Blue"} {
+		if stmt.Variants[i].Name != name {
+			t.Errorf("variant[%d].Name = %q, want %q", i, stmt.Variants[i].Name, name)
+		}
+		if len(stmt.Variants[i].Fields) != 0 {
+			t.Errorf("variant[%d] %q should have no fields", i, name)
+		}
+	}
+}
+
+// TestConstructorPatternInMatch tests parsing of constructor patterns inside match expressions.
+func TestConstructorPatternInMatch(t *testing.T) {
+	input := `match x Some(v) => v _ => 0;`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(program.Statements))
+	}
+
+	exprStmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	if !ok {
+		t.Fatalf("not *ast.ExpressionStatement, got=%T", program.Statements[0])
+	}
+
+	matchExpr, ok := exprStmt.Expression.(*ast.MatchExpression)
+	if !ok {
+		t.Fatalf("not *ast.MatchExpression, got=%T", exprStmt.Expression)
+	}
+
+	if len(matchExpr.Cases) != 2 {
+		t.Fatalf("expected 2 match cases, got %d", len(matchExpr.Cases))
+	}
+
+	// First case: Some(v) => v
+	firstCase := matchExpr.Cases[0]
+	cp, ok := firstCase.Pattern.(*ast.ConstructorPattern)
+	if !ok {
+		t.Fatalf("first case pattern not *ast.ConstructorPattern, got=%T", firstCase.Pattern)
+	}
+	if cp.Name != "Some" {
+		t.Errorf("constructor pattern name = %q, want %q", cp.Name, "Some")
+	}
+	if len(cp.Fields) != 1 {
+		t.Fatalf("expected 1 field, got %d", len(cp.Fields))
+	}
+	if cp.Fields[0].Value != "v" {
+		t.Errorf("field[0].Value = %q, want %q", cp.Fields[0].Value, "v")
+	}
+
+	// Second case: _ => 0 (wildcard)
+	secondCase := matchExpr.Cases[1]
+	if !secondCase.IsDefault {
+		t.Error("second case should be wildcard (IsDefault = true)")
+	}
+}
+
+// TestConstructorPatternMultiField tests multi-field constructor patterns.
+func TestConstructorPatternMultiField(t *testing.T) {
+	input := `match p MkPair(x, y) => x _ => 0;`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	exprStmt := program.Statements[0].(*ast.ExpressionStatement)
+	matchExpr := exprStmt.Expression.(*ast.MatchExpression)
+
+	if len(matchExpr.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(matchExpr.Cases))
+	}
+
+	firstCase := matchExpr.Cases[0]
+	cp, ok := firstCase.Pattern.(*ast.ConstructorPattern)
+	if !ok {
+		t.Fatalf("first case pattern not *ast.ConstructorPattern, got=%T", firstCase.Pattern)
+	}
+	if cp.Name != "MkPair" {
+		t.Errorf("constructor pattern name = %q, want %q", cp.Name, "MkPair")
+	}
+	if len(cp.Fields) != 2 {
+		t.Fatalf("expected 2 fields, got %d", len(cp.Fields))
+	}
+	if cp.Fields[0].Value != "x" || cp.Fields[1].Value != "y" {
+		t.Errorf("fields = [%q, %q], want [x, y]", cp.Fields[0].Value, cp.Fields[1].Value)
+	}
+}

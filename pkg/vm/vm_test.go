@@ -2,9 +2,9 @@ package vm
 
 import (
 	"fmt"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"

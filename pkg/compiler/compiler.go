@@ -188,6 +188,12 @@ func (s *SymbolTable) defineFree(original Symbol) Symbol {
 	return symbol
 }
 
+// IsDefinedInCurrentScope checks if a name is defined in the current scope (not outer scopes)
+func (s *SymbolTable) IsDefinedInCurrentScope(name string) bool {
+	_, ok := s.store[name]
+	return ok
+}
+
 // NumDefinitions returns the number of definitions
 func (s *SymbolTable) NumDefinitions() int {
 	return s.count
@@ -450,12 +456,16 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpPop)
 
 	case *ast.AssignmentStatement:
-		// Check if variable already exists (reassignment)
-		symbol, ok := c.symbolTable.Resolve(node.Name.Value)
-		if !ok {
-			// New variable
-			symbol = c.symbolTable.Define(node.Name.Value)
+		// Check if variable already exists in current scope (reassignment is forbidden)
+		if c.symbolTable.IsDefinedInCurrentScope(node.Name.Value) {
+			return &CompileError{
+				Line:    node.Token.Line,
+				Column:  node.Token.Column,
+				Message: fmt.Sprintf("variable `%s` is already bound and cannot be reassigned", node.Name.Value),
+			}
 		}
+		// New variable
+		symbol := c.symbolTable.Define(node.Name.Value)
 		err := c.Compile(node.Value)
 		if err != nil {
 			return err
@@ -487,11 +497,15 @@ func (c *Compiler) Compile(node ast.Node) error {
 			// Get element (handles null for out of bounds)
 			c.emit(bytecode.OpIndex)
 
-			// Define/resolve variable and assign
-			symbol, ok := c.symbolTable.Resolve(name.Value)
-			if !ok {
-				symbol = c.symbolTable.Define(name.Value)
+			// Define variable and assign (reassignment is forbidden)
+			if c.symbolTable.IsDefinedInCurrentScope(name.Value) {
+				return &CompileError{
+					Line:    node.Token.Line,
+					Column:  node.Token.Column,
+					Message: fmt.Sprintf("variable `%s` is already bound and cannot be reassigned", name.Value),
+				}
 			}
+			symbol := c.symbolTable.Define(name.Value)
 			if symbol.Scope == GlobalScope {
 				c.emit(bytecode.OpSetGlobal, symbol.Index)
 			} else {

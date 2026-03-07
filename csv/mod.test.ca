@@ -5,147 +5,116 @@ use csv;
 
 io.println("# CSV Module Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 45);
-
-// ============================================
-// parse: Basic cases
-// ============================================
-
-io.println("# parse: Basic CSV");
-
+// === Pre-compute values ===
 csv_basic = "name,age,city\nAlice,30,Tokyo\nBob,25,Osaka";
 result_basic = csv.parse(csv_basic);
-ctx = test.is(ctx, "basic: row count", len(result_basic), 3);
-ctx = test.is(ctx, "basic: header name", result_basic[0][0], "name");
-ctx = test.is(ctx, "basic: header age", result_basic[0][1], "age");
-ctx = test.is(ctx, "basic: header city", result_basic[0][2], "city");
-ctx = test.is(ctx, "basic: row1 name", result_basic[1][0], "Alice");
-ctx = test.is(ctx, "basic: row1 age", result_basic[1][1], "30");
-ctx = test.is(ctx, "basic: row1 city", result_basic[1][2], "Tokyo");
-ctx = test.is(ctx, "basic: row2 name", result_basic[2][0], "Bob");
-ctx = test.is(ctx, "basic: row2 age", result_basic[2][1], "25");
-
-io.println("# parse: Empty input");
 
 empty_result = csv.parse("");
-ctx = test.is(ctx, "empty: no rows", len(empty_result), 0);
-
-io.println("# parse: Single row");
 
 single_row = csv.parse("a,b,c");
-ctx = test.is(ctx, "single row: count", len(single_row), 1);
-ctx = test.is(ctx, "single row: fields", len(single_row[0]), 3);
-ctx = test.is(ctx, "single row: first field", single_row[0][0], "a");
-ctx = test.is(ctx, "single row: last field", single_row[0][2], "c");
-
-io.println("# parse: Quoted fields");
 
 csv_quoted = '"hello, world","she said ""hi""",normal';
 result_quoted = csv.parse(csv_quoted);
-ctx = test.is(ctx, "quoted: field count", len(result_quoted[0]), 3);
-ctx = test.is(ctx, "quoted: comma in field", result_quoted[0][0], "hello, world");
-ctx = test.is(ctx, "quoted: escaped quote", result_quoted[0][1], 'she said "hi"');
-ctx = test.is(ctx, "quoted: normal field", result_quoted[0][2], "normal");
-
-io.println("# parse: CRLF line endings");
 
 csv_crlf = "a,b\r\nc,d\r\ne,f";
 result_crlf = csv.parse(csv_crlf);
-ctx = test.is(ctx, "crlf: row count", len(result_crlf), 3);
-ctx = test.is(ctx, "crlf: row1 field1", result_crlf[0][0], "a");
-ctx = test.is(ctx, "crlf: row2 field1", result_crlf[1][0], "c");
-ctx = test.is(ctx, "crlf: row3 field1", result_crlf[2][0], "e");
-
-io.println("# parse: Empty fields");
 
 csv_empty_fields = "a,,c\n,b,";
 result_ef = csv.parse(csv_empty_fields);
-ctx = test.is(ctx, "empty fields: row1 field2 empty", result_ef[0][1], "");
-ctx = test.is(ctx, "empty fields: row2 field1 empty", result_ef[1][0], "");
-ctx = test.is(ctx, "empty fields: row2 field3 empty", result_ef[1][2], "");
-
-io.println("# parse: Whitespace preserved");
 
 csv_ws = " hello , world ";
 result_ws = csv.parse(csv_ws);
-ctx = test.is(ctx, "whitespace: preserved in field", result_ws[0][0], " hello ");
-ctx = test.is(ctx, "whitespace: preserved in field2", result_ws[0][1], " world ");
-
-// ============================================
-// parse_with_header: Basic cases
-// ============================================
-
-io.println("# parse_with_header: Basic");
 
 csv_header = "name,age,city\nAlice,30,Tokyo\nBob,25,Osaka";
 result_header = csv.parse_with_header(csv_header);
-ctx = test.is(ctx, "header: row count", len(result_header), 2);
-ctx = test.is(ctx, "header: row1 name", result_header[0]["name"], "Alice");
-ctx = test.is(ctx, "header: row1 age", result_header[0]["age"], "30");
-ctx = test.is(ctx, "header: row1 city", result_header[0]["city"], "Tokyo");
-ctx = test.is(ctx, "header: row2 name", result_header[1]["name"], "Bob");
-ctx = test.is(ctx, "header: row2 age", result_header[1]["age"], "25");
-
-io.println("# parse_with_header: Only header row");
 
 csv_only_header = "name,age,city";
 result_oh = csv.parse_with_header(csv_only_header);
-ctx = test.is(ctx, "only header: no data rows", len(result_oh), 0);
-
-io.println("# parse_with_header: Short rows fill with empty");
 
 csv_short = "a,b,c\n1,2";
 result_short = csv.parse_with_header(csv_short);
-ctx = test.is(ctx, "short row: missing field is empty", result_short[0]["c"], "");
-
-// ============================================
-// stringify: Basic cases
-// ============================================
-
-io.println("# stringify: Basic");
 
 data_basic = [["name", "age"], ["Alice", "30"], ["Bob", "25"]];
 result_str = csv.stringify(data_basic);
-ctx = test.is(ctx, "stringify: basic output", result_str, "name,age\r\nAlice,30\r\nBob,25");
-
-io.println("# stringify: Quoting");
 
 data_quote = [["hello, world", 'say "hi"', "normal"]];
 result_quote = csv.stringify(data_quote);
-ctx = test.is(ctx, "stringify: comma quoted", result_quote, '"hello, world","say ""hi""",normal');
-
-io.println("# stringify: Newline in field");
 
 data_newline = [["line1\nline2", "normal"]];
 result_nl = csv.stringify(data_newline);
-ctx = test.is(ctx, "stringify: newline quoted", result_nl, '"line1\nline2",normal');
-
-io.println("# stringify: Empty array");
 
 empty_data = [];
 result_empty = csv.stringify(empty_data);
-ctx = test.is(ctx, "stringify: empty is empty string", result_empty, "");
-
-io.println("# stringify: Single row");
 
 single_data = [["a", "b", "c"]];
 result_single = csv.stringify(single_data);
-ctx = test.is(ctx, "stringify: single row", result_single, "a,b,c");
-
-// ============================================
-// Round-trip tests
-// ============================================
-
-io.println("# Round-trip");
 
 original = [["name", "age", "note"], ["Alice", "30", "hello, world"], ["Bob", "25", 'say "hi"']];
 csv_str = csv.stringify(original);
 parsed_back = csv.parse(csv_str);
-ctx = test.is(ctx, "round-trip: row count", len(parsed_back), 3);
-ctx = test.is(ctx, "round-trip: header", parsed_back[0][0], "name");
-ctx = test.is(ctx, "round-trip: name field", parsed_back[1][0], "Alice");
-ctx = test.is(ctx, "round-trip: comma field", parsed_back[1][2], "hello, world");
-ctx = test.is(ctx, "round-trip: quote field", parsed_back[2][2], 'say "hi"');
 
-test.done(ctx);
+// === Run tests ===
+test.new()
+    |> test.plan(45)
+    // parse: Basic CSV
+    |> test.is("basic: row count", len(result_basic), 3)
+    |> test.is("basic: header name", result_basic[0][0], "name")
+    |> test.is("basic: header age", result_basic[0][1], "age")
+    |> test.is("basic: header city", result_basic[0][2], "city")
+    |> test.is("basic: row1 name", result_basic[1][0], "Alice")
+    |> test.is("basic: row1 age", result_basic[1][1], "30")
+    |> test.is("basic: row1 city", result_basic[1][2], "Tokyo")
+    |> test.is("basic: row2 name", result_basic[2][0], "Bob")
+    |> test.is("basic: row2 age", result_basic[2][1], "25")
+    // parse: Empty input
+    |> test.is("empty: no rows", len(empty_result), 0)
+    // parse: Single row
+    |> test.is("single row: count", len(single_row), 1)
+    |> test.is("single row: fields", len(single_row[0]), 3)
+    |> test.is("single row: first field", single_row[0][0], "a")
+    |> test.is("single row: last field", single_row[0][2], "c")
+    // parse: Quoted fields
+    |> test.is("quoted: field count", len(result_quoted[0]), 3)
+    |> test.is("quoted: comma in field", result_quoted[0][0], "hello, world")
+    |> test.is("quoted: escaped quote", result_quoted[0][1], 'she said "hi"')
+    |> test.is("quoted: normal field", result_quoted[0][2], "normal")
+    // parse: CRLF line endings
+    |> test.is("crlf: row count", len(result_crlf), 3)
+    |> test.is("crlf: row1 field1", result_crlf[0][0], "a")
+    |> test.is("crlf: row2 field1", result_crlf[1][0], "c")
+    |> test.is("crlf: row3 field1", result_crlf[2][0], "e")
+    // parse: Empty fields
+    |> test.is("empty fields: row1 field2 empty", result_ef[0][1], "")
+    |> test.is("empty fields: row2 field1 empty", result_ef[1][0], "")
+    |> test.is("empty fields: row2 field3 empty", result_ef[1][2], "")
+    // parse: Whitespace preserved
+    |> test.is("whitespace: preserved in field", result_ws[0][0], " hello ")
+    |> test.is("whitespace: preserved in field2", result_ws[0][1], " world ")
+    // parse_with_header: Basic
+    |> test.is("header: row count", len(result_header), 2)
+    |> test.is("header: row1 name", result_header[0]["name"], "Alice")
+    |> test.is("header: row1 age", result_header[0]["age"], "30")
+    |> test.is("header: row1 city", result_header[0]["city"], "Tokyo")
+    |> test.is("header: row2 name", result_header[1]["name"], "Bob")
+    |> test.is("header: row2 age", result_header[1]["age"], "25")
+    // parse_with_header: Only header row
+    |> test.is("only header: no data rows", len(result_oh), 0)
+    // parse_with_header: Short rows fill with empty
+    |> test.is("short row: missing field is empty", result_short[0]["c"], "")
+    // stringify: Basic
+    |> test.is("stringify: basic output", result_str, "name,age\r\nAlice,30\r\nBob,25")
+    // stringify: Quoting
+    |> test.is("stringify: comma quoted", result_quote, '"hello, world","say ""hi""",normal')
+    // stringify: Newline in field
+    |> test.is("stringify: newline quoted", result_nl, '"line1\nline2",normal')
+    // stringify: Empty array
+    |> test.is("stringify: empty is empty string", result_empty, "")
+    // stringify: Single row
+    |> test.is("stringify: single row", result_single, "a,b,c")
+    // Round-trip
+    |> test.is("round-trip: row count", len(parsed_back), 3)
+    |> test.is("round-trip: header", parsed_back[0][0], "name")
+    |> test.is("round-trip: name field", parsed_back[1][0], "Alice")
+    |> test.is("round-trip: comma field", parsed_back[1][2], "hello, world")
+    |> test.is("round-trip: quote field", parsed_back[2][2], 'say "hi"')
+    |> test.done();

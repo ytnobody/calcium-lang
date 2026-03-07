@@ -88,6 +88,8 @@ const (
 	FAILURE     TokenType = "FAILURE"
 	RETURN      TokenType = "RETURN"
 	IN          TokenType = "IN"
+	DO  TokenType = "DO"
+	END TokenType = "END"
 
 	// Built-in function keywords
 	MAP    TokenType = "MAP"
@@ -116,7 +118,8 @@ var keywords = map[string]TokenType{
 	"failure":    FAILURE,
 	"return":     RETURN,
 	"in":         IN,
-	"map":        MAP,
+	"do":  DO,
+	"map": MAP,
 	"filter":     FILTER,
 	"reduce":     REDUCE,
 	"has":        HAS,

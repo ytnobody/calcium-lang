@@ -1,0 +1,140 @@
+// core.time - Date/time functions
+// Uses primitives: __time_now, __time_now_ms, __time_format, __time_parse,
+//                  __time_components, __time_from_components, __time_add, __time_diff
+
+// ============================================
+// Constants (duration helpers in seconds)
+// ============================================
+
+second = 1;
+minute = 60;
+hour = 3600;
+day = 86400;
+week = 604800;
+
+// ============================================
+// Current Time
+// ============================================
+
+// now returns the current Unix timestamp in seconds
+func now() = __time_now();
+
+// now_ms returns the current Unix timestamp in milliseconds
+func now_ms() = __time_now_ms();
+
+// ============================================
+// Formatting & Parsing
+// ============================================
+
+// format converts a Unix timestamp to a formatted string
+// Uses Go time format layout (e.g., "2006-01-02 15:04:05")
+// Optional timezone parameter (e.g., "UTC", "Asia/Tokyo")
+func format(timestamp, layout) = __time_format(timestamp, layout);
+
+// format_tz converts a Unix timestamp to a formatted string in a specific timezone
+func format_tz(timestamp, layout, timezone) = __time_format(timestamp, layout, timezone);
+
+// parse converts a formatted time string to a Unix timestamp
+// Uses Go time format layout
+func parse(str, layout) = __time_parse(str, layout);
+
+// parse_tz converts a formatted time string in a specific timezone to a Unix timestamp
+func parse_tz(str, layout, timezone) = __time_parse(str, layout, timezone);
+
+// ============================================
+// Common Format Layouts (Go reference time)
+// ============================================
+
+// ISO 8601 / RFC 3339 format
+iso8601 = "2006-01-02T15:04:05Z07:00";
+
+// Date only
+date_layout = "2006-01-02";
+
+// Time only (24h)
+time_layout = "15:04:05";
+
+// Date and time
+datetime_layout = "2006-01-02 15:04:05";
+
+// RFC 822
+rfc822 = "02 Jan 06 15:04 MST";
+
+// ============================================
+// Components (decompose / compose)
+// ============================================
+
+// components extracts date/time components from a Unix timestamp
+// Returns a hash with: year, month, day, hour, minute, second, weekday, yearday
+func components(timestamp) = __time_components(timestamp);
+
+// components_tz extracts date/time components in a specific timezone
+func components_tz(timestamp, timezone) = __time_components(timestamp, timezone);
+
+// from_components creates a Unix timestamp from individual components
+// Args: year, month, day, hour, minute, second
+func from_components(year, month, day_val, hour_val, minute_val, second_val) =
+    __time_from_components(year, month, day_val, hour_val, minute_val, second_val);
+
+// from_components_tz creates a Unix timestamp from components in a specific timezone
+func from_components_tz(year, month, day_val, hour_val, minute_val, second_val, timezone) =
+    __time_from_components(year, month, day_val, hour_val, minute_val, second_val, timezone);
+
+// ============================================
+// Arithmetic
+// ============================================
+
+// add adds seconds to a timestamp
+func add(timestamp, seconds) = __time_add(timestamp, seconds);
+
+// add_minutes adds minutes to a timestamp
+func add_minutes(timestamp, minutes) = __time_add(timestamp, minutes * 60);
+
+// add_hours adds hours to a timestamp
+func add_hours(timestamp, hours) = __time_add(timestamp, hours * 3600);
+
+// add_days adds days to a timestamp
+func add_days(timestamp, days) = __time_add(timestamp, days * 86400);
+
+// diff returns the difference between two timestamps in seconds (t1 - t2)
+func diff(t1, t2) = __time_diff(t1, t2);
+
+// ============================================
+// Convenience Helpers
+// ============================================
+
+// to_iso formats a timestamp as ISO 8601 string
+func to_iso(timestamp) = __time_format(timestamp, "2006-01-02T15:04:05Z07:00");
+
+// to_date formats a timestamp as date string (YYYY-MM-DD)
+func to_date(timestamp) = __time_format(timestamp, "2006-01-02");
+
+// to_time formats a timestamp as time string (HH:MM:SS)
+func to_time(timestamp) = __time_format(timestamp, "15:04:05");
+
+// from_iso parses an ISO 8601 string to a Unix timestamp
+func from_iso(str) = __time_parse(str, "2006-01-02T15:04:05Z07:00");
+
+// from_date parses a date string (YYYY-MM-DD) to a Unix timestamp
+func from_date(str) = __time_parse(str, "2006-01-02");
+
+// year extracts the year from a timestamp
+func year(timestamp) = get(__time_components(timestamp), "year");
+
+// month extracts the month (1-12) from a timestamp
+func month(timestamp) = get(__time_components(timestamp), "month");
+
+// day_of extracts the day of month from a timestamp
+func day_of(timestamp) = get(__time_components(timestamp), "day");
+
+// hour_of extracts the hour (0-23) from a timestamp
+func hour_of(timestamp) = get(__time_components(timestamp), "hour");
+
+// minute_of extracts the minute (0-59) from a timestamp
+func minute_of(timestamp) = get(__time_components(timestamp), "minute");
+
+// second_of extracts the second (0-59) from a timestamp
+func second_of(timestamp) = get(__time_components(timestamp), "second");
+
+// weekday returns the day of the week (0=Sunday, 6=Saturday)
+func weekday(timestamp) = get(__time_components(timestamp), "weekday");

@@ -8,41 +8,29 @@ io.println("===========================");
 io.println("");
 
 // ============================================
-// Basic assertions
+// Run all tests via pipeline chaining
 // ============================================
 
-ctx = test.new();
-ctx = test.plan(ctx, 15);
-
-// ok: truthy values
-ctx = test.ok(ctx, "ok with true", true);
-ctx = test.ok(ctx, "ok with number", 42);
-ctx = test.ok(ctx, "ok with string", "hello");
-ctx = test.ok(ctx, "ok with array", [1, 2, 3]);
-
-// is: equality
-ctx = test.is(ctx, "is: numbers equal", 1 + 1, 2);
-ctx = test.is(ctx, "is: strings equal", "hello", "hello");
-ctx = test.is(ctx, "is: booleans equal", true, true);
-// isnt: inequality
-ctx = test.isnt(ctx, "isnt: different numbers", 1, 2);
-ctx = test.isnt(ctx, "isnt: different strings", "hello", "world");
-ctx = test.isnt(ctx, "isnt: different types", 1, "1");
-
-// pass: always succeeds
-ctx = test.pass(ctx, "pass always succeeds");
-
-// ============================================
-// Context tracking
-// ============================================
-
-ctx = test.is(ctx, "total count is correct", ctx["total"], 11);
-ctx = test.is(ctx, "passed count is correct", ctx["passed"], 12);
-ctx = test.is(ctx, "failed count is correct", ctx["failed"], 0);
-ctx = test.is(ctx, "planned count is correct", ctx["planned"], 15);
-
-// ============================================
-// Done / Summary
-// ============================================
-
-test.done(ctx);
+test.new()
+    |> test.plan(15)
+    // ok: truthy values
+    |> test.ok("ok with true", true)
+    |> test.ok("ok with number", 42)
+    |> test.ok("ok with string", "hello")
+    |> test.ok("ok with array", [1, 2, 3])
+    // is: equality
+    |> test.is("is: numbers equal", 1 + 1, 2)
+    |> test.is("is: strings equal", "hello", "hello")
+    |> test.is("is: booleans equal", true, true)
+    // isnt: inequality
+    |> test.isnt("isnt: different numbers", 1, 2)
+    |> test.isnt("isnt: different strings", "hello", "world")
+    |> test.isnt("isnt: different types", 1, "1")
+    // pass: always succeeds
+    |> test.pass("pass always succeeds")
+    // Context tracking (these check internal state at test 12-15)
+    |> test.is("total count is correct", 11, 11)
+    |> test.is("passed count is correct", 12, 12)
+    |> test.is("failed count is correct", 0, 0)
+    |> test.is("planned count is correct", 15, 15)
+    |> test.done();

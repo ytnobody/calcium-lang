@@ -224,10 +224,25 @@ func TestGlobalAssignment(t *testing.T) {
 		{"x = 1; x;", 1},
 		{"x = 1; y = 2; x + y;", 3},
 		{"x = 1; y = x + 1; y;", 2},
-		{"x = 1; x = x + 1; x;", 2},
 	}
 
 	runVmTests(t, tests)
+}
+
+func TestReassignmentRejected(t *testing.T) {
+	tests := []string{
+		"x = 1; x = 2;",
+		"x = 1; x = x + 1;",
+	}
+
+	for _, input := range tests {
+		program := parse(input)
+		comp := compiler.New()
+		err := comp.Compile(program)
+		if err == nil {
+			t.Errorf("expected compile error for %q, got none", input)
+		}
+	}
 }
 
 func TestArrayLiterals(t *testing.T) {

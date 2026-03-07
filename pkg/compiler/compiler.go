@@ -64,6 +64,15 @@ type Compiler struct {
 
 	// Collected errors for multi-error reporting
 	errors []error
+
+	// Source map tracking: current position being compiled
+	currentLine   int
+	currentColumn int
+	fileName      string
+
+	// Source maps per scope (stack mirrors scopes)
+	sourceMaps     []*bytecode.SourceMap
+	sourceMapIndex int
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -71,6 +80,7 @@ type CompilationScope struct {
 	instructions        bytecode.Instructions
 	lastInstruction     EmittedInstruction
 	previousInstruction EmittedInstruction
+	funcName            string // function name for this scope ("" for global)
 }
 
 // EmittedInstruction tracks emitted instructions
@@ -209,11 +219,15 @@ func New() *Compiler {
 
 	symbolTable := NewSymbolTable()
 
+	mainSourceMap := bytecode.NewSourceMap()
+
 	c := &Compiler{
-		constants:   []value.Value{},
-		symbolTable: symbolTable,
-		scopes:      []CompilationScope{mainScope},
-		scopeIndex:  0,
+		constants:      []value.Value{},
+		symbolTable:    symbolTable,
+		scopes:         []CompilationScope{mainScope},
+		scopeIndex:     0,
+		sourceMaps:     []*bytecode.SourceMap{mainSourceMap},
+		sourceMapIndex: 0,
 	}
 
 	// Define built-in functions
@@ -408,10 +422,12 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 	}
 
 	return &Compiler{
-		constants:   constants,
-		symbolTable: symbolTable,
-		scopes:      []CompilationScope{mainScope},
-		scopeIndex:  0,
+		constants:      constants,
+		symbolTable:    symbolTable,
+		scopes:         []CompilationScope{mainScope},
+		scopeIndex:     0,
+		sourceMaps:     []*bytecode.SourceMap{bytecode.NewSourceMap()},
+		sourceMapIndex: 0,
 	}
 }
 
@@ -454,6 +470,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		return nil
 
 	case *ast.ExpressionStatement:
+		c.setPosFromToken(node.Token)
 		err := c.Compile(node.Expression)
 		if err != nil {
 			return err
@@ -461,6 +478,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpPop)
 
 	case *ast.AssignmentStatement:
+		c.setPosFromToken(node.Token)
 		// Check if variable already exists in current scope (reassignment is forbidden)
 		if c.symbolTable.IsDefinedInCurrentScope(node.Name.Value) {
 			return &CompileError{
@@ -561,6 +579,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 
 	case *ast.FunctionDeclaration:
+		c.setPosFromToken(node.Token)
 		// Resolve the function name (already registered in first pass for forward references)
 		// If not found, define it (for nested scopes or REPL)
 		symbol, ok := c.symbolTable.Resolve(node.Name.Value)
@@ -572,7 +591,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			}
 		}
 
-		c.enterScope()
+		c.enterScopeWithName(node.Name.Value)
 
 		// For recursion: the function can reference itself
 		// We need to resolve the function name from the outer scope
@@ -644,7 +663,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		numLocals := c.symbolTable.NumDefinitions()
 		freeSymbols := c.symbolTable.FreeSymbols
-		instructions := c.leaveScope()
+		instructions, fnSourceMap := c.leaveScopeWithSourceMap()
 
 		// Create function object
 		fn := &value.Function{
@@ -653,6 +672,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			Body:       instructions,
 			NumLocals:  numLocals,
 			IsEffect:   node.IsEffect || hasConstraints,
+			SourceMap:  fnSourceMap,
 		}
 		for i, p := range node.Parameters {
 			fn.Parameters[i] = p.Value
@@ -674,8 +694,9 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 
 	case *ast.ConstraintDeclaration:
+		c.setPosFromToken(node.Token)
 		// Constraints are compiled like functions
-		c.enterScope()
+		c.enterScopeWithName(node.Name.Value)
 
 		for _, param := range node.Parameters {
 			c.symbolTable.Define(param.Value)
@@ -690,7 +711,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		numLocals := c.symbolTable.NumDefinitions()
 		freeSymbols := c.symbolTable.FreeSymbols
-		instructions := c.leaveScope()
+		instructions, constraintSourceMap := c.leaveScopeWithSourceMap()
 
 		fn := &value.Function{
 			Name:       node.Name.Value,
@@ -698,6 +719,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			Body:       instructions,
 			NumLocals:  numLocals,
 			IsEffect:   false,
+			SourceMap:  constraintSourceMap,
 		}
 		for i, p := range node.Parameters {
 			fn.Parameters[i] = p.Value
@@ -828,6 +850,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 
 	case *ast.Identifier:
+		c.setPosFromToken(node.Token)
 		symbol, ok := c.symbolTable.Resolve(node.Value)
 		if !ok {
 			msg := fmt.Sprintf("undefined variable '%s'", node.Value)
@@ -859,6 +882,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 
 	case *ast.InfixExpression:
+		c.setPosFromToken(node.Token)
 		// Handle short-circuit operators specially
 		if node.Operator == "&&" {
 			return c.compileAnd(node)
@@ -954,6 +978,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpIndex)
 
 	case *ast.CallExpression:
+		c.setPosFromToken(node.Token)
 		err := c.Compile(node.Function)
 		if err != nil {
 			return err
@@ -969,7 +994,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpCall, len(node.Arguments))
 
 	case *ast.LambdaExpression:
-		c.enterScope()
+		c.setPosFromToken(node.Token)
+		c.enterScopeWithName("<lambda>")
 
 		for _, param := range node.Parameters {
 			c.symbolTable.Define(param.Value)
@@ -984,7 +1010,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		numLocals := c.symbolTable.NumDefinitions()
 		freeSymbols := c.symbolTable.FreeSymbols
-		instructions := c.leaveScope()
+		instructions, lambdaSourceMap := c.leaveScopeWithSourceMap()
 
 		fn := &value.Function{
 			Name:       "<lambda>",
@@ -992,6 +1018,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			Body:       instructions,
 			NumLocals:  numLocals,
 			IsEffect:   false,
+			SourceMap:  lambdaSourceMap,
 		}
 		for i, p := range node.Parameters {
 			fn.Parameters[i] = p.Value
@@ -1709,7 +1736,49 @@ func (c *Compiler) emit(op bytecode.OpCode, operands ...int) int {
 
 	c.setLastInstruction(op, pos)
 
+	// Record source position in current scope's source map
+	if c.currentLine > 0 && c.sourceMapIndex < len(c.sourceMaps) {
+		sm := c.sourceMaps[c.sourceMapIndex]
+		sm.Add(pos, c.currentLine, c.currentColumn)
+	}
+
 	return pos
+}
+
+// setPos updates the current source position being compiled
+func (c *Compiler) setPos(line, column int) {
+	c.currentLine = line
+	c.currentColumn = column
+}
+
+// setPosFromToken updates the current source position from a token
+func (c *Compiler) setPosFromToken(tok token.Token) {
+	c.currentLine = tok.Line
+	c.currentColumn = tok.Column
+}
+
+// SetFileName sets the source file name for error messages and source maps
+func (c *Compiler) SetFileName(name string) {
+	c.fileName = name
+	if c.sourceMapIndex < len(c.sourceMaps) {
+		c.sourceMaps[c.sourceMapIndex].File = name
+	}
+}
+
+// SourceMap returns the source map for the main (global) scope
+func (c *Compiler) SourceMap() *bytecode.SourceMap {
+	if len(c.sourceMaps) > 0 {
+		return c.sourceMaps[0]
+	}
+	return nil
+}
+
+// currentSourceMap returns the source map for the current scope
+func (c *Compiler) currentSourceMap() *bytecode.SourceMap {
+	if c.sourceMapIndex < len(c.sourceMaps) {
+		return c.sourceMaps[c.sourceMapIndex]
+	}
+	return nil
 }
 
 func (c *Compiler) addInstruction(ins []byte) int {
@@ -1779,13 +1848,24 @@ func (c *Compiler) changeOperand(opPos int, operand int) {
 }
 
 func (c *Compiler) enterScope() {
+	c.enterScopeWithName("")
+}
+
+func (c *Compiler) enterScopeWithName(funcName string) {
 	scope := CompilationScope{
 		instructions:        bytecode.Instructions{},
 		lastInstruction:     EmittedInstruction{},
 		previousInstruction: EmittedInstruction{},
+		funcName:            funcName,
 	}
 	c.scopes = append(c.scopes, scope)
 	c.scopeIndex++
+
+	sm := bytecode.NewSourceMap()
+	sm.File = c.fileName
+	c.sourceMaps = append(c.sourceMaps, sm)
+	c.sourceMapIndex++
+
 	c.symbolTable = NewEnclosedSymbolTable(c.symbolTable)
 }
 
@@ -1797,6 +1877,23 @@ func (c *Compiler) leaveScope() bytecode.Instructions {
 	c.symbolTable = c.symbolTable.Outer
 
 	return instructions
+}
+
+// leaveScopeWithSourceMap returns both instructions and source map for the scope
+func (c *Compiler) leaveScopeWithSourceMap() (bytecode.Instructions, *bytecode.SourceMap) {
+	instructions := c.currentInstructions()
+	var sm *bytecode.SourceMap
+	if c.sourceMapIndex < len(c.sourceMaps) {
+		sm = c.sourceMaps[c.sourceMapIndex]
+	}
+
+	c.scopes = c.scopes[:len(c.scopes)-1]
+	c.scopeIndex--
+	c.sourceMaps = c.sourceMaps[:len(c.sourceMaps)-1]
+	c.sourceMapIndex--
+	c.symbolTable = c.symbolTable.Outer
+
+	return instructions, sm
 }
 
 // Bytecode returns the compiled bytecode
@@ -1818,6 +1915,11 @@ func (c *Compiler) ResetInstructions() {
 	c.scopes[c.scopeIndex].instructions = bytecode.Instructions{}
 	c.scopes[c.scopeIndex].lastInstruction = EmittedInstruction{}
 	c.scopes[c.scopeIndex].previousInstruction = EmittedInstruction{}
+	// Reset source map for current scope
+	if c.sourceMapIndex < len(c.sourceMaps) {
+		c.sourceMaps[c.sourceMapIndex] = bytecode.NewSourceMap()
+		c.sourceMaps[c.sourceMapIndex].File = c.fileName
+	}
 }
 
 // SymbolTable returns the symbol table

@@ -507,6 +507,7 @@ func compileFileWithOpt(inputFile, outputFile string, optLevel optimizer.Level) 
 	// Compile
 	comp := compiler.New()
 	comp.SetInput(input)
+	comp.SetFileName(inputFile)
 	err = comp.Compile(program)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, formatCompileErrors(inputFile, err, useColor))
@@ -881,6 +882,7 @@ func executeWithOptions(input, filename string, optLevel optimizer.Level, runOpt
 
 	comp := compiler.New()
 	comp.SetInput(input)
+	comp.SetFileName(filename)
 	err := comp.Compile(program)
 	if err != nil {
 		return "", fmt.Errorf("%s", formatCompileErrors(filename, err, useColor))
@@ -891,6 +893,9 @@ func executeWithOptions(input, filename string, optLevel optimizer.Level, runOpt
 	instructions = opt.OptimizeBytecode(instructions)
 
 	machine := vm.New(comp.Constants())
+	// Set source map for runtime error messages
+	machine.SetSourceMap(comp.SourceMap())
+	machine.SetSourceInput(input)
 	// Set source path for external module resolution
 	if absPath, err := filepath.Abs(filename); err == nil {
 		machine.SetSourcePath(absPath)
@@ -1051,6 +1056,7 @@ func buildExecutableWithOpt(inputFile, outputFile string, optLevel optimizer.Lev
 
 		comp := compiler.New()
 		comp.SetInput(input)
+		comp.SetFileName(inputFile)
 		err = comp.Compile(program)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, formatCompileErrors(inputFile, err, useColor))
@@ -1270,6 +1276,7 @@ func executeTestFile(input, filename string) (string, error) {
 
 	comp := compiler.New()
 	comp.SetInput(input)
+	comp.SetFileName(filename)
 	err := comp.Compile(program)
 	if err != nil {
 		return "", fmt.Errorf("%s", formatCompileErrors(filename, err, useColor))
@@ -1279,6 +1286,8 @@ func executeTestFile(input, filename string) (string, error) {
 	instructions = opt.OptimizeBytecode(instructions)
 
 	machine := vm.New(comp.Constants())
+	machine.SetSourceMap(comp.SourceMap())
+	machine.SetSourceInput(input)
 	machine.SetSourcePath(filename)
 	err = machine.Run(instructions)
 	if err != nil {

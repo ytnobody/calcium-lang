@@ -96,6 +96,7 @@ type Function struct {
 	Globals    []Value    // Globals pool (for module functions)
 	Builtins   []*Builtin // Builtins pool (for module functions)
 	IsEffect   bool       // true for func!
+	SourceMap  interface{} // *bytecode.SourceMap (stored as interface to avoid circular import)
 }
 
 // BuiltinFn is the signature for built-in functions

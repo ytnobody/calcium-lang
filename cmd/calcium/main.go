@@ -529,7 +529,7 @@ func loadHistory(line *liner.State) {
 		return
 	}
 	if f, err := os.Open(histFile); err == nil {
-		line.ReadHistory(f)
+		_, _ = line.ReadHistory(f)
 		f.Close()
 	}
 }
@@ -541,7 +541,7 @@ func saveHistory(line *liner.State) {
 		return
 	}
 	if f, err := os.Create(histFile); err == nil {
-		line.WriteHistory(f)
+		_, _ = line.WriteHistory(f)
 		f.Close()
 	}
 }

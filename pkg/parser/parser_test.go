@@ -738,6 +738,41 @@ func TestMatchGuardClause(t *testing.T) {
 	}
 }
 
+func TestTupleLiteral(t *testing.T) {
+	input := `(1, "hello", true);`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	tuple, ok := stmt.Expression.(*ast.TupleLiteral)
+	if !ok {
+		t.Fatalf("exp not ast.TupleLiteral. got=%T", stmt.Expression)
+	}
+
+	if len(tuple.Elements) != 3 {
+		t.Fatalf("tuple.Elements wrong. expected=3, got=%d", len(tuple.Elements))
+	}
+}
+
+func TestTupleVsLambda(t *testing.T) {
+	// (x, y) => x + y should still be a lambda, not a tuple
+	input := `(x, y) => x + y;`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	_, ok := stmt.Expression.(*ast.LambdaExpression)
+	if !ok {
+		t.Fatalf("exp not ast.LambdaExpression. got=%T", stmt.Expression)
+	}
+}
+
 func TestCallExpression(t *testing.T) {
 	input := `add(1, 2 * 3, 4 + 5);`
 

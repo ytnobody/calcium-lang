@@ -1,6 +1,8 @@
 package vm
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"
@@ -1646,4 +1648,99 @@ func TestDoExpression(t *testing.T) {
 		{`do y = 7; y * y end;`, 49},
 	}
 	runVmTests(t, tests)
+}
+
+// TestCoreIOFSFunctions tests the filesystem functions added to core.io
+func TestCoreIOFSFunctions(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+
+	// Write a test file
+	if err := os.WriteFile(testFile, []byte("hello"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// exists: file exists
+	existsResult := runVmExpr(t, `use core.io; io.exists("`+testFile+`");`)
+	if existsResult.Type != value.TYPE_BOOL || !existsResult.AsBool() {
+		t.Errorf("exists: expected true for existing file, got %v", existsResult)
+	}
+
+	// exists: missing file returns false
+	missingPath := filepath.Join(tmpDir, "no_such_file.txt")
+	notExistsResult := runVmExpr(t, `use core.io; io.exists("`+missingPath+`");`)
+	if notExistsResult.Type != value.TYPE_BOOL || notExistsResult.AsBool() {
+		t.Errorf("exists: expected false for missing file, got %v", notExistsResult)
+	}
+
+	// list_dir: directory listing returns success with array
+	listing := runVmExpr(t, `use core.io; io.list_dir("`+tmpDir+`");`)
+	if !listing.IsSuccess() {
+		t.Errorf("list_dir: expected success, got %v", listing)
+	}
+
+	// mkdir: create subdirectory
+	subDir := filepath.Join(tmpDir, "newdir")
+	mkdirResult := runVmExpr(t, `use core.io; io.mkdir("`+subDir+`");`)
+	if !mkdirResult.IsSuccess() {
+		t.Errorf("mkdir: expected success, got %v", mkdirResult)
+	}
+	if _, err := os.Stat(subDir); os.IsNotExist(err) {
+		t.Errorf("mkdir: directory was not created at %s", subDir)
+	}
+
+	// file_info: returns metadata hash with correct fields
+	infoResult := runVmExpr(t, `use core.io; io.file_info("`+testFile+`");`)
+	if !infoResult.IsSuccess() {
+		t.Errorf("file_info: expected success, got %v", infoResult)
+	} else {
+		h := infoResult.AsSuccess().AsHash()
+		name, ok := h.Get(value.String("name"))
+		if !ok || name.AsString() != "test.txt" {
+			t.Errorf("file_info: expected name=test.txt, got %v", name)
+		}
+		isDir, ok := h.Get(value.String("is_dir"))
+		if !ok || isDir.AsBool() {
+			t.Errorf("file_info: expected is_dir=false")
+		}
+		_, ok = h.Get(value.String("size"))
+		if !ok {
+			t.Errorf("file_info: expected size key in result")
+		}
+		_, ok = h.Get(value.String("modified"))
+		if !ok {
+			t.Errorf("file_info: expected modified key in result")
+		}
+	}
+
+	// delete_file: remove existing file
+	deleteResult := runVmExpr(t, `use core.io; io.delete_file("`+testFile+`");`)
+	if !deleteResult.IsSuccess() {
+		t.Errorf("delete_file: expected success, got %v", deleteResult)
+	}
+	if _, err := os.Stat(testFile); !os.IsNotExist(err) {
+		t.Errorf("delete_file: file still exists after delete")
+	}
+
+	// delete_file: returns failure for nonexistent file
+	deleteFailResult := runVmExpr(t, `use core.io; io.delete_file("`+testFile+`");`)
+	if !deleteFailResult.IsFailure() {
+		t.Errorf("delete_file: expected failure for nonexistent file, got %v", deleteFailResult)
+	}
+}
+
+// runVmExpr runs a Calcium expression and returns the last stack element
+func runVmExpr(t *testing.T, input string) value.Value {
+	t.Helper()
+	program := parse(input)
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+	machine := New(comp.Constants())
+	if err := machine.Run(comp.Bytecode().Instructions); err != nil {
+		t.Fatalf("vm error: %s", err)
+	}
+	return machine.LastPoppedStackElem()
 }

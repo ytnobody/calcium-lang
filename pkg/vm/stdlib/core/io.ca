@@ -1,5 +1,6 @@
 // core.io - Input/Output functions
-// Uses primitives: __print, __println, __read_file, __write_file
+// Uses primitives: __print, __println, __read_file, __write_file,
+//                  __list_dir, __mkdir, __exists, __delete_file, __file_info
 // Note: stdin and eof event sources are provided by the VM
 
 // print outputs a value without newline
@@ -47,3 +48,24 @@ func read_lines(path) =
 // write_lines writes an array of lines to a file
 func! write_lines(path, lines) =
     write_file(path, __str_join(lines, "\n"));
+
+// list_dir returns an array of file/directory names in the given directory
+// Returns success(array) or failure(error)
+func list_dir(path) = __list_dir(path);
+
+// mkdir creates a directory (and any necessary parents)
+// Returns success(null) or failure(error)
+func! mkdir(path) = __mkdir(path);
+
+// exists checks whether a file or directory exists at the given path
+// Returns true or false (or failure on permission errors)
+func exists(path) = __exists(path);
+
+// delete_file removes a file at the given path
+// Returns success(null) or failure(error)
+func! delete_file(path) = __delete_file(path);
+
+// file_info returns metadata about a file or directory as a hash
+// Hash keys: name, size, is_dir, modified
+// Returns success(hash) or failure(error)
+func file_info(path) = __file_info(path);

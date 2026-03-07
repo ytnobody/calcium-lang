@@ -17,6 +17,7 @@ This document provides a complete reference for the Calcium programming language
 11. [Built-in Functions](#built-in-functions)
 12. [Testing](#testing)
 13. [Compiler Optimization](#compiler-optimization)
+14. [Memory Management](#memory-management)
 
 ---
 
@@ -944,6 +945,48 @@ calcium run -O0 program.ca
 # Maximum optimization
 calcium compile -O2 program.ca -o program.bone
 ```
+
+---
+
+## Memory Management
+
+### Overview
+
+Calcium runs on a virtual machine (VM) implemented in Go. Memory management is handled entirely by Go's garbage collector (GC), meaning Calcium does not implement its own GC or manual memory management.
+
+### How It Works
+
+- **Value Allocation**: All Calcium values (integers, strings, arrays, hashes, closures, etc.) are allocated as Go objects on the Go heap.
+- **Automatic Collection**: When a Calcium value is no longer reachable — i.e., no variable, closure, or stack frame references it — Go's GC automatically reclaims the memory.
+- **No Manual Deallocation**: Calcium has no `free`, `delete`, or memory management functions. Users never need to worry about memory leaks from forgetting to release resources.
+
+### VM Architecture
+
+The Calcium VM uses the following memory structures:
+
+| Structure | Purpose | Size |
+|-----------|---------|------|
+| Value Stack | Operand storage for bytecode execution | 65,536 slots |
+| Globals Table | Top-level variable bindings | 65,536 slots |
+| Call Frames | Function call stack (closures + instruction pointers) | 8,192 frames |
+
+These are pre-allocated at VM startup and reused across execution. Closures capture free variables by reference, and captured values remain alive as long as the closure itself is reachable.
+
+### Implications for Developers
+
+- **No resource exhaustion from GC pauses**: Go's GC is a concurrent, low-latency collector. Typical Calcium programs will not experience noticeable GC pauses.
+- **Circular references are handled**: Go's GC is a tracing collector, so circular references between hashes, arrays, or closures are properly collected.
+- **Large data structures**: For programs that allocate many large arrays or hashes, memory usage follows Go's allocation patterns. Values are collected when they go out of scope.
+
+### Future Considerations
+
+As Calcium evolves, the following memory management enhancements may be considered:
+
+- **Weak references**: For cache-like data structures that should not prevent GC.
+- **Memory usage introspection**: Built-in functions to query current memory usage for profiling.
+- **Custom allocators**: For performance-critical applications that need more control over allocation patterns.
+
+Currently, relying on Go's GC provides a good balance of simplicity, safety, and performance for the target use cases of Calcium.
 
 ---
 

@@ -1,6 +1,8 @@
 package vm
 
 import (
+	"fmt"
+	"strings"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1961,4 +1963,97 @@ func TestADT(t *testing.T) {
 			t.Fatalf("unhandled expected type for %q", tt.input)
 		}
 	}
+}
+
+func TestEditDistance(t *testing.T) {
+	tests := []struct {
+		a, b     string
+		expected int
+	}{
+		{"", "", 0},
+		{"abc", "", 3},
+		{"", "abc", 3},
+		{"abc", "abc", 0},
+		{"abc", "abd", 1},
+		{"kitten", "sitting", 3},
+		{"tostring", "toString", 1},
+		{"length", "lngeth", 2},
+	}
+
+	for _, tt := range tests {
+		got := editDistance(tt.a, tt.b)
+		if got != tt.expected {
+			t.Errorf("editDistance(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.expected)
+		}
+	}
+}
+
+func TestSuggestSimilarName(t *testing.T) {
+	candidates := []string{"length", "push", "pop", "map", "filter"}
+
+	t.Run("close typo suggested", func(t *testing.T) {
+		result := suggestSimilarName("lnegth", candidates)
+		if result == "" {
+			t.Error("expected suggestion for close typo 'lnegth' -> 'length'")
+		}
+	})
+
+	t.Run("very different name not suggested", func(t *testing.T) {
+		result := suggestSimilarName("xyz123", candidates)
+		if result != "" {
+			t.Errorf("expected no suggestion for very different name, got: %s", result)
+		}
+	})
+
+	t.Run("suggestion format contains did you mean", func(t *testing.T) {
+		result := suggestSimilarName("lengt", candidates)
+		if result != "" && !strings.Contains(result, "did you mean") {
+			t.Errorf("unexpected suggestion format: %s", result)
+		}
+	})
+}
+
+func TestErrorMessageQuality(t *testing.T) {
+	t.Run("array index type error has hint", func(t *testing.T) {
+		input := `arr = [1, 2, 3]; arr["bad"];`
+		_, err := testEvalVM(t, input)
+		if err == nil {
+			t.Fatal("expected runtime error, got none")
+		}
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, "integer") {
+			t.Errorf("expected 'integer' in error message, got: %s", errMsg)
+		}
+	})
+
+	t.Run("spread type error has hint", func(t *testing.T) {
+		input := `f = (x) => x; f(42...);`
+		_, err := testEvalVM(t, input)
+		if err == nil {
+			t.Fatal("expected runtime error, got none")
+		}
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, "array") {
+			t.Errorf("expected 'array' in error message, got: %s", errMsg)
+		}
+	})
+}
+
+// testEvalVM compiles and runs the input, returning (result, error)
+func testEvalVM(t *testing.T, input string) (string, error) {
+	t.Helper()
+
+	program := parse(input)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		return "", fmt.Errorf("compile error: %v", err)
+	}
+
+	machine := New(comp.Constants())
+	if err := machine.Run(comp.Bytecode().Instructions); err != nil {
+		return "", err
+	}
+
+	return machine.LastPoppedStackElem().String(), nil
 }

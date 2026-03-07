@@ -1491,6 +1491,88 @@ func TestCacheExportedFunctions(t *testing.T) {
 }
 
 // Test CachedModule struct
+func TestTailCallOptimization(t *testing.T) {
+	tests := []vmTestCase{
+		// Simple tail-recursive function (countdown) using match
+		{
+			input: `
+				func countDown(n) =
+					match n
+						0 => 0
+						_ => countDown(n - 1);
+				countDown(10);
+			`,
+			expected: 0,
+		},
+		// Tail-recursive sum with accumulator
+		{
+			input: `
+				func sum(n, acc) =
+					match n
+						0 => acc
+						_ => sum(n - 1, acc + n);
+				sum(100, 0);
+			`,
+			expected: 5050,
+		},
+		// Non-tail call should still work (result is used in expression)
+		{
+			input: `
+				func factorial(n) =
+					match n
+						0 => 1
+						_ => n * factorial(n - 1);
+				factorial(10);
+			`,
+			expected: 3628800,
+		},
+		// Tail-recursive factorial with accumulator
+		{
+			input: `
+				func fact(n, acc) =
+					match n
+						0 => acc
+						_ => fact(n - 1, n * acc);
+				fact(10, 1);
+			`,
+			expected: 3628800,
+		},
+		// Simple function call (no recursion, ensure normal calls still work)
+		{
+			input:    "func add(a, b) = a + b; add(3, 7);",
+			expected: 10,
+		},
+	}
+	runVmTests(t, tests)
+}
+
+func TestTailCallDeepRecursion(t *testing.T) {
+	// This test specifically verifies that TCO prevents stack overflow
+	// by running a very deep recursion that would fail without it.
+	program := parse(`
+		func loop(n) =
+			match n
+				0 => 0
+				_ => loop(n - 1);
+		loop(100000);
+	`)
+
+	comp := compiler.New()
+	err := comp.Compile(program)
+	if err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	err = vm.Run(comp.Bytecode().Instructions)
+	if err != nil {
+		t.Fatalf("vm error (stack overflow?): %s", err)
+	}
+
+	result := vm.LastPoppedStackElem()
+	testExpectedValue(t, 0, result)
+}
+
 func TestCachedModuleStruct(t *testing.T) {
 	mod := CachedModule{
 		Author: "testauthor",

@@ -1,0 +1,48 @@
+// Tail Call Optimization Tests
+use test;
+
+// Tail-recursive countdown
+func countDown(n) =
+  match n
+    0 => 0
+    _ => countDown(n - 1);
+
+// Tail-recursive sum with accumulator
+func sum(n, acc) =
+  match n
+    0 => acc
+    _ => sum(n - 1, acc + n);
+
+// Tail-recursive factorial with accumulator
+func fact(n, acc) =
+  match n
+    0 => acc
+    _ => fact(n - 1, n * acc);
+
+// Non-tail recursive factorial (should still work correctly)
+func factorial(n) =
+  match n
+    0 => 1
+    _ => n * factorial(n - 1);
+
+// Deep tail recursion (would overflow without TCO)
+func deepLoop(n) =
+  match n
+    0 => "done"
+    _ => deepLoop(n - 1);
+
+// Tail-recursive fibonacci with accumulators
+func fib(n, a, b) =
+  match n
+    0 => a
+    _ => fib(n - 1, b, a + b);
+
+test.new()
+  |> test.plan(6)
+  |> test.is("tail-recursive countdown", countDown(10), 0)
+  |> test.is("tail-recursive sum", sum(100, 0), 5050)
+  |> test.is("tail-recursive factorial", fact(10, 1), 3628800)
+  |> test.is("non-tail recursive factorial", factorial(10), 3628800)
+  |> test.is("deep tail recursion (50000)", deepLoop(50000), "done")
+  |> test.is("tail-recursive fibonacci", fib(20, 0, 1), 6765)
+  |> test.done();

@@ -86,5 +86,36 @@ func! lte(label, actual, expected) = match actual <= expected
     true => __println(concat("  ✓ ", concat(label, concat(": ", concat(to_string(actual), concat(" <= ", to_string(expected)))))))
     false => __println(concat("  ✗ ", concat(label, concat(": Expected ", concat(to_string(actual), concat(" <= ", to_string(expected)))))));
 
+// not_null asserts that value is not null
+func! not_null(label, value) = match __type_of(value)
+    "null" => __println(concat("  ✗ ", concat(label, ": Expected non-null value, got null")))
+    _ => __println(concat("  ✓ ", label));
+
+// near asserts that two numbers are approximately equal (within epsilon)
+func! near(label, actual, expected, epsilon) = match _abs_diff(actual, expected) <= epsilon
+    true => __println(concat("  ✓ ", concat(label, concat(": ", concat(to_string(actual), concat(" ≈ ", to_string(expected)))))))
+    false => __println(concat("  ✗ ", concat(label, concat(": Expected ", concat(to_string(actual), concat(" ≈ ", concat(to_string(expected), concat(" (epsilon: ", concat(to_string(epsilon), ")")))))))));
+
+func _abs_diff(a, b) = match a >= b
+    true => a - b
+    false => b - a;
+
+// between asserts that value is in the range [low, high]
+func! between(label, value, low, high) = match value >= low
+    true => match value <= high
+        true => __println(concat("  ✓ ", concat(label, concat(": ", concat(to_string(value), concat(" in [", concat(to_string(low), concat(", ", concat(to_string(high), "]")))))))))
+        false => __println(concat("  ✗ ", concat(label, concat(": ", concat(to_string(value), concat(" is not in [", concat(to_string(low), concat(", ", concat(to_string(high), "]")))))))))
+    false => __println(concat("  ✗ ", concat(label, concat(": ", concat(to_string(value), concat(" is not in [", concat(to_string(low), concat(", ", concat(to_string(high), "]")))))))));
+
+// matches asserts that a string contains a substring
+func! matches(label, actual, pattern) = match __str_contains(to_string(actual), pattern)
+    true => __println(concat("  ✓ ", concat(label, concat(": contains '", concat(pattern, "'")))))
+    false => __println(concat("  ✗ ", concat(label, concat(": '", concat(to_string(actual), concat("' does not contain '", concat(pattern, "'")))))));
+
+// not_matches asserts that a string does NOT contain a substring
+func! not_matches(label, actual, pattern) = match __str_contains(to_string(actual), pattern)
+    false => __println(concat("  ✓ ", concat(label, concat(": does not contain '", concat(pattern, "'")))))
+    true => __println(concat("  ✗ ", concat(label, concat(": '", concat(to_string(actual), concat("' should not contain '", concat(pattern, "'")))))));
+
 // section prints a section header
 func! section(name) = __println(concat("\n", concat(name, ":")));

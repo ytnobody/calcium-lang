@@ -1386,9 +1386,23 @@ func (p *Parser) parseMatchCase() *ast.MatchCase {
 	if p.curTokenIs(token.UNDERSCORE) {
 		mc.IsDefault = true
 		mc.Pattern = &ast.WildcardExpression{Token: p.curToken}
+	} else if p.curTokenIs(token.IDENT) && p.peekTokenIs(token.IF) {
+		// Binding pattern: identifier followed by 'if' guard
+		// e.g. "x if x > 0 => ..."
+		mc.IsBinding = true
+		mc.Pattern = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		p.nextToken() // consume 'if'
+		p.nextToken() // move to guard expression
+		mc.Guard = p.parseExpression(LAMBDA)
 	} else {
 		// Parse pattern/condition - use LAMBDA precedence to stop before =>
 		mc.Pattern = p.parseExpression(LAMBDA)
+		// Check for guard after pattern: "pattern if condition => ..."
+		if p.peekTokenIs(token.IF) {
+			p.nextToken() // consume 'if'
+			p.nextToken() // move to guard expression
+			mc.Guard = p.parseExpression(LAMBDA)
+		}
 	}
 
 	// Expect =>

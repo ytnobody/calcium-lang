@@ -359,8 +359,10 @@ func (me *MatchExpression) TokenLiteral() string { return me.Token.Literal }
 type MatchCase struct {
 	Token     token.Token // the '=>' token
 	Pattern   Expression  // pattern or condition
+	Guard     Expression  // optional guard condition (nil if no guard); e.g. "if x > 0"
 	Body      Expression
 	IsDefault bool // true if pattern is _
+	IsBinding bool // true if pattern is a variable binding (identifier captures subject value)
 }
 
 // EffectHandleExpression represents !? { success(r) => ... failure(e) => ... }

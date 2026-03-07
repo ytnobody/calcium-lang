@@ -695,6 +695,88 @@ func TestMatchExpression(t *testing.T) {
 	}
 }
 
+func TestMatchGuardExpression(t *testing.T) {
+	input := `match n
+		x if x > 0 => "positive"
+		0           => "zero"
+		_           => "negative";`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	match, ok := stmt.Expression.(*ast.MatchExpression)
+	if !ok {
+		t.Fatalf("exp not ast.MatchExpression. got=%T", stmt.Expression)
+	}
+
+	if len(match.Cases) != 3 {
+		t.Fatalf("match.Cases wrong. expected=3, got=%d", len(match.Cases))
+	}
+
+	// First case: binding pattern with guard
+	firstCase := match.Cases[0]
+	if !firstCase.IsBinding {
+		t.Errorf("first case should be a binding pattern")
+	}
+	if firstCase.Guard == nil {
+		t.Errorf("first case should have a guard")
+	}
+	ident, ok := firstCase.Pattern.(*ast.Identifier)
+	if !ok {
+		t.Errorf("first case pattern should be an Identifier, got=%T", firstCase.Pattern)
+	} else if ident.Value != "x" {
+		t.Errorf("first case binding name should be 'x', got=%s", ident.Value)
+	}
+
+	// Second case: regular pattern, no guard
+	if match.Cases[1].Guard != nil {
+		t.Errorf("second case should not have a guard")
+	}
+	if match.Cases[1].IsBinding {
+		t.Errorf("second case should not be a binding")
+	}
+
+	// Third case: default
+	if !match.Cases[2].IsDefault {
+		t.Errorf("third case should be default")
+	}
+}
+
+func TestMatchPatternGuardExpression(t *testing.T) {
+	// Test guard on regular pattern (not binding)
+	input := `match n
+		1 if n > 10 => "big one"
+		1           => "small one"
+		_           => "other";`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	match, ok := stmt.Expression.(*ast.MatchExpression)
+	if !ok {
+		t.Fatalf("exp not ast.MatchExpression. got=%T", stmt.Expression)
+	}
+
+	if len(match.Cases) != 3 {
+		t.Fatalf("match.Cases wrong. expected=3, got=%d", len(match.Cases))
+	}
+
+	// First case: pattern with guard
+	firstCase := match.Cases[0]
+	if firstCase.IsBinding {
+		t.Errorf("first case should not be a binding pattern")
+	}
+	if firstCase.Guard == nil {
+		t.Errorf("first case should have a guard")
+	}
+}
+
 func TestCallExpression(t *testing.T) {
 	input := `add(1, 2 * 3, 4 + 5);`
 

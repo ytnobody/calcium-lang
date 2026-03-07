@@ -400,6 +400,44 @@ func TestMatchExpression(t *testing.T) {
 	runVmTests(t, tests)
 }
 
+func TestMatchGuardExpression(t *testing.T) {
+	tests := []vmTestCase{
+		// Binding pattern with guard: "x if x > 0 => ..."
+		{
+			input:    `n = 5; match n x if x > 0 => "positive" _ => "other";`,
+			expected: "positive",
+		},
+		{
+			input:    `n = -3; match n x if x > 0 => "positive" _ => "other";`,
+			expected: "other",
+		},
+		{
+			input:    `n = 0; match n x if x > 0 => "positive" 0 => "zero" _ => "negative";`,
+			expected: "zero",
+		},
+		// Pattern with guard: "1 if condition => ..."
+		{
+			input:    `n = 1; match n 1 if n > 0 => "positive one" 1 => "one" _ => "other";`,
+			expected: "positive one",
+		},
+		{
+			input:    `n = 1; match n 1 if n > 10 => "big one" 1 => "small one" _ => "other";`,
+			expected: "small one",
+		},
+		// Multiple binding cases with guards
+		{
+			input:    `n = 10; match n x if x > 5 => "big" x if x > 0 => "small" _ => "non-positive";`,
+			expected: "big",
+		},
+		{
+			input:    `n = 3; match n x if x > 5 => "big" x if x > 0 => "small" _ => "non-positive";`,
+			expected: "small",
+		},
+	}
+
+	runVmTests(t, tests)
+}
+
 func TestPipeOperator(t *testing.T) {
 	tests := []vmTestCase{
 		{

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/peterh/liner"
 	"github.com/ytnobody/calcium-lang/pkg/ast"
 	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 	"github.com/ytnobody/calcium-lang/pkg/compiler"
@@ -504,30 +504,222 @@ func executeBytecode(data []byte) error {
 	return nil
 }
 
+// historyFilePath returns the path to the REPL history file
+func historyFilePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".calcium_history")
+}
+
+// startupScriptPath returns the path to the REPL startup script
+func startupScriptPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".calciumrc")
+}
+
+// loadHistory loads REPL history from the history file
+func loadHistory(line *liner.State) {
+	histFile := historyFilePath()
+	if histFile == "" {
+		return
+	}
+	if f, err := os.Open(histFile); err == nil {
+		_, _ = line.ReadHistory(f)
+		f.Close()
+	}
+}
+
+// saveHistory saves REPL history to the history file
+func saveHistory(line *liner.State) {
+	histFile := historyFilePath()
+	if histFile == "" {
+		return
+	}
+	if f, err := os.Create(histFile); err == nil {
+		_, _ = line.WriteHistory(f)
+		f.Close()
+	}
+}
+
+// loadStartupScript executes the startup script if it exists
+func loadStartupScript(comp *compiler.Compiler, machine *vm.VM) {
+	scriptPath := startupScriptPath()
+	if scriptPath == "" {
+		return
+	}
+
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		return // File doesn't exist, that's fine
+	}
+
+	input := strings.TrimSpace(string(data))
+	if input == "" {
+		return
+	}
+
+	fmt.Printf("Loading startup script: %s\n", scriptPath)
+	_, err = executeInREPL(input, comp, machine)
+	if err != nil {
+		fmt.Printf("Warning: startup script error: %v\n", err)
+	}
+}
+
+// isIncomplete checks if the input looks like it needs more lines
+// (unclosed braces, brackets, parens, or trailing operators)
+func isIncomplete(input string) bool {
+	depth := 0
+	inString := false
+	inLineComment := false
+	prev := rune(0)
+
+	for _, ch := range input {
+		if inLineComment {
+			if ch == '\n' {
+				inLineComment = false
+			}
+			prev = ch
+			continue
+		}
+
+		if ch == '/' && prev == '/' {
+			inLineComment = true
+			prev = ch
+			continue
+		}
+
+		if inString {
+			if ch == '"' && prev != '\\' {
+				inString = false
+			}
+			prev = ch
+			continue
+		}
+
+		switch ch {
+		case '"':
+			inString = true
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		}
+		prev = ch
+	}
+
+	if depth > 0 {
+		return true
+	}
+
+	// Check for trailing operators that suggest continuation
+	trimmed := strings.TrimSpace(input)
+	if strings.HasSuffix(trimmed, "|>") ||
+		strings.HasSuffix(trimmed, "=>") ||
+		strings.HasSuffix(trimmed, "=") ||
+		strings.HasSuffix(trimmed, ",") {
+		return true
+	}
+
+	return false
+}
+
 func runREPL() {
 	fmt.Printf("Calcium %s - Interactive REPL\n", version)
 	fmt.Println("Type 'exit' or Ctrl+D to quit, 'help' for help")
 	fmt.Println()
 
-	scanner := bufio.NewScanner(os.Stdin)
+	line := liner.NewLiner()
+	defer line.Close()
+	line.SetCtrlCAborts(true)
+
+	// Load history from file
+	loadHistory(line)
+	defer saveHistory(line)
 
 	// Keep state across REPL sessions
 	comp := compiler.New()
 	machine := vm.NewForREPL(nil, make([]value.Value, 65536)) // Don't capture stdin
 
+	// Load startup script
+	loadStartupScript(comp, machine)
+
+	var multiLineBuffer strings.Builder
+	prompt := "ca> "
+
 	for {
-		fmt.Print("ca> ")
-		if !scanner.Scan() {
+		input, err := line.Prompt(prompt)
+		if err != nil {
+			if err == liner.ErrPromptAborted {
+				if multiLineBuffer.Len() > 0 {
+					// Cancel multi-line input
+					multiLineBuffer.Reset()
+					prompt = "ca> "
+					fmt.Println("(input cancelled)")
+					continue
+				}
+				fmt.Println("Goodbye!")
+				return
+			}
+			// EOF (Ctrl+D)
 			fmt.Println()
 			break
 		}
 
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+		trimmed := strings.TrimSpace(input)
+
+		// Handle multi-line input
+		if multiLineBuffer.Len() > 0 {
+			if trimmed == "" {
+				// Empty line in multi-line mode: try to execute what we have
+				fullInput := multiLineBuffer.String()
+				multiLineBuffer.Reset()
+				prompt = "ca> "
+
+				line.AppendHistory(fullInput)
+				result, err := executeInREPL(fullInput, comp, machine)
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					continue
+				}
+				if result != "" && result != "null" {
+					fmt.Println(result)
+				}
+				continue
+			}
+
+			multiLineBuffer.WriteString("\n")
+			multiLineBuffer.WriteString(input)
+
+			if isIncomplete(multiLineBuffer.String()) {
+				continue
+			}
+
+			fullInput := multiLineBuffer.String()
+			multiLineBuffer.Reset()
+			prompt = "ca> "
+
+			line.AppendHistory(fullInput)
+			result, err := executeInREPL(fullInput, comp, machine)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				continue
+			}
+			if result != "" && result != "null" {
+				fmt.Println(result)
+			}
 			continue
 		}
 
-		switch line {
+		if trimmed == "" {
+			continue
+		}
+
+		switch trimmed {
 		case "exit", "quit":
 			fmt.Println("Goodbye!")
 			return
@@ -542,7 +734,15 @@ func runREPL() {
 			continue
 		}
 
-		result, err := executeInREPL(line, comp, machine)
+		// Check if input is incomplete (needs multi-line)
+		if isIncomplete(trimmed) {
+			multiLineBuffer.WriteString(input)
+			prompt = "..> "
+			continue
+		}
+
+		line.AppendHistory(trimmed)
+		result, err := executeInREPL(trimmed, comp, machine)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			continue
@@ -560,13 +760,26 @@ func printREPLHelp() {
   clear       Clear all defined variables and functions
   help        Show this help
 
+Features:
+  - Command history (Up/Down arrows) saved to ~/.calcium_history
+  - Startup script loaded from ~/.calciumrc
+  - Multi-line input: unclosed brackets/parens auto-continue (..> prompt)
+  - Ctrl+C cancels multi-line input, Ctrl+D exits
+
 Examples:
   ca> x = 10;
   ca> x * 2;
   20
   ca> func double(n) = n * 2;
   ca> double(21);
-  42`)
+  42
+
+Multi-line example:
+  ca> func fib(n) =
+  ..>   match n
+  ..>     0 => 0
+  ..>     1 => 1
+  ..>     _ => fib(n-1) + fib(n-2);`)
 }
 
 func execute(input string) (string, error) {

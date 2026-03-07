@@ -1136,6 +1136,40 @@ func TestCoreArrayModule(t *testing.T) {
 	runVmTests(t, tests)
 }
 
+// Test core.json module
+func TestCoreJSONModule(t *testing.T) {
+	tests := []vmTestCase{
+		// Parse integers
+		{`use core.json; json.parse("42") !? { success(v) => v failure(e) => 0 };`, int64(42)},
+		{`use core.json; json.parse("-17") !? { success(v) => v failure(e) => 0 };`, int64(-17)},
+		// Parse float
+		{`use core.json; json.parse("3.14") !? { success(v) => v failure(e) => 0.0 };`, 3.14},
+		// Parse booleans
+		{`use core.json; json.parse("true") !? { success(v) => v failure(e) => false };`, true},
+		{`use core.json; json.parse("false") !? { success(v) => v failure(e) => true };`, false},
+		// Parse strings
+		{`use core.json; json.parse('"hello"') !? { success(v) => v failure(e) => "" };`, "hello"},
+		// Parse arrays
+		{`use core.json; json.parse("[1, 2, 3]") !? { success(v) => v[0] failure(e) => 0 };`, int64(1)},
+		{`use core.json; json.parse("[1, 2, 3]") !? { success(v) => len(v) failure(e) => 0 };`, int64(3)},
+		// Parse objects
+		{`use core.json; json.parse('{"name": "Alice"}') !? { success(v) => v["name"] failure(e) => "" };`, "Alice"},
+		// Stringify
+		{`use core.json; json.stringify(42) !? { success(v) => v failure(e) => "" };`, "42"},
+		{`use core.json; json.stringify(true) !? { success(v) => v failure(e) => "" };`, "true"},
+		{`use core.json; json.stringify("hello") !? { success(v) => v failure(e) => "" };`, `"hello"`},
+		{`use core.json; json.stringify([1, 2, 3]) !? { success(v) => v failure(e) => "" };`, "[1,2,3]"},
+		// Round-trip
+		{`use core.json; json.parse(json.stringify(42) !? { success(v) => v failure(_) => "" }) !? { success(v) => v failure(_) => 0 };`, int64(42)},
+		// Aliases
+		{`use core.json; json.decode("42") !? { success(v) => v failure(e) => 0 };`, int64(42)},
+		{`use core.json; json.encode(42) !? { success(v) => v failure(e) => "" };`, "42"},
+		// Error case
+		{`use core.json; json.parse("invalid") !? { success(v) => "ok" failure(e) => "error" };`, "error"},
+	}
+	runVmTests(t, tests)
+}
+
 func TestHashLiterals(t *testing.T) {
 	tests := []vmTestCase{
 		// Empty hash

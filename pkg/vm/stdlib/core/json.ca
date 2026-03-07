@@ -1,0 +1,20 @@
+// core.json - JSON parser / serializer
+// Uses primitives: __json_parse, __json_stringify
+
+// parse converts a JSON string to a Calcium value
+// Returns success(value) on success, failure(message) on error
+// Supports: strings, numbers (int/float), booleans, null, arrays, objects
+// Example: json.parse('{"name": "Alice", "age": 30}')
+func parse(s) = __json_parse(s);
+
+// stringify converts a Calcium value to a JSON string
+// Returns success(string) on success, failure(message) on error
+// Supports: strings, numbers, booleans, null, arrays, hashes
+// Example: json.stringify({name: "Alice", age: 30})
+func stringify(v) = __json_stringify(v);
+
+// decode is an alias for parse
+func decode(s) = parse(s);
+
+// encode is an alias for stringify
+func encode(v) = stringify(v);

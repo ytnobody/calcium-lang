@@ -59,10 +59,10 @@ func (es *ExpressionStatement) TokenLiteral() string { return es.Token.Literal }
 // AssignmentStatement represents variable binding: x = expr;
 // Optionally typed: x: Int = expr;
 type AssignmentStatement struct {
-	Token      token.Token     // the IDENT token
-	Name       *Identifier
-	TypeAnnot  *TypeAnnotation // optional type annotation (nil if not annotated)
-	Value      Expression
+	Token     token.Token // the IDENT token
+	Name      *Identifier
+	TypeAnnot *TypeAnnotation // optional type annotation (nil if not annotated)
+	Value     Expression
 }
 
 func (as *AssignmentStatement) statementNode()       {}
@@ -92,12 +92,12 @@ func (ht *HeadTailDestructuringStatement) TokenLiteral() string { return ht.Toke
 // FunctionDeclaration represents: func name(params) = body;
 // Optionally typed: func name(a: Int, b: Int): Int = body;
 type FunctionDeclaration struct {
-	Token       token.Token      // the FUNC token
+	Token       token.Token // the FUNC token
 	Name        *Identifier
 	Parameters  []*Identifier
-	Constraints []*Identifier    // constraint for each parameter (nil if none)
+	Constraints []*Identifier     // constraint for each parameter (nil if none)
 	ParamTypes  []*TypeAnnotation // optional type annotation for each parameter (nil if not annotated)
-	ReturnType  *TypeAnnotation  // optional return type annotation (nil if not annotated)
+	ReturnType  *TypeAnnotation   // optional return type annotation (nil if not annotated)
 	Body        Expression
 	IsEffect    bool // true for func! (side-effect function)
 }
@@ -335,7 +335,7 @@ func (me *MemberExpression) TokenLiteral() string { return me.Token.Literal }
 // LambdaExpression represents (params) => expr or x => expr
 // Optionally typed: (a: Int, b: Int) => a + b
 type LambdaExpression struct {
-	Token      token.Token      // the '=>' token
+	Token      token.Token // the '=>' token
 	Parameters []*Identifier
 	ParamTypes []*TypeAnnotation // optional type annotation for each parameter (nil if not annotated)
 	Body       Expression

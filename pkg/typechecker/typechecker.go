@@ -79,8 +79,8 @@ func (c *Checker) checkStatement(stmt ast.Statement) {
 		c.checkFunctionDeclaration(s)
 	case *ast.ExpressionStatement:
 		c.inferExpr(s.Expression)
-	// Other statement kinds (namespace, use, type, destructuring) currently
-	// have no type annotation support; skip silently.
+		// Other statement kinds (namespace, use, type, destructuring) currently
+		// have no type annotation support; skip silently.
 	}
 }
 

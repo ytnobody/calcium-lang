@@ -45,14 +45,14 @@ type TypeExpr interface {
 // AnyType is the dynamic type; compatible with everything.
 type AnyType struct{}
 
-func (*AnyType) typeExpr()    {}
-func (*AnyType) String() string { return "Any" }
+func (*AnyType) typeExpr()                            {}
+func (*AnyType) String() string                       { return "Any" }
 func (*AnyType) IsCompatibleWith(other TypeExpr) bool { return true }
 
 // NullType represents the null type.
 type NullType struct{}
 
-func (*NullType) typeExpr()    {}
+func (*NullType) typeExpr()      {}
 func (*NullType) String() string { return "Null" }
 func (*NullType) IsCompatibleWith(other TypeExpr) bool {
 	_, ok := other.(*AnyType)
@@ -66,7 +66,7 @@ func (*NullType) IsCompatibleWith(other TypeExpr) bool {
 // BoolType represents the boolean type.
 type BoolType struct{}
 
-func (*BoolType) typeExpr()    {}
+func (*BoolType) typeExpr()      {}
 func (*BoolType) String() string { return "Bool" }
 func (*BoolType) IsCompatibleWith(other TypeExpr) bool {
 	if _, ok := other.(*AnyType); ok {
@@ -79,7 +79,7 @@ func (*BoolType) IsCompatibleWith(other TypeExpr) bool {
 // IntType represents the integer type.
 type IntType struct{}
 
-func (*IntType) typeExpr()    {}
+func (*IntType) typeExpr()      {}
 func (*IntType) String() string { return "Int" }
 func (*IntType) IsCompatibleWith(other TypeExpr) bool {
 	if _, ok := other.(*AnyType); ok {
@@ -92,7 +92,7 @@ func (*IntType) IsCompatibleWith(other TypeExpr) bool {
 // FloatType represents the floating-point type.
 type FloatType struct{}
 
-func (*FloatType) typeExpr()    {}
+func (*FloatType) typeExpr()      {}
 func (*FloatType) String() string { return "Float" }
 func (*FloatType) IsCompatibleWith(other TypeExpr) bool {
 	if _, ok := other.(*AnyType); ok {
@@ -105,7 +105,7 @@ func (*FloatType) IsCompatibleWith(other TypeExpr) bool {
 // StringType represents the string type.
 type StringType struct{}
 
-func (*StringType) typeExpr()    {}
+func (*StringType) typeExpr()      {}
 func (*StringType) String() string { return "String" }
 func (*StringType) IsCompatibleWith(other TypeExpr) bool {
 	if _, ok := other.(*AnyType); ok {
@@ -118,7 +118,7 @@ func (*StringType) IsCompatibleWith(other TypeExpr) bool {
 // RegexType represents the regex type.
 type RegexType struct{}
 
-func (*RegexType) typeExpr()    {}
+func (*RegexType) typeExpr()      {}
 func (*RegexType) String() string { return "Regex" }
 func (*RegexType) IsCompatibleWith(other TypeExpr) bool {
 	if _, ok := other.(*AnyType); ok {
@@ -131,7 +131,7 @@ func (*RegexType) IsCompatibleWith(other TypeExpr) bool {
 // FuncType represents the function type (generic, no parameter type info).
 type FuncType struct{}
 
-func (*FuncType) typeExpr()    {}
+func (*FuncType) typeExpr()      {}
 func (*FuncType) String() string { return "Func" }
 func (*FuncType) IsCompatibleWith(other TypeExpr) bool {
 	if _, ok := other.(*AnyType); ok {
@@ -310,7 +310,7 @@ type NamedType struct {
 	Name string
 }
 
-func (*NamedType) typeExpr() {}
+func (*NamedType) typeExpr()        {}
 func (n *NamedType) String() string { return n.Name }
 func (n *NamedType) IsCompatibleWith(other TypeExpr) bool {
 	if _, ok := other.(*AnyType); ok {
@@ -326,19 +326,19 @@ func (n *NamedType) IsCompatibleWith(other TypeExpr) bool {
 // ---- singleton instances for common types ----
 
 var (
-	Any    TypeExpr = &AnyType{}
-	Null   TypeExpr = &NullType{}
-	Bool   TypeExpr = &BoolType{}
-	Int    TypeExpr = &IntType{}
-	Float  TypeExpr = &FloatType{}
-	Str    TypeExpr = &StringType{}
-	Rx     TypeExpr = &RegexType{}
-	Fn     TypeExpr = &FuncType{}
-	Arr    TypeExpr = &ArrayType{}
-	Hsh    TypeExpr = &HashType{}
-	Tup    TypeExpr = &TupleType{}
-	Succ   TypeExpr = &SuccessType{}
-	Fail   TypeExpr = &FailureType{}
+	Any   TypeExpr = &AnyType{}
+	Null  TypeExpr = &NullType{}
+	Bool  TypeExpr = &BoolType{}
+	Int   TypeExpr = &IntType{}
+	Float TypeExpr = &FloatType{}
+	Str   TypeExpr = &StringType{}
+	Rx    TypeExpr = &RegexType{}
+	Fn    TypeExpr = &FuncType{}
+	Arr   TypeExpr = &ArrayType{}
+	Hsh   TypeExpr = &HashType{}
+	Tup   TypeExpr = &TupleType{}
+	Succ  TypeExpr = &SuccessType{}
+	Fail  TypeExpr = &FailureType{}
 )
 
 // FromName returns the TypeExpr for a given built-in type name, or nil if unknown.

@@ -25,7 +25,7 @@ func TestFromName(t *testing.T) {
 		{"Success", true},
 		{"Failure", true},
 		{"Unknown", false},
-		{"int", false},  // case-sensitive
+		{"int", false}, // case-sensitive
 		{"string", false},
 	}
 

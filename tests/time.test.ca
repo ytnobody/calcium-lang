@@ -1,0 +1,31 @@
+// core.time module tests
+use test;
+use core.time;
+
+// Helper to unwrap Result type
+func unwrap(result) = result !? {
+    success(v) => v
+    failure(e) => e
+};
+
+// Known timestamp: 2024-01-15 12:30:00 UTC = 1705314600
+known_ts = time.from_components_tz(2024, 1, 15, 12, 30, 0, "UTC");
+
+test.new()
+  |> test.plan(15)
+  |> test.is("now returns positive", time.now() > 0, true)
+  |> test.is("now_ms returns positive", time.now_ms() > 0, true)
+  |> test.is("now_ms > now * 900", time.now_ms() > time.now() * 900, true)
+  |> test.is("format date UTC", unwrap(time.format_tz(known_ts, "2006-01-02", "UTC")), "2024-01-15")
+  |> test.is("format datetime UTC", unwrap(time.format_tz(known_ts, "2006-01-02 15:04:05", "UTC")), "2024-01-15 12:30:00")
+  |> test.is("parse date", unwrap(time.parse_tz("2024-01-15", "2006-01-02", "UTC")), known_ts - 45000)
+  |> test.is("components year", time.year(known_ts), 2024)
+  |> test.is("components month", time.month(known_ts), 1)
+  |> test.is("add seconds", time.add(known_ts, 3600), known_ts + 3600)
+  |> test.is("add_hours", time.add_hours(known_ts, 2), known_ts + 7200)
+  |> test.is("add_days", time.add_days(known_ts, 1), known_ts + 86400)
+  |> test.is("diff", time.diff(known_ts + 100, known_ts), 100)
+  |> test.is("to_date matches format", unwrap(time.to_date(known_ts)), unwrap(time.format(known_ts, "2006-01-02")))
+  |> test.is("minute constant", time.minute, 60)
+  |> test.is("hour constant", time.hour, 3600)
+  |> test.done();

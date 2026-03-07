@@ -3,6 +3,7 @@ package lsp
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"
@@ -244,19 +245,29 @@ var (
 
 func extractPosition(msg string) (line, col int) {
 	if m := reLineCol.FindStringSubmatch(msg); len(m) == 3 {
-		fmt.Sscanf(m[1], "%d", &line)
-		fmt.Sscanf(m[2], "%d", &col)
+		if v, err := strconv.Atoi(m[1]); err == nil {
+			line = v
+		}
+		if v, err := strconv.Atoi(m[2]); err == nil {
+			col = v
+		}
 		return
 	}
 	if m := reAtLine.FindStringSubmatch(msg); len(m) >= 2 {
-		fmt.Sscanf(m[1], "%d", &line)
+		if v, err := strconv.Atoi(m[1]); err == nil {
+			line = v
+		}
 		if len(m) >= 3 && m[2] != "" {
-			fmt.Sscanf(m[2], "%d", &col)
+			if v, err := strconv.Atoi(m[2]); err == nil {
+				col = v
+			}
 		}
 		return
 	}
 	if m := reLine.FindStringSubmatch(msg); len(m) == 2 {
-		fmt.Sscanf(m[1], "%d", &line)
+		if v, err := strconv.Atoi(m[1]); err == nil {
+			line = v
+		}
 		return
 	}
 	return 0, 0

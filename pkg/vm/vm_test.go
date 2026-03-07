@@ -400,6 +400,43 @@ func TestMatchExpression(t *testing.T) {
 	runVmTests(t, tests)
 }
 
+func TestMatchGuardClause(t *testing.T) {
+	tests := []vmTestCase{
+		// Basic guard clause: bind variable and check condition
+		{
+			input:    `match 5 x if x > 0 => "positive" _ => "non-positive";`,
+			expected: "positive",
+		},
+		// Guard clause with negative number falls through to default
+		{
+			input:    `match -3 x if x > 0 => "positive" _ => "non-positive";`,
+			expected: "non-positive",
+		},
+		// Guard with equality check
+		{
+			input:    `match 42 x if x == 42 => "answer" _ => "other";`,
+			expected: "answer",
+		},
+		// Multiple guard clauses
+		{
+			input:    `match 15 x if x > 10 => "big" x if x > 0 => "small" _ => "zero-or-neg";`,
+			expected: "big",
+		},
+		// Guard mixed with exact match
+		{
+			input:    `match 1 0 => "zero" x if x > 0 => "positive" _ => "negative";`,
+			expected: "positive",
+		},
+		// Guard with exact match first
+		{
+			input:    `match 0 0 => "zero" x if x > 0 => "positive" _ => "negative";`,
+			expected: "zero",
+		},
+	}
+
+	runVmTests(t, tests)
+}
+
 func TestPipeOperator(t *testing.T) {
 	tests := []vmTestCase{
 		{

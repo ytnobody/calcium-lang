@@ -1391,6 +1391,14 @@ func (p *Parser) parseMatchCase() *ast.MatchCase {
 		mc.Pattern = p.parseExpression(LAMBDA)
 	}
 
+	// Check for guard clause: pattern if condition => body
+	// "if" is a contextual keyword (not reserved), so it appears as IDENT with literal "if"
+	if p.peekTokenIs(token.IDENT) && p.peekToken.Literal == "if" {
+		p.nextToken() // consume "if"
+		p.nextToken() // move to guard expression
+		mc.Guard = p.parseExpression(LAMBDA)
+	}
+
 	// Expect =>
 	if !p.expectPeek(token.ARROW) {
 		return nil

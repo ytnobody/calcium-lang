@@ -36,7 +36,7 @@ type SymbolInfo struct {
 type SymbolKind int
 
 const (
-	SymbolVariable   SymbolKind = iota
+	SymbolVariable SymbolKind = iota
 	SymbolFunction
 	SymbolConstraint
 	SymbolType
@@ -408,26 +408,26 @@ var builtinCompletions = []CompletionItem{
 }
 
 var builtinDocs = map[string]string{
-	"func": "```calcium\nfunc name(params) = body\n```\nDeclares a pure function.",
-	"func!": "```calcium\nfunc! name(params) = body\n```\nDeclares an effect (side-effecting) function.",
-	"match": "```calcium\nmatch expr\n  pattern => result\n  _ => default\n```\nPattern matching expression.",
+	"func":       "```calcium\nfunc name(params) = body\n```\nDeclares a pure function.",
+	"func!":      "```calcium\nfunc! name(params) = body\n```\nDeclares an effect (side-effecting) function.",
+	"match":      "```calcium\nmatch expr\n  pattern => result\n  _ => default\n```\nPattern matching expression.",
 	"constraint": "```calcium\nconstraint Name(x) = expr\n```\nDefines a constraint (type predicate).",
-	"namespace": "```calcium\nnamespace module.path\n```\nDeclares the namespace for this file.",
-	"use": "```calcium\nuse module.path\n```\nImports a module.",
-	"type": "```calcium\ntype Name = Variant1(fields) | Variant2\n```\nDeclares an algebraic data type.",
-	"do": "```calcium\ndo\n  stmt1;\n  stmt2;\n  finalExpr\nend\n```\nBlock expression with sequential statements.",
-	"return": "```calcium\nreturn expr\n```\nExplicit return from a function body.",
-	"success": "```calcium\nsuccess(value)\n```\nCreates a successful result value.",
-	"failure": "```calcium\nfailure(error)\n```\nCreates a failed result value.",
-	"in": "Used in `for`-style expressions and range iteration.",
-	"map": "```calcium\nmap(collection, fn)\n```\nApplies `fn` to each element of the collection.",
-	"filter": "```calcium\nfilter(collection, fn)\n```\nReturns elements for which `fn` returns true.",
-	"reduce": "```calcium\nreduce(collection, initial, fn)\n```\nFolds the collection into a single value.",
-	"has": "```calcium\nhas(hash, key)\n```\nReturns true if `hash` contains `key`.",
-	"keys": "```calcium\nkeys(hash)\n```\nReturns all keys of the hash.",
-	"values": "```calcium\nvalues(hash)\n```\nReturns all values of the hash.",
-	"hash": "```calcium\nhash(array)\n```\nConverts an array of key-value pairs into a hash.",
-	"len": "```calcium\nlen(collection)\n```\nReturns the number of elements.",
-	"true": "Boolean literal `true`.",
-	"false": "Boolean literal `false`.",
+	"namespace":  "```calcium\nnamespace module.path\n```\nDeclares the namespace for this file.",
+	"use":        "```calcium\nuse module.path\n```\nImports a module.",
+	"type":       "```calcium\ntype Name = Variant1(fields) | Variant2\n```\nDeclares an algebraic data type.",
+	"do":         "```calcium\ndo\n  stmt1;\n  stmt2;\n  finalExpr\nend\n```\nBlock expression with sequential statements.",
+	"return":     "```calcium\nreturn expr\n```\nExplicit return from a function body.",
+	"success":    "```calcium\nsuccess(value)\n```\nCreates a successful result value.",
+	"failure":    "```calcium\nfailure(error)\n```\nCreates a failed result value.",
+	"in":         "Used in `for`-style expressions and range iteration.",
+	"map":        "```calcium\nmap(collection, fn)\n```\nApplies `fn` to each element of the collection.",
+	"filter":     "```calcium\nfilter(collection, fn)\n```\nReturns elements for which `fn` returns true.",
+	"reduce":     "```calcium\nreduce(collection, initial, fn)\n```\nFolds the collection into a single value.",
+	"has":        "```calcium\nhas(hash, key)\n```\nReturns true if `hash` contains `key`.",
+	"keys":       "```calcium\nkeys(hash)\n```\nReturns all keys of the hash.",
+	"values":     "```calcium\nvalues(hash)\n```\nReturns all values of the hash.",
+	"hash":       "```calcium\nhash(array)\n```\nConverts an array of key-value pairs into a hash.",
+	"len":        "```calcium\nlen(collection)\n```\nReturns the number of elements.",
+	"true":       "Boolean literal `true`.",
+	"false":      "Boolean literal `false`.",
 }

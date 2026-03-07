@@ -8,32 +8,32 @@ package lsp
 
 // RequestMessage is a JSON-RPC 2.0 request
 type RequestMessage struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      any `json:"id,omitempty"`
-	Method  string      `json:"method"`
-	Params  any `json:"params,omitempty"`
+	JSONRPC string `json:"jsonrpc"`
+	ID      any    `json:"id,omitempty"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
 }
 
 // ResponseMessage is a JSON-RPC 2.0 response
 type ResponseMessage struct {
-	JSONRPC string        `json:"jsonrpc"`
-	ID      any   `json:"id"`
-	Result  any   `json:"result,omitempty"`
+	JSONRPC string         `json:"jsonrpc"`
+	ID      any            `json:"id"`
+	Result  any            `json:"result,omitempty"`
 	Error   *ResponseError `json:"error,omitempty"`
 }
 
 // NotificationMessage is a JSON-RPC 2.0 notification (no ID)
 type NotificationMessage struct {
-	JSONRPC string      `json:"jsonrpc"`
-	Method  string      `json:"method"`
-	Params  any `json:"params,omitempty"`
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
 }
 
 // ResponseError represents a JSON-RPC error object
 type ResponseError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    any `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // Error codes (JSON-RPC + LSP)
@@ -99,8 +99,8 @@ type TextDocumentContentChangeEvent struct {
 
 // InitializeParams are the parameters for the initialize request
 type InitializeParams struct {
-	ProcessID    *int              `json:"processId"`
-	RootURI      string            `json:"rootUri"`
+	ProcessID    *int               `json:"processId"`
+	RootURI      string             `json:"rootUri"`
 	Capabilities ClientCapabilities `json:"capabilities"`
 }
 
@@ -145,10 +145,10 @@ type ServerInfo struct {
 
 // ServerCapabilities describes the server's capabilities
 type ServerCapabilities struct {
-	TextDocumentSync   int                  `json:"textDocumentSync"`
-	CompletionProvider *CompletionOptions   `json:"completionProvider,omitempty"`
-	HoverProvider      bool                 `json:"hoverProvider,omitempty"`
-	DefinitionProvider bool                 `json:"definitionProvider,omitempty"`
+	TextDocumentSync   int                `json:"textDocumentSync"`
+	CompletionProvider *CompletionOptions `json:"completionProvider,omitempty"`
+	HoverProvider      bool               `json:"hoverProvider,omitempty"`
+	DefinitionProvider bool               `json:"definitionProvider,omitempty"`
 }
 
 // CompletionOptions describes completion server capabilities
@@ -228,11 +228,11 @@ const (
 
 // CompletionItem represents a single completion suggestion
 type CompletionItem struct {
-	Label            string             `json:"label"`
-	Kind             CompletionItemKind `json:"kind,omitempty"`
-	Detail           string             `json:"detail,omitempty"`
-	Documentation    string             `json:"documentation,omitempty"`
-	InsertText       string             `json:"insertText,omitempty"`
+	Label         string             `json:"label"`
+	Kind          CompletionItemKind `json:"kind,omitempty"`
+	Detail        string             `json:"detail,omitempty"`
+	Documentation string             `json:"documentation,omitempty"`
+	InsertText    string             `json:"insertText,omitempty"`
 }
 
 // CompletionList is a list of completion items
@@ -290,7 +290,7 @@ type DidOpenTextDocumentParams struct {
 
 // DidChangeTextDocumentParams are the params for textDocument/didChange
 type DidChangeTextDocumentParams struct {
-	TextDocument   VersionedTextDocumentIdentifier   `json:"textDocument"`
+	TextDocument   VersionedTextDocumentIdentifier  `json:"textDocument"`
 	ContentChanges []TextDocumentContentChangeEvent `json:"contentChanges"`
 }
 

@@ -120,11 +120,27 @@ type VM struct {
 
 	// Run options (import map, lock file, cached-only mode)
 	runOptions *RunOptions
+
+	// Source map for the main program (for runtime error messages)
+	sourceMap *bytecode.SourceMap
+
+	// Source input for showing source lines in error messages
+	sourceInput string
 }
 
 // SetSourcePath sets the source file path for external module resolution
 func (vm *VM) SetSourcePath(path string) {
 	vm.sourcePath = path
+}
+
+// SetSourceMap sets the source map for the main program
+func (vm *VM) SetSourceMap(sm *bytecode.SourceMap) {
+	vm.sourceMap = sm
+}
+
+// SetSourceInput sets the source code text for error messages
+func (vm *VM) SetSourceInput(input string) {
+	vm.sourceInput = input
 }
 
 // SetRunOptions sets the run options for the VM
@@ -355,6 +371,7 @@ func (vm *VM) Run(instructions bytecode.Instructions) error {
 		Name:      "<main>",
 		Body:      instructions,
 		NumLocals: 0,
+		SourceMap: vm.sourceMap,
 	}
 	mainClosure := &value.Closure{Fn: mainFn}
 	vm.frames[0] = NewFrame(mainClosure, 0)
@@ -368,11 +385,113 @@ func (vm *VM) Run(instructions bytecode.Instructions) error {
 
 		err := vm.executeOpcode(op)
 		if err != nil {
-			return err
+			return vm.wrapError(err)
 		}
 	}
 
 	return nil
+}
+
+// wrapError enhances an error with source position and stack trace
+func (vm *VM) wrapError(err error) error {
+	var sb strings.Builder
+	sb.WriteString(err.Error())
+
+	// Get source position from current frame
+	pos := vm.currentSourcePosition()
+	if pos.IsValid() {
+		sb.WriteString(fmt.Sprintf("\n  at %s", pos.String()))
+
+		// Show the source line if available
+		if vm.sourceInput != "" && pos.Line > 0 {
+			line := vm.getSourceLine(pos.Line)
+			if line != "" {
+				sb.WriteString(fmt.Sprintf("\n  | %s", line))
+				if pos.Column > 0 && pos.Column <= len(line) {
+					sb.WriteString(fmt.Sprintf("\n  | %s^", strings.Repeat(" ", pos.Column-1)))
+				}
+			}
+		}
+	}
+
+	// Build stack trace
+	trace := vm.stackTrace()
+	if len(trace) > 0 {
+		sb.WriteString("\n\nstack trace:")
+		for _, entry := range trace {
+			sb.WriteString(fmt.Sprintf("\n  %s", entry))
+		}
+	}
+
+	return fmt.Errorf("%s", sb.String())
+}
+
+// currentSourcePosition returns the source position for the current instruction
+func (vm *VM) currentSourcePosition() bytecode.SourcePosition {
+	frame := vm.currentFrame()
+	sm := vm.getFrameSourceMap(frame)
+	if sm == nil {
+		return bytecode.SourcePosition{}
+	}
+	return sm.Lookup(frame.ip)
+}
+
+// getFrameSourceMap extracts the source map from a frame's function
+func (vm *VM) getFrameSourceMap(frame *Frame) *bytecode.SourceMap {
+	if frame == nil || frame.cl == nil || frame.cl.Fn == nil {
+		return nil
+	}
+	if sm, ok := frame.cl.Fn.SourceMap.(*bytecode.SourceMap); ok {
+		return sm
+	}
+	return nil
+}
+
+// stackTrace builds a stack trace from the current call frames
+func (vm *VM) stackTrace() []string {
+	if vm.framesIndex <= 1 {
+		return nil // Only main frame, no interesting stack trace
+	}
+
+	var entries []string
+	// Walk frames from current (innermost) to outermost
+	for i := vm.framesIndex - 1; i >= 0; i-- {
+		frame := vm.frames[i]
+		if frame == nil || frame.cl == nil || frame.cl.Fn == nil {
+			continue
+		}
+
+		fn := frame.cl.Fn
+		funcName := fn.Name
+		if funcName == "" {
+			funcName = "<anonymous>"
+		}
+
+		sm := vm.getFrameSourceMap(frame)
+		if sm != nil {
+			pos := sm.Lookup(frame.ip)
+			if pos.IsValid() {
+				entries = append(entries, fmt.Sprintf("%s at %s", funcName, pos.String()))
+				continue
+			}
+		}
+
+		entries = append(entries, funcName)
+	}
+
+	return entries
+}
+
+// getSourceLine returns the source line at the given 1-based line number
+func (vm *VM) getSourceLine(lineNum int) string {
+	if vm.sourceInput == "" || lineNum <= 0 {
+		return ""
+	}
+	lines := strings.Split(vm.sourceInput, "\n")
+	if lineNum > len(lines) {
+		return ""
+	}
+	return strings.TrimRight(lines[lineNum-1], "\r")
 }
 
 // getConstant returns the constant at the given index, using the frame's constants if available

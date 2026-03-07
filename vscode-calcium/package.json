@@ -1,0 +1,64 @@
+{
+  "name": "vscode-calcium",
+  "displayName": "Calcium Language",
+  "description": "Calcium language support with LSP (completion, hover, definition, diagnostics)",
+  "version": "0.1.0",
+  "publisher": "calcium-lang",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:calcium"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "calcium",
+        "aliases": ["Calcium", "calcium"],
+        "extensions": [".ca"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "calcium",
+        "scopeName": "source.calcium",
+        "path": "./syntaxes/calcium.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Calcium",
+      "properties": {
+        "calcium.lsp.path": {
+          "type": "string",
+          "default": "calcium-lsp",
+          "description": "Path to the calcium-lsp binary"
+        },
+        "calcium.lsp.logFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the calcium-lsp log file (empty = no logging)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -5,68 +5,59 @@ use core.types;
 
 io.println("# Type System Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 26);
-
-// === Type Detection ===
-io.println("# type_of");
-ctx = test.is(ctx, "int type", types.type_of(42), "int");
-ctx = test.is(ctx, "float type", types.type_of(3.14), "float");
-ctx = test.is(ctx, "string type", types.type_of("hello"), "string");
-ctx = test.is(ctx, "bool true type", types.type_of(true), "bool");
-ctx = test.is(ctx, "bool false type", types.type_of(false), "bool");
-ctx = test.is(ctx, "array type", types.type_of([1, 2, 3]), "array");
-ctx = test.is(ctx, "hash type", types.type_of({a: 1}), "hash");
-ctx = test.is(ctx, "null type", types.type_of(types.null), "null");
-
-// === Type Predicates ===
-io.println("# Type predicates");
-ctx = test.ok(ctx, "is_int positive", types.is_int(42));
-ctx = test.is(ctx, "is_int negative", types.is_int(3.14), false);
-ctx = test.ok(ctx, "is_float", types.is_float(3.14));
-ctx = test.ok(ctx, "is_string", types.is_string("hello"));
-ctx = test.ok(ctx, "is_bool", types.is_bool(true));
-ctx = test.ok(ctx, "is_array", types.is_array([1, 2]));
-ctx = test.ok(ctx, "is_hash", types.is_hash({a: 1}));
-ctx = test.ok(ctx, "is_null", types.is_null(types.null));
-ctx = test.ok(ctx, "is_number int", types.is_number(42));
-ctx = test.ok(ctx, "is_number float", types.is_number(3.14));
-ctx = test.is(ctx, "is_number string", types.is_number("42"), false);
-
-// === Type Conversion ===
-io.println("# to_int");
-ctx = types.to_int("42") !? {
-    success(v) => test.is(ctx, "from string", v, 42)
-    failure(e) => test.fail(ctx, "to_int from string failed")
-};
-ctx = types.to_int(3.7) !? {
-    success(v) => test.is(ctx, "from float", v, 3)
-    failure(e) => test.fail(ctx, "to_int from float failed")
-};
-ctx = types.to_int(true) !? {
-    success(v) => test.is(ctx, "from bool", v, 1)
-    failure(e) => test.fail(ctx, "to_int from bool failed")
+// === Pre-compute conversion results ===
+func unwrap_or(result, default_val) = result !? {
+    success(v) => v
+    failure(_) => default_val
 };
 
-io.println("# to_float");
-ctx = types.to_float("3.14") !? {
-    success(v) => test.is(ctx, "from string", v, 3.14)
-    failure(e) => test.fail(ctx, "to_float from string failed")
+to_int_str = unwrap_or(types.to_int("42"), -999);
+to_int_float = unwrap_or(types.to_int(3.7), -999);
+to_int_bool = unwrap_or(types.to_int(true), -999);
+to_float_str = unwrap_or(types.to_float("3.14"), -999.0);
+to_float_int = unwrap_or(types.to_float(42), -999.0);
+
+// Conversion error checks (should fail)
+to_int_invalid_is_failure = types.to_int("not a number") !? {
+    success(_) => false
+    failure(_) => true
 };
-ctx = types.to_float(42) !? {
-    success(v) => test.is(ctx, "from int", v, 42.0)
-    failure(e) => test.fail(ctx, "to_float from int failed")
+to_float_invalid_is_failure = types.to_float("not a number") !? {
+    success(_) => false
+    failure(_) => true
 };
 
-// === Conversion Errors ===
-io.println("# Conversion errors");
-ctx = types.to_int("not a number") !? {
-    success(v) => test.fail(ctx, "to_int invalid")
-    failure(e) => test.pass(ctx, "to_int invalid")
-};
-ctx = types.to_float("not a number") !? {
-    success(v) => test.fail(ctx, "to_float invalid")
-    failure(e) => test.pass(ctx, "to_float invalid")
-};
-
-test.done(ctx);
+test.new()
+    |> test.plan(26)
+    // Type Detection
+    |> test.is("int type", types.type_of(42), "int")
+    |> test.is("float type", types.type_of(3.14), "float")
+    |> test.is("string type", types.type_of("hello"), "string")
+    |> test.is("bool true type", types.type_of(true), "bool")
+    |> test.is("bool false type", types.type_of(false), "bool")
+    |> test.is("array type", types.type_of([1, 2, 3]), "array")
+    |> test.is("hash type", types.type_of({a: 1}), "hash")
+    |> test.is("null type", types.type_of(types.null), "null")
+    // Type Predicates
+    |> test.ok("is_int positive", types.is_int(42))
+    |> test.is("is_int negative", types.is_int(3.14), false)
+    |> test.ok("is_float", types.is_float(3.14))
+    |> test.ok("is_string", types.is_string("hello"))
+    |> test.ok("is_bool", types.is_bool(true))
+    |> test.ok("is_array", types.is_array([1, 2]))
+    |> test.ok("is_hash", types.is_hash({a: 1}))
+    |> test.ok("is_null", types.is_null(types.null))
+    |> test.ok("is_number int", types.is_number(42))
+    |> test.ok("is_number float", types.is_number(3.14))
+    |> test.is("is_number string", types.is_number("42"), false)
+    // Type Conversion: to_int
+    |> test.is("from string", to_int_str, 42)
+    |> test.is("from float", to_int_float, 3)
+    |> test.is("from bool", to_int_bool, 1)
+    // Type Conversion: to_float
+    |> test.is("from string", to_float_str, 3.14)
+    |> test.is("from int", to_float_int, 42.0)
+    // Conversion Errors
+    |> test.ok("to_int invalid", to_int_invalid_is_failure)
+    |> test.ok("to_float invalid", to_float_invalid_is_failure)
+    |> test.done();

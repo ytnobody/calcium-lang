@@ -3,14 +3,14 @@
 // Author: YTNOBODY
 // License: MIT
 //
-// Usage:
+// Usage (pipeline chaining style):
 //   use test;
-//   ctx = test.new();
-//   ctx = test.plan(ctx, 3);
-//   ctx = test.is(ctx, "addition", 1 + 1, 2);
-//   ctx = test.ok(ctx, "truthy", true);
-//   ctx = test.isnt(ctx, "not equal", 1, 2);
-//   test.done(ctx);
+//   test.new()
+//       |> test.plan(3)
+//       |> test.is("addition", 1 + 1, 2)
+//       |> test.ok("truthy", true)
+//       |> test.isnt("not equal", 1, 2)
+//       |> test.done();
 
 namespace test;
 

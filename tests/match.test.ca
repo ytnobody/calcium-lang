@@ -4,62 +4,34 @@ use test;
 
 io.println("# Pattern Matching Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 18);
-
 // === Literal Matching ===
-io.println("# Literal matching");
 func describe_num(n) = match n
     0 => "zero"
     1 => "one"
     2 => "two"
     _ => "many";
 
-ctx = test.is(ctx, "match 0", describe_num(0), "zero");
-ctx = test.is(ctx, "match 1", describe_num(1), "one");
-ctx = test.is(ctx, "match 2", describe_num(2), "two");
-ctx = test.is(ctx, "match wildcard", describe_num(100), "many");
-
 // === Boolean Matching ===
-io.println("# Boolean matching");
 func bool_to_str(b) = match b
     true => "yes"
     false => "no";
 
-ctx = test.is(ctx, "match true", bool_to_str(true), "yes");
-ctx = test.is(ctx, "match false", bool_to_str(false), "no");
-
 // === String Matching ===
-io.println("# String matching");
 func greet(name) = match name
     "Alice" => "Hello, Alice!"
     "Bob" => "Hi, Bob!"
     _ => concat("Welcome, ", name);
 
-ctx = test.is(ctx, "match Alice", greet("Alice"), "Hello, Alice!");
-ctx = test.is(ctx, "match Bob", greet("Bob"), "Hi, Bob!");
-ctx = test.is(ctx, "match other", greet("Charlie"), "Welcome, Charlie");
-
 // === Wildcard ===
-io.println("# Wildcard");
 func always_default(x) = match x
     _ => "default";
 
-ctx = test.is(ctx, "wildcard int", always_default(1), "default");
-ctx = test.is(ctx, "wildcard string", always_default("hello"), "default");
-ctx = test.is(ctx, "wildcard bool", always_default(true), "default");
-
 // === Recursive Pattern Matching ===
-io.println("# Recursive with match");
 func sum_list(lst) = match len(lst)
     0 => 0
     _ => head(lst) + sum_list(tail(lst));
 
-ctx = test.is(ctx, "sum empty list", sum_list([]), 0);
-ctx = test.is(ctx, "sum [1..5]", sum_list([1, 2, 3, 4, 5]), 15);
-
 // === Nested Match ===
-io.println("# Nested match");
 func classify_positive(x) = match x > 100
     true => "large positive"
     false => "small positive";
@@ -72,9 +44,30 @@ func classify(x) = match x > 0
     true => classify_positive(x)
     false => classify_non_positive(x);
 
-ctx = test.is(ctx, "classify 500", classify(500), "large positive");
-ctx = test.is(ctx, "classify 50", classify(50), "small positive");
-ctx = test.is(ctx, "classify 0", classify(0), "zero");
-ctx = test.is(ctx, "classify -10", classify(-10), "negative");
-
-test.done(ctx);
+test.new()
+    |> test.plan(18)
+    // Literal matching
+    |> test.is("match 0", describe_num(0), "zero")
+    |> test.is("match 1", describe_num(1), "one")
+    |> test.is("match 2", describe_num(2), "two")
+    |> test.is("match wildcard", describe_num(100), "many")
+    // Boolean matching
+    |> test.is("match true", bool_to_str(true), "yes")
+    |> test.is("match false", bool_to_str(false), "no")
+    // String matching
+    |> test.is("match Alice", greet("Alice"), "Hello, Alice!")
+    |> test.is("match Bob", greet("Bob"), "Hi, Bob!")
+    |> test.is("match other", greet("Charlie"), "Welcome, Charlie")
+    // Wildcard
+    |> test.is("wildcard int", always_default(1), "default")
+    |> test.is("wildcard string", always_default("hello"), "default")
+    |> test.is("wildcard bool", always_default(true), "default")
+    // Recursive with match
+    |> test.is("sum empty list", sum_list([]), 0)
+    |> test.is("sum [1..5]", sum_list([1, 2, 3, 4, 5]), 15)
+    // Nested match
+    |> test.is("classify 500", classify(500), "large positive")
+    |> test.is("classify 50", classify(50), "small positive")
+    |> test.is("classify 0", classify(0), "zero")
+    |> test.is("classify -10", classify(-10), "negative")
+    |> test.done();

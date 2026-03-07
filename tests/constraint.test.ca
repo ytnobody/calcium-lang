@@ -5,57 +5,23 @@ use core.string;
 
 io.println("# Constraint Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 31);
-
-// === Basic Constraint ===
-io.println("# Basic constraint");
+// === Define Constraints ===
 constraint Positive(x) = x > 0;
-ctx = test.ok(ctx, "5 is positive", Positive(5));
-ctx = test.ok(ctx, "5 passes Positive", Positive(5));
-ctx = test.is(ctx, "-3 fails Positive", Positive(-3), false);
-ctx = test.is(ctx, "0 fails Positive", Positive(0), false);
-
-// === String Constraint ===
-io.println("# String constraint");
 constraint NonEmpty(s) = len(s) > 0;
-ctx = test.ok(ctx, "hello is non-empty", NonEmpty("hello"));
-ctx = test.is(ctx, "empty fails NonEmpty", NonEmpty(""), false);
-
-// === Compound Constraint ===
-io.println("# Compound constraint");
 constraint InRange(x) = x >= 0 && x <= 100;
-ctx = test.ok(ctx, "50 in range", InRange(50));
-ctx = test.ok(ctx, "0 in range", InRange(0));
-ctx = test.ok(ctx, "100 in range", InRange(100));
-ctx = test.is(ctx, "-1 out of range", InRange(-1), false);
-ctx = test.is(ctx, "101 out of range", InRange(101), false);
-
-// === Constraint with Contains ===
-io.println("# Constraint with string.contains");
 constraint Digit(c) = string.contains("0123456789", c);
-ctx = test.ok(ctx, "5 is digit", Digit("5"));
-ctx = test.is(ctx, "a is not digit", Digit("a"), false);
-
 constraint Letter(c) = string.contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", c);
-ctx = test.ok(ctx, "a is letter", Letter("a"));
-ctx = test.ok(ctx, "Z is letter", Letter("Z"));
-ctx = test.is(ctx, "5 is not letter", Letter("5"), false);
+constraint Even(n) = n % 2 == 0;
+constraint Odd(n) = n % 2 == 1;
+constraint PositiveEven(x) = Positive(x) && Even(x);
 
-// === Constraint in Match ===
-// Note: Using Constraint(value) returns boolean, useful for match branching
-io.println("# Constraint in match");
+// === Helper Functions ===
 func classify_char(c) = match Digit(c)
     true => "digit"
     false => match Letter(c)
         true => "letter"
         false => "other";
 
-ctx = test.is(ctx, "classify 5", classify_char("5"), "digit");
-ctx = test.is(ctx, "classify a", classify_char("a"), "letter");
-ctx = test.is(ctx, "classify @", classify_char("@"), "other");
-
-// Alternative: Using !? for result handling
 func is_digit(c) = c |> Digit? !? { success(_) => true  failure(_) => false };
 func is_letter(c) = c |> Letter? !? { success(_) => true  failure(_) => false };
 func classify_with_result(c) = match is_digit(c)
@@ -63,34 +29,50 @@ func classify_with_result(c) = match is_digit(c)
     false => match is_letter(c)
         true => "letter"
         false => "other";
-ctx = test.is(ctx, "result classify 5", classify_with_result("5"), "digit");
-ctx = test.is(ctx, "result classify a", classify_with_result("a"), "letter");
-
-// === Multiple Constraints ===
-io.println("# Multiple constraints");
-constraint Even(n) = n % 2 == 0;
-constraint Odd(n) = n % 2 == 1;
-
-ctx = test.ok(ctx, "4 is even", Even(4));
-ctx = test.ok(ctx, "7 is odd", Odd(7));
-ctx = test.is(ctx, "7 is not even", Even(7), false);
 
 func describe_parity(n) = match Even(n)
     true => "even"
     false => "odd";
 
-ctx = test.is(ctx, "parity 4", describe_parity(4), "even");
-ctx = test.is(ctx, "parity 7", describe_parity(7), "odd");
-
-// === Constraint Composition ===
-io.println("# Constraint composition");
-constraint PositiveEven(x) = Positive(x) && Even(x);
-ctx = test.ok(ctx, "4 is positive and even", PositiveEven(4));
-ctx = test.is(ctx, "3 is not positive-even", PositiveEven(3), false);
-ctx = test.is(ctx, "-4 is not positive-even", PositiveEven(-4), false);
-
-// Composing with && on boolean constraint results
-ctx = test.ok(ctx, "4 passes both", Positive(4) && Even(4));
-ctx = test.is(ctx, "3 fails composition", Positive(3) && Even(3), false);
-
-test.done(ctx);
+test.new()
+    |> test.plan(31)
+    // Basic constraint
+    |> test.ok("5 is positive", Positive(5))
+    |> test.ok("5 passes Positive", Positive(5))
+    |> test.is("-3 fails Positive", Positive(-3), false)
+    |> test.is("0 fails Positive", Positive(0), false)
+    // String constraint
+    |> test.ok("hello is non-empty", NonEmpty("hello"))
+    |> test.is("empty fails NonEmpty", NonEmpty(""), false)
+    // Compound constraint
+    |> test.ok("50 in range", InRange(50))
+    |> test.ok("0 in range", InRange(0))
+    |> test.ok("100 in range", InRange(100))
+    |> test.is("-1 out of range", InRange(-1), false)
+    |> test.is("101 out of range", InRange(101), false)
+    // Constraint with string.contains
+    |> test.ok("5 is digit", Digit("5"))
+    |> test.is("a is not digit", Digit("a"), false)
+    |> test.ok("a is letter", Letter("a"))
+    |> test.ok("Z is letter", Letter("Z"))
+    |> test.is("5 is not letter", Letter("5"), false)
+    // Constraint in match
+    |> test.is("classify 5", classify_char("5"), "digit")
+    |> test.is("classify a", classify_char("a"), "letter")
+    |> test.is("classify @", classify_char("@"), "other")
+    // Alternative: Using !? for result handling
+    |> test.is("result classify 5", classify_with_result("5"), "digit")
+    |> test.is("result classify a", classify_with_result("a"), "letter")
+    // Multiple constraints
+    |> test.ok("4 is even", Even(4))
+    |> test.ok("7 is odd", Odd(7))
+    |> test.is("7 is not even", Even(7), false)
+    |> test.is("parity 4", describe_parity(4), "even")
+    |> test.is("parity 7", describe_parity(7), "odd")
+    // Constraint composition
+    |> test.ok("4 is positive and even", PositiveEven(4))
+    |> test.is("3 is not positive-even", PositiveEven(3), false)
+    |> test.is("-4 is not positive-even", PositiveEven(-4), false)
+    |> test.ok("4 passes both", Positive(4) && Even(4))
+    |> test.is("3 fails composition", Positive(3) && Even(3), false)
+    |> test.done();

@@ -1,69 +1,57 @@
 // Pipeline Operator Test
 use core.io!;
 use test;
+use core.string;
 
 io.println("# Pipeline Tests");
 
-ctx = test.new();
-ctx = test.plan(ctx, 10);
-
-// === Basic Pipeline ===
-io.println("# Basic pipeline");
-result = 5 |> (x => x * 2);
-ctx = test.is(ctx, "simple pipe", result, 10);
-
-// === Chained Pipeline ===
-io.println("# Chained pipeline");
-result2 = 5
-    |> (x => x * 2)
-    |> (x => x + 3)
-    |> (x => x * x);
-ctx = test.is(ctx, "chained transforms", result2, 169);
-
-// === Pipeline with Named Functions ===
-io.println("# Pipeline with named functions");
+// === Named Functions ===
 func double(x) = x * 2;
 func add_ten(x) = x + 10;
 func square(x) = x * x;
 
+// === Pre-compute values ===
+result = 5 |> (x => x * 2);
+result2 = 5
+    |> (x => x * 2)
+    |> (x => x + 3)
+    |> (x => x * x);
 result3 = 3 |> double |> add_ten |> square;
-ctx = test.is(ctx, "named functions", result3, 256);
-
-// === Pipeline with Arrays ===
-io.println("# Pipeline with arrays");
 nums = [1, 2, 3, 4, 5];
 sum_of_squares = nums
     |> map(x => x * x)
     |> reduce((acc, x) => acc + x, 0);
-ctx = test.is(ctx, "sum of squares", sum_of_squares, 55);
-
-// === Pipeline with Filter ===
-io.println("# Pipeline with filter");
 evens_doubled = [1, 2, 3, 4, 5, 6]
     |> filter(x => x % 2 == 0)
     |> map(x => x * 2);
-ctx = test.is(ctx, "filtered length", len(evens_doubled), 3);
-ctx = test.is(ctx, "first doubled even", evens_doubled[0], 4);
-ctx = test.is(ctx, "second doubled even", evens_doubled[1], 8);
-ctx = test.is(ctx, "third doubled even", evens_doubled[2], 12);
-
-// === Complex Pipeline ===
-io.println("# Complex pipeline");
 result4 = range(1, 101)
     |> filter(x => x % 3 == 0)
     |> filter(x => x % 5 == 0)
     |> map(x => x / 15)
     |> reduce((acc, x) => acc + x, 0);
-ctx = test.is(ctx, "multiples of 15", result4, 21);
-
-// === Pipeline with String ===
-io.println("# Pipeline with string operations");
-use core.string;
 text = "  HELLO WORLD  ";
 processed = text
     |> string.trim
     |> string.to_lower
     |> string.replace("world", "calcium");
-ctx = test.is(ctx, "string pipeline", processed, "hello calcium");
 
-test.done(ctx);
+test.new()
+    |> test.plan(10)
+    // Basic pipeline
+    |> test.is("simple pipe", result, 10)
+    // Chained pipeline
+    |> test.is("chained transforms", result2, 169)
+    // Named functions
+    |> test.is("named functions", result3, 256)
+    // Pipeline with arrays
+    |> test.is("sum of squares", sum_of_squares, 55)
+    // Pipeline with filter
+    |> test.is("filtered length", len(evens_doubled), 3)
+    |> test.is("first doubled even", evens_doubled[0], 4)
+    |> test.is("second doubled even", evens_doubled[1], 8)
+    |> test.is("third doubled even", evens_doubled[2], 12)
+    // Complex pipeline
+    |> test.is("multiples of 15", result4, 21)
+    // Pipeline with string
+    |> test.is("string pipeline", processed, "hello calcium")
+    |> test.done();

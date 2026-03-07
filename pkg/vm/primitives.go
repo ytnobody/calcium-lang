@@ -1330,6 +1330,35 @@ func primitiveEnvList(args ...value.Value) value.Value {
 }
 
 // =============================================================================
+// OS / Process Primitives
+// =============================================================================
+
+// __os_args returns the command-line arguments as an array of strings
+func primitiveOsArgs(args ...value.Value) value.Value {
+	if len(args) != 0 {
+		return value.Failure(value.String("__os_args: expected 0 arguments"))
+	}
+
+	result := make([]value.Value, len(os.Args))
+	for i, a := range os.Args {
+		result[i] = value.String(a)
+	}
+	return value.Array(result)
+}
+
+// __os_exit terminates the process with the given exit code
+func primitiveOsExit(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__os_exit: expected 1 argument (code)"))
+	}
+	if args[0].Type != value.TYPE_INT {
+		return value.Failure(value.String("__os_exit: code must be integer"))
+	}
+	os.Exit(int(args[0].AsInt()))
+	return value.Null() // unreachable
+}
+
+// =============================================================================
 // Primitive Registry
 // =============================================================================
 
@@ -1416,5 +1445,9 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__env_set":   {Name: "__env_set", Fn: primitiveEnvSet},
 		"__env_unset": {Name: "__env_unset", Fn: primitiveEnvUnset},
 		"__env_list":  {Name: "__env_list", Fn: primitiveEnvList},
+
+		// OS / Process
+		"__os_args": {Name: "__os_args", Fn: primitiveOsArgs},
+		"__os_exit": {Name: "__os_exit", Fn: primitiveOsExit},
 	}
 }

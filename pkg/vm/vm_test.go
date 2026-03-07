@@ -1588,3 +1588,41 @@ func TestCachedModuleStruct(t *testing.T) {
 		t.Errorf("CachedModule.Name = %q, want %q", mod.Name, "testmodule")
 	}
 }
+
+// Test core.os module - env functions
+func TestCoreOSEnv(t *testing.T) {
+	// Set a test env var beforehand so we can read it back
+	t.Setenv("CALCIUM_TEST_VAR", "hello_calcium")
+
+	tests := []vmTestCase{
+		// env() returns success(value) when the variable exists; use !? to unwrap
+		{`use core.os; os.env("CALCIUM_TEST_VAR") !? { success(v) => v failure(e) => "" };`, "hello_calcium"},
+		// env() returns failure when the variable is not set
+		{`use core.os; os.env("CALCIUM_NONEXISTENT_XYZ_12345") !? { success(v) => true failure(e) => false };`, false},
+		// env_all() returns a hash containing the test variable
+		{`use core.os; has(os.env_all(), "CALCIUM_TEST_VAR");`, true},
+	}
+	runVmTests(t, tests)
+}
+
+// Test core.os module - args()
+func TestCoreOSArgs(t *testing.T) {
+	// os.Args always has at least the program name
+	input := `
+		use core.os;
+		len(os.args()) >= 1;
+	`
+	program := parse(input)
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err != nil {
+		t.Fatalf("vm error: %s", err)
+	}
+	result := vm.LastPoppedStackElem()
+	if !result.AsBool() {
+		t.Errorf("expected args() to return array with at least 1 element")
+	}
+}

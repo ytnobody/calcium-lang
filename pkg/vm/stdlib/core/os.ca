@@ -1,0 +1,25 @@
+// core.os - Operating system and process interface
+// Uses primitives: __env_get, __env_set, __env_unset, __env_list, __os_args, __os_exit
+
+// env(name) - Get an environment variable by name
+// Returns success(value) if the variable is set, or failure(error) if not set
+func env(name) = __env_get(name);
+
+// set_env(name, value) - Set an environment variable
+// Returns success(null) or failure(error)
+func! set_env(name, val) = __env_set(name, val);
+
+// unset_env(name) - Unset an environment variable
+// Returns success(null) or failure(error)
+func! unset_env(name) = __env_unset(name);
+
+// env_all() - Returns all environment variables as a hash
+func env_all() = __env_list();
+
+// args() - Returns the command-line arguments as an array of strings
+// The first element is the program name (os.Args[0])
+func args() = __os_args();
+
+// exit(code) - Terminate the process with the given exit code
+// code must be an integer (e.g. 0 for success, 1 for error)
+func! exit(code) = __os_exit(code);

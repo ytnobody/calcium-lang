@@ -569,6 +569,80 @@ func TestPipeExpression(t *testing.T) {
 	}
 }
 
+func TestErrorPropPipeExpression(t *testing.T) {
+	t.Run("simple propagation", func(t *testing.T) {
+		input := `x |>? validate;`
+
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		pipe, ok := stmt.Expression.(*ast.ErrorPropPipeExpression)
+		if !ok {
+			t.Fatalf("exp not ast.ErrorPropPipeExpression. got=%T", stmt.Expression)
+		}
+
+		ident, ok := pipe.Left.(*ast.Identifier)
+		if !ok {
+			t.Fatalf("pipe.Left not ast.Identifier. got=%T", pipe.Left)
+		}
+		if ident.Value != "x" {
+			t.Fatalf("pipe.Left.Value not 'x'. got=%q", ident.Value)
+		}
+
+		right, ok := pipe.Right.(*ast.Identifier)
+		if !ok {
+			t.Fatalf("pipe.Right not ast.Identifier. got=%T", pipe.Right)
+		}
+		if right.Value != "validate" {
+			t.Fatalf("pipe.Right.Value not 'validate'. got=%q", right.Value)
+		}
+	})
+
+	t.Run("chained propagation", func(t *testing.T) {
+		input := `x |>? validate |>? save;`
+
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		// Should be: (x |>? validate) |>? save
+		pipe, ok := stmt.Expression.(*ast.ErrorPropPipeExpression)
+		if !ok {
+			t.Fatalf("exp not ast.ErrorPropPipeExpression. got=%T", stmt.Expression)
+		}
+
+		_, ok = pipe.Left.(*ast.ErrorPropPipeExpression)
+		if !ok {
+			t.Fatalf("pipe.Left not ast.ErrorPropPipeExpression. got=%T", pipe.Left)
+		}
+	})
+
+	t.Run("with extra arguments", func(t *testing.T) {
+		input := `x |>? validate(schema);`
+
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		pipe, ok := stmt.Expression.(*ast.ErrorPropPipeExpression)
+		if !ok {
+			t.Fatalf("exp not ast.ErrorPropPipeExpression. got=%T", stmt.Expression)
+		}
+
+		_, ok = pipe.Right.(*ast.CallExpression)
+		if !ok {
+			t.Fatalf("pipe.Right not ast.CallExpression. got=%T", pipe.Right)
+		}
+	})
+}
+
 func TestSpreadExpression(t *testing.T) {
 	input := `[1, 2, 3]... |> add;`
 

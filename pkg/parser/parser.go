@@ -32,6 +32,7 @@ const (
 
 var precedences = map[token.TokenType]int{
 	token.PIPE:        PIPE,
+	token.PROP_PIPE:   PIPE, // |>? for error propagation
 	token.EFFECT_PIPE: PIPE,
 	token.EFFECT_END:  PIPE, // !? for result handling
 	token.OR:          OR,
@@ -132,6 +133,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.LBRACKET, p.parseIndexExpression)
 	p.registerInfix(token.DOT, p.parseMemberExpression)
 	p.registerInfix(token.PIPE, p.parsePipeExpression)
+	p.registerInfix(token.PROP_PIPE, p.parseErrorPropPipeExpression)
 	p.registerInfix(token.EFFECT_PIPE, p.parseEffectPipeExpression)
 	p.registerInfix(token.SPREAD, p.parseSpreadExpression)
 	p.registerInfix(token.QUESTION, p.parseConstraintCheckExpression)
@@ -1323,6 +1325,16 @@ func (p *Parser) parsePipeExpression(left ast.Expression) ast.Expression {
 
 func (p *Parser) parseEffectPipeExpression(left ast.Expression) ast.Expression {
 	exp := &ast.EffectPipeExpression{Token: p.curToken, Left: left}
+
+	precedence := p.curPrecedence()
+	p.nextToken()
+	exp.Right = p.parseExpression(precedence)
+
+	return exp
+}
+
+func (p *Parser) parseErrorPropPipeExpression(left ast.Expression) ast.Expression {
+	exp := &ast.ErrorPropPipeExpression{Token: p.curToken, Left: left}
 
 	precedence := p.curPrecedence()
 	p.nextToken()

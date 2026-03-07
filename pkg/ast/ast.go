@@ -324,6 +324,18 @@ type EffectPipeExpression struct {
 func (ep *EffectPipeExpression) expressionNode()      {}
 func (ep *EffectPipeExpression) TokenLiteral() string { return ep.Token.Literal }
 
+// ErrorPropPipeExpression represents expr |>? func
+// If func(expr) returns failure(e), the enclosing function returns failure(e) immediately.
+// If func(expr) returns success(v), the expression evaluates to v (unwrapped).
+type ErrorPropPipeExpression struct {
+	Token token.Token // the '|>?' token
+	Left  Expression
+	Right Expression
+}
+
+func (ep *ErrorPropPipeExpression) expressionNode()      {}
+func (ep *ErrorPropPipeExpression) TokenLiteral() string { return ep.Token.Literal }
+
 // SpreadExpression represents expr...
 type SpreadExpression struct {
 	Token token.Token // the '...' token

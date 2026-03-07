@@ -50,6 +50,7 @@ const (
 
 	// Pipelines
 	PIPE        TokenType = "|>"
+	PROP_PIPE   TokenType = "|>?" // Error propagation pipe: left |>? func
 	EFFECT_PIPE TokenType = "!>"
 	EFFECT_END  TokenType = "!?"
 

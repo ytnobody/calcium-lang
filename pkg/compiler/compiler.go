@@ -1068,6 +1068,60 @@ func (c *Compiler) Compile(node ast.Node) error {
 		// Just call normally - func! already wraps return in success
 		c.emit(bytecode.OpCall, 1)
 
+	case *ast.ErrorPropPipeExpression:
+		// expr |>? func: call func(expr), if result is failure return early, otherwise unwrap success
+		// Equivalent to:
+		//   result = func(expr)
+		//   if result is failure: return result  (early return from enclosing function)
+		//   else: unwrap result (success value)
+		//
+		// Also supports |>? func(extra_args) -> func(expr, extra_args)
+		if call, ok := node.Right.(*ast.CallExpression); ok {
+			// Compile function
+			err := c.Compile(call.Function)
+			if err != nil {
+				return err
+			}
+			// Compile pipe input as first arg
+			err = c.Compile(node.Left)
+			if err != nil {
+				return err
+			}
+			// Compile extra args
+			for _, arg := range call.Arguments {
+				err = c.Compile(arg)
+				if err != nil {
+					return err
+				}
+			}
+			c.emit(bytecode.OpCall, 1+len(call.Arguments))
+		} else {
+			// Simple: func(expr)
+			err := c.Compile(node.Right)
+			if err != nil {
+				return err
+			}
+			err = c.Compile(node.Left)
+			if err != nil {
+				return err
+			}
+			c.emit(bytecode.OpCall, 1)
+		}
+
+		// Now the result is on the stack. Check if it is a failure.
+		// Stack: [..., result]
+		c.emit(bytecode.OpDup)       // Stack: [..., result, result]
+		c.emit(bytecode.OpIsFailure) // Stack: [..., result, bool]
+		// If NOT failure (bool is false), jump past the early return
+		skipReturn := c.emit(bytecode.OpJumpIfFalse, 9999) // Stack: [..., result]
+		// It's a failure: return it immediately from the enclosing function
+		c.emit(bytecode.OpReturn)
+		// Patch jump target (after the OpReturn)
+		afterReturn := len(c.currentInstructions())
+		c.changeOperand(skipReturn, afterReturn)
+		// It's a success: unwrap the value
+		c.emit(bytecode.OpUnwrap) // Stack: [..., value]
+
 	case *ast.SpreadExpression:
 		err := c.Compile(node.Value)
 		if err != nil {

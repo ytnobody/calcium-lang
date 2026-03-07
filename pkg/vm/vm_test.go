@@ -720,6 +720,85 @@ func TestSuccessFailure(t *testing.T) {
 	}
 }
 
+func TestErrorPropPipe(t *testing.T) {
+	t.Run("propagates success value", func(t *testing.T) {
+		// When the function returns success, |>? unwraps and continues
+		input := `
+func wrap_success(x) = success(x * 2);
+result = 5 |>? wrap_success;
+result;
+`
+		program := parse(input)
+		comp := compiler.New()
+		err := comp.Compile(program)
+		if err != nil {
+			t.Fatalf("compiler error: %s", err)
+		}
+		vm := New(comp.Constants())
+		err = vm.Run(comp.Bytecode().Instructions)
+		if err != nil {
+			t.Fatalf("vm error: %s", err)
+		}
+		result := vm.LastPoppedStackElem()
+		if result.AsInt() != 10 {
+			t.Errorf("expected 10, got %v (type %s)", result, result.Type)
+		}
+	})
+
+	t.Run("propagates failure on early return", func(t *testing.T) {
+		// When the function returns failure, |>? causes the enclosing function to return failure
+		input := `
+func always_fail(x) = failure("oops");
+func process(x) = x |>? always_fail;
+process(42);
+`
+		program := parse(input)
+		comp := compiler.New()
+		err := comp.Compile(program)
+		if err != nil {
+			t.Fatalf("compiler error: %s", err)
+		}
+		vm := New(comp.Constants())
+		err = vm.Run(comp.Bytecode().Instructions)
+		if err != nil {
+			t.Fatalf("vm error: %s", err)
+		}
+		result := vm.LastPoppedStackElem()
+		if !result.IsFailure() {
+			t.Errorf("expected failure, got %s (%v)", result.Type, result)
+		}
+		if result.AsFailure().AsString() != "oops" {
+			t.Errorf("expected 'oops', got %v", result.AsFailure())
+		}
+	})
+
+	t.Run("chained propagation stops at first failure", func(t *testing.T) {
+		// Chain: ok_step succeeds (returns success(n+1)), fail_step always fails.
+		// The |>? for fail_step should cause process to return failure immediately.
+		input := `
+func ok_step(x) = success(x + 1);
+func fail_step(x) = failure("failed");
+func process(n) = n |>? ok_step |>? fail_step;
+process(10);
+`
+		program := parse(input)
+		comp := compiler.New()
+		err := comp.Compile(program)
+		if err != nil {
+			t.Fatalf("compiler error: %s", err)
+		}
+		vm := New(comp.Constants())
+		err = vm.Run(comp.Bytecode().Instructions)
+		if err != nil {
+			t.Fatalf("vm error: %s", err)
+		}
+		result := vm.LastPoppedStackElem()
+		if !result.IsFailure() {
+			t.Errorf("expected failure, got %s (%v)", result.Type, result)
+		}
+	})
+}
+
 func TestBuiltinLen(t *testing.T) {
 	tests := []vmTestCase{
 		{`len("hello");`, 5},

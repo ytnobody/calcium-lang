@@ -1346,47 +1346,99 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 	for i, mc := range node.Cases {
 		isLast := i == len(node.Cases)-1
 
-		// Duplicate subject for comparison
-		c.emit(bytecode.OpDup)
+		if mc.Guard != nil {
+			// Guard case: pattern if guard => body
+			// The pattern is an identifier that binds the subject value.
+			// 1. Bind subject to the pattern variable
+			// 2. Evaluate guard condition
+			// 3. If guard is false, unbind and jump to next case
 
-		if mc.IsDefault {
-			// Default case: always matches, pop the duplicate
-			c.emit(bytecode.OpPop)
-		} else {
-			// Compile pattern/condition
-			err := c.Compile(mc.Pattern)
+			// Duplicate subject for binding
+			c.emit(bytecode.OpDup)
+
+			// Bind the pattern identifier as a local variable
+			ident, ok := mc.Pattern.(*ast.Identifier)
+			if !ok {
+				return fmt.Errorf("guard clause requires a variable pattern (e.g., x if x > 0)")
+			}
+			guardSymbol := c.symbolTable.Define(ident.Value)
+			if guardSymbol.Scope == GlobalScope {
+				c.emit(bytecode.OpSetGlobal, guardSymbol.Index)
+			} else {
+				c.emit(bytecode.OpSetLocal, guardSymbol.Index)
+			}
+
+			// Evaluate guard condition
+			err := c.Compile(mc.Guard)
 			if err != nil {
 				return err
 			}
 
-			// Compare
-			c.emit(bytecode.OpEqual)
-		}
+			var jumpToNextPos int
+			if !isLast {
+				// Jump to next case if guard fails
+				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
+			}
 
-		var jumpToNextPos int
-		if !isLast && !mc.IsDefault {
-			// Jump to next case if no match
-			jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
-		}
+			// Guard passed: pop subject, compile body
+			c.emit(bytecode.OpPop)
 
-		// Pop subject (matched)
-		c.emit(bytecode.OpPop)
+			err = c.Compile(mc.Body)
+			if err != nil {
+				return err
+			}
 
-		// Compile body
-		err = c.Compile(mc.Body)
-		if err != nil {
-			return err
-		}
+			if !isLast {
+				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
+				// Patch jump to next case
+				afterPos := len(c.currentInstructions())
+				c.changeOperand(jumpToNextPos, afterPos)
+			}
+		} else {
+			// Standard case (no guard)
 
-		if !isLast {
-			// Jump to end after body
-			jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
-		}
+			// Duplicate subject for comparison
+			c.emit(bytecode.OpDup)
 
-		if !isLast && !mc.IsDefault {
-			// Patch jump to next case
-			afterPos := len(c.currentInstructions())
-			c.changeOperand(jumpToNextPos, afterPos)
+			if mc.IsDefault {
+				// Default case: always matches, pop the duplicate
+				c.emit(bytecode.OpPop)
+			} else {
+				// Compile pattern/condition
+				err := c.Compile(mc.Pattern)
+				if err != nil {
+					return err
+				}
+
+				// Compare
+				c.emit(bytecode.OpEqual)
+			}
+
+			var jumpToNextPos int
+			if !isLast && !mc.IsDefault {
+				// Jump to next case if no match
+				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
+			}
+
+			// Pop subject (matched)
+			c.emit(bytecode.OpPop)
+
+			// Compile body
+			err = c.Compile(mc.Body)
+			if err != nil {
+				return err
+			}
+
+			if !isLast {
+				// Jump to end after body
+				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
+			}
+
+			if !isLast && !mc.IsDefault {
+				// Patch jump to next case
+				afterPos := len(c.currentInstructions())
+				c.changeOperand(jumpToNextPos, afterPos)
+			}
 		}
 	}
 

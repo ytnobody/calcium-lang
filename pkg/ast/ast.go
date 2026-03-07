@@ -360,7 +360,8 @@ type MatchCase struct {
 	Token     token.Token // the '=>' token
 	Pattern   Expression  // pattern or condition
 	Body      Expression
-	IsDefault bool // true if pattern is _
+	IsDefault bool       // true if pattern is _
+	Guard     Expression // optional guard: x if x > 0 => ...
 }
 
 // EffectHandleExpression represents !? { success(r) => ... failure(e) => ... }

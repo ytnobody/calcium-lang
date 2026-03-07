@@ -695,6 +695,49 @@ func TestMatchExpression(t *testing.T) {
 	}
 }
 
+func TestMatchGuardClause(t *testing.T) {
+	input := `match x
+		n if n > 0 => "positive"
+		_ => "other";`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	match, ok := stmt.Expression.(*ast.MatchExpression)
+	if !ok {
+		t.Fatalf("exp not ast.MatchExpression. got=%T", stmt.Expression)
+	}
+
+	if len(match.Cases) != 2 {
+		t.Fatalf("match.Cases wrong. expected=2, got=%d", len(match.Cases))
+	}
+
+	// First case should have a guard
+	if match.Cases[0].Guard == nil {
+		t.Errorf("first case should have a guard clause")
+	}
+
+	// First case pattern should be identifier "n"
+	ident, ok := match.Cases[0].Pattern.(*ast.Identifier)
+	if !ok {
+		t.Fatalf("first case pattern not ast.Identifier. got=%T", match.Cases[0].Pattern)
+	}
+	if ident.Value != "n" {
+		t.Errorf("pattern identifier wrong. expected='n', got=%q", ident.Value)
+	}
+
+	// Second case should be default with no guard
+	if !match.Cases[1].IsDefault {
+		t.Errorf("second case should be default")
+	}
+	if match.Cases[1].Guard != nil {
+		t.Errorf("default case should not have a guard")
+	}
+}
+
 func TestCallExpression(t *testing.T) {
 	input := `add(1, 2 * 3, 4 + 5);`
 

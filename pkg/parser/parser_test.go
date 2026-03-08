@@ -1777,12 +1777,12 @@ func TestNoPrefixParseFnErrors(t *testing.T) {
 		input       string
 		expectError bool
 	}{
-		{`= 5;`, true},          // ASSIGN
-		{`};`, true},            // RBRACE
-		{`];`, true},            // RBRACKET
-		{`);`, true},            // RPAREN
-		{`, 5;`, true},          // COMMA
-		{`;;`, true},            // SEMICOLON
+		{`= 5;`, true}, // ASSIGN
+		{`};`, true},   // RBRACE
+		{`];`, true},   // RBRACKET
+		{`);`, true},   // RPAREN
+		{`, 5;`, true}, // COMMA
+		{`;;`, true},   // SEMICOLON
 	}
 
 	for _, tt := range tests {

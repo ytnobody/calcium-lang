@@ -1137,3 +1137,907 @@ func square(n: Positive?) = n * n;
 		t.Error("expected no type annotation for constrained param")
 	}
 }
+
+// ---- Additional tests for uncovered code paths ----
+
+func TestFloatLiteralExpression(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected float64
+	}{
+		{"3.14;", 3.14},
+		{"0.5;", 0.5},
+		{"100.0;", 100.0},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("program has not enough statements. got=%d", len(program.Statements))
+		}
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+		if !ok {
+			t.Fatalf("program.Statements[0] is not ast.ExpressionStatement. got=%T",
+				program.Statements[0])
+		}
+		literal, ok := stmt.Expression.(*ast.FloatLiteral)
+		if !ok {
+			t.Fatalf("exp not *ast.FloatLiteral. got=%T", stmt.Expression)
+		}
+		if literal.Value != tt.expected {
+			t.Errorf("literal.Value not %f. got=%f", tt.expected, literal.Value)
+		}
+	}
+}
+
+func TestStringLiteral(t *testing.T) {
+	input := `"hello world";`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	str, ok := stmt.Expression.(*ast.StringLiteral)
+	if !ok {
+		t.Fatalf("exp not *ast.StringLiteral. got=%T", stmt.Expression)
+	}
+	if str.Value != "hello world" {
+		t.Errorf("str.Value not %q. got=%q", "hello world", str.Value)
+	}
+}
+
+func TestInterpolatedString(t *testing.T) {
+	input := `"hello ${name} world";`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	is, ok := stmt.Expression.(*ast.InterpolatedString)
+	if !ok {
+		t.Fatalf("exp not *ast.InterpolatedString. got=%T", stmt.Expression)
+	}
+	if len(is.Parts) < 3 {
+		t.Fatalf("expected at least 3 parts, got %d", len(is.Parts))
+	}
+}
+
+func TestRegexLiteral(t *testing.T) {
+	input := `/hello/gi;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	regex, ok := stmt.Expression.(*ast.RegexLiteral)
+	if !ok {
+		t.Fatalf("exp not *ast.RegexLiteral. got=%T", stmt.Expression)
+	}
+	if regex.Pattern != "hello" {
+		t.Errorf("regex.Pattern not %q. got=%q", "hello", regex.Pattern)
+	}
+	if regex.Flags != "gi" {
+		t.Errorf("regex.Flags not %q. got=%q", "gi", regex.Flags)
+	}
+}
+
+func TestHashLiteral(t *testing.T) {
+	t.Run("empty hash", func(t *testing.T) {
+		input := `{};`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		hash, ok := stmt.Expression.(*ast.HashLiteral)
+		if !ok {
+			t.Fatalf("exp not *ast.HashLiteral. got=%T", stmt.Expression)
+		}
+		if len(hash.Pairs) != 0 {
+			t.Errorf("expected 0 pairs, got %d", len(hash.Pairs))
+		}
+	})
+
+	t.Run("hash with pairs", func(t *testing.T) {
+		input := `{name: "alice", age: 30};`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		hash, ok := stmt.Expression.(*ast.HashLiteral)
+		if !ok {
+			t.Fatalf("exp not *ast.HashLiteral. got=%T", stmt.Expression)
+		}
+		if len(hash.Pairs) != 2 {
+			t.Fatalf("expected 2 pairs, got %d", len(hash.Pairs))
+		}
+	})
+}
+
+func TestIndexExpression(t *testing.T) {
+	input := `arr[1];`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	idx, ok := stmt.Expression.(*ast.IndexExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.IndexExpression. got=%T", stmt.Expression)
+	}
+
+	ident, ok := idx.Left.(*ast.Identifier)
+	if !ok {
+		t.Fatalf("idx.Left not *ast.Identifier. got=%T", idx.Left)
+	}
+	if ident.Value != "arr" {
+		t.Errorf("expected 'arr', got %q", ident.Value)
+	}
+
+	index, ok := idx.Index.(*ast.IntegerLiteral)
+	if !ok {
+		t.Fatalf("idx.Index not *ast.IntegerLiteral. got=%T", idx.Index)
+	}
+	if index.Value != 1 {
+		t.Errorf("expected index 1, got %d", index.Value)
+	}
+}
+
+func TestTypeDeclaration(t *testing.T) {
+	t.Run("simple variants", func(t *testing.T) {
+		input := `type Color = Red | Green | Blue;`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("expected 1 statement, got %d", len(program.Statements))
+		}
+
+		td, ok := program.Statements[0].(*ast.TypeDeclaration)
+		if !ok {
+			t.Fatalf("expected *ast.TypeDeclaration, got %T", program.Statements[0])
+		}
+		if td.Name.Value != "Color" {
+			t.Errorf("expected type name 'Color', got %q", td.Name.Value)
+		}
+		if len(td.Variants) != 3 {
+			t.Fatalf("expected 3 variants, got %d", len(td.Variants))
+		}
+		expected := []string{"Red", "Green", "Blue"}
+		for i, v := range td.Variants {
+			if v.Name != expected[i] {
+				t.Errorf("variant[%d] expected %q, got %q", i, expected[i], v.Name)
+			}
+		}
+	})
+
+	t.Run("variants with fields", func(t *testing.T) {
+		input := `type Shape = Circle(radius) | Rect(width, height);`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		td := program.Statements[0].(*ast.TypeDeclaration)
+		if len(td.Variants) != 2 {
+			t.Fatalf("expected 2 variants, got %d", len(td.Variants))
+		}
+		if len(td.Variants[0].Fields) != 1 {
+			t.Fatalf("expected 1 field for Circle, got %d", len(td.Variants[0].Fields))
+		}
+		if td.Variants[0].Fields[0] != "radius" {
+			t.Errorf("expected field 'radius', got %q", td.Variants[0].Fields[0])
+		}
+		if len(td.Variants[1].Fields) != 2 {
+			t.Fatalf("expected 2 fields for Rect, got %d", len(td.Variants[1].Fields))
+		}
+	})
+}
+
+func TestNamespaceDeclaration(t *testing.T) {
+	input := `namespace math.utils;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(program.Statements))
+	}
+
+	ns, ok := program.Statements[0].(*ast.NamespaceDeclaration)
+	if !ok {
+		t.Fatalf("expected *ast.NamespaceDeclaration, got %T", program.Statements[0])
+	}
+	if len(ns.Name.Parts) != 2 {
+		t.Fatalf("expected 2 parts, got %d", len(ns.Name.Parts))
+	}
+	if ns.Name.Parts[0] != "math" || ns.Name.Parts[1] != "utils" {
+		t.Errorf("expected [math, utils], got %v", ns.Name.Parts)
+	}
+}
+
+func TestDoExpression(t *testing.T) {
+	t.Run("simple do block", func(t *testing.T) {
+		input := `do x = 1; x + 1 end;`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		doExpr, ok := stmt.Expression.(*ast.DoExpression)
+		if !ok {
+			t.Fatalf("exp not *ast.DoExpression. got=%T", stmt.Expression)
+		}
+		if len(doExpr.Statements) != 1 {
+			t.Errorf("expected 1 intermediate statement, got %d", len(doExpr.Statements))
+		}
+		if doExpr.FinalExpression == nil {
+			t.Fatal("expected final expression, got nil")
+		}
+	})
+
+	t.Run("do block with just expression", func(t *testing.T) {
+		input := `do 42 end;`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		doExpr, ok := stmt.Expression.(*ast.DoExpression)
+		if !ok {
+			t.Fatalf("exp not *ast.DoExpression. got=%T", stmt.Expression)
+		}
+		if doExpr.FinalExpression == nil {
+			t.Fatal("expected final expression, got nil")
+		}
+	})
+
+	t.Run("unclosed do block", func(t *testing.T) {
+		input := `do 42`
+		l := lexer.New(input)
+		p := New(l)
+		p.ParseProgram()
+		errors := p.Errors()
+		if len(errors) == 0 {
+			t.Fatal("expected parse errors for unclosed do block")
+		}
+	})
+
+	t.Run("empty do block", func(t *testing.T) {
+		input := `do end;`
+		l := lexer.New(input)
+		p := New(l)
+		p.ParseProgram()
+		errors := p.Errors()
+		if len(errors) == 0 {
+			t.Fatal("expected parse errors for empty do block")
+		}
+	})
+}
+
+func TestReturnExpression(t *testing.T) {
+	input := `return 42;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	ret, ok := stmt.Expression.(*ast.ReturnExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.ReturnExpression. got=%T", stmt.Expression)
+	}
+	if ret.Value == nil {
+		t.Fatal("expected return value, got nil")
+	}
+}
+
+func TestSuccessExpression(t *testing.T) {
+	input := `success(42);`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	succ, ok := stmt.Expression.(*ast.SuccessExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.SuccessExpression. got=%T", stmt.Expression)
+	}
+	if succ.Value == nil {
+		t.Fatal("expected success value, got nil")
+	}
+}
+
+func TestFailureExpression(t *testing.T) {
+	input := `failure("error");`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	fail, ok := stmt.Expression.(*ast.FailureExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.FailureExpression. got=%T", stmt.Expression)
+	}
+	if fail.Value == nil {
+		t.Fatal("expected failure value, got nil")
+	}
+}
+
+func TestWildcardExpression(t *testing.T) {
+	input := `_;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	_, ok := stmt.Expression.(*ast.WildcardExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.WildcardExpression. got=%T", stmt.Expression)
+	}
+}
+
+func TestEffectPipeExpression(t *testing.T) {
+	input := `x !> save;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	pipe, ok := stmt.Expression.(*ast.EffectPipeExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.EffectPipeExpression. got=%T", stmt.Expression)
+	}
+	if pipe.Left == nil || pipe.Right == nil {
+		t.Fatal("expected left and right for effect pipe")
+	}
+}
+
+func TestConstraintCheckExpression(t *testing.T) {
+	input := `x?;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	check, ok := stmt.Expression.(*ast.ConstraintCheckExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.ConstraintCheckExpression. got=%T", stmt.Expression)
+	}
+	if check.Constraint == nil {
+		t.Fatal("expected constraint")
+	}
+}
+
+func TestEffectHandleExpression(t *testing.T) {
+	input := `x !? { success(v) => v failure(e) => 0 };`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	handle, ok := stmt.Expression.(*ast.EffectHandleExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.EffectHandleExpression. got=%T", stmt.Expression)
+	}
+	if handle.SuccessVar == nil {
+		t.Error("expected success var")
+	}
+	if handle.FailureVar == nil {
+		t.Error("expected failure var")
+	}
+	if handle.SuccessBody == nil {
+		t.Error("expected success body")
+	}
+	if handle.FailureBody == nil {
+		t.Error("expected failure body")
+	}
+}
+
+func TestBuiltinAsIdentifier(t *testing.T) {
+	builtins := []string{"map", "filter", "reduce", "has", "keys", "values", "len"}
+	for _, name := range builtins {
+		input := name + "(x);"
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		call, ok := stmt.Expression.(*ast.CallExpression)
+		if !ok {
+			t.Fatalf("for %s: exp not *ast.CallExpression. got=%T", name, stmt.Expression)
+		}
+		ident, ok := call.Function.(*ast.Identifier)
+		if !ok {
+			t.Fatalf("for %s: function not *ast.Identifier. got=%T", name, call.Function)
+		}
+		if ident.Value != name {
+			t.Errorf("expected %q, got %q", name, ident.Value)
+		}
+	}
+}
+
+func TestConstructorPatternInMatch(t *testing.T) {
+	input := `match shape
+		Circle(r) => r
+		Rect(w, h) => w
+		_ => 0;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	match, ok := stmt.Expression.(*ast.MatchExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.MatchExpression. got=%T", stmt.Expression)
+	}
+
+	if len(match.Cases) != 3 {
+		t.Fatalf("expected 3 cases, got %d", len(match.Cases))
+	}
+
+	// First case: Circle(r)
+	cp, ok := match.Cases[0].Pattern.(*ast.ConstructorPattern)
+	if !ok {
+		t.Fatalf("case 0 pattern not *ast.ConstructorPattern. got=%T", match.Cases[0].Pattern)
+	}
+	if cp.Name != "Circle" {
+		t.Errorf("expected constructor name 'Circle', got %q", cp.Name)
+	}
+	if len(cp.Fields) != 1 {
+		t.Fatalf("expected 1 field, got %d", len(cp.Fields))
+	}
+
+	// Second case: Rect(w, h)
+	cp2, ok := match.Cases[1].Pattern.(*ast.ConstructorPattern)
+	if !ok {
+		t.Fatalf("case 1 pattern not *ast.ConstructorPattern. got=%T", match.Cases[1].Pattern)
+	}
+	if len(cp2.Fields) != 2 {
+		t.Fatalf("expected 2 fields, got %d", len(cp2.Fields))
+	}
+}
+
+func TestArrayDestructuringStatement(t *testing.T) {
+	input := `[a, b, c] = [1, 2, 3];`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(program.Statements))
+	}
+
+	destr, ok := program.Statements[0].(*ast.ArrayDestructuringStatement)
+	if !ok {
+		t.Fatalf("expected *ast.ArrayDestructuringStatement, got %T", program.Statements[0])
+	}
+	if len(destr.Names) != 3 {
+		t.Fatalf("expected 3 names, got %d", len(destr.Names))
+	}
+	expected := []string{"a", "b", "c"}
+	for i, n := range destr.Names {
+		if n.Value != expected[i] {
+			t.Errorf("name[%d] expected %q, got %q", i, expected[i], n.Value)
+		}
+	}
+}
+
+func TestHeadTailDestructuringStatement(t *testing.T) {
+	input := `[head | tail] = [1, 2, 3];`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(program.Statements))
+	}
+
+	destr, ok := program.Statements[0].(*ast.HeadTailDestructuringStatement)
+	if !ok {
+		t.Fatalf("expected *ast.HeadTailDestructuringStatement, got %T", program.Statements[0])
+	}
+	if destr.Head.Value != "head" {
+		t.Errorf("expected head 'head', got %q", destr.Head.Value)
+	}
+	if destr.Tail.Value != "tail" {
+		t.Errorf("expected tail 'tail', got %q", destr.Tail.Value)
+	}
+}
+
+func TestEmptyArray(t *testing.T) {
+	input := `[];`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	array, ok := stmt.Expression.(*ast.ArrayLiteral)
+	if !ok {
+		t.Fatalf("exp not *ast.ArrayLiteral. got=%T", stmt.Expression)
+	}
+	if len(array.Elements) != 0 {
+		t.Errorf("expected 0 elements, got %d", len(array.Elements))
+	}
+}
+
+func TestLambdaWithBlockBody(t *testing.T) {
+	t.Run("single ident lambda with block", func(t *testing.T) {
+		input := `x => { x + 1 };`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		lambda, ok := stmt.Expression.(*ast.LambdaExpression)
+		if !ok {
+			t.Fatalf("exp not *ast.LambdaExpression. got=%T", stmt.Expression)
+		}
+		if len(lambda.Parameters) != 1 {
+			t.Errorf("expected 1 parameter, got %d", len(lambda.Parameters))
+		}
+		// Body should be a DoExpression (reused for block)
+		_, ok = lambda.Body.(*ast.DoExpression)
+		if !ok {
+			t.Fatalf("lambda body not *ast.DoExpression. got=%T", lambda.Body)
+		}
+	})
+
+	t.Run("parenthesized lambda with block", func(t *testing.T) {
+		input := `(x, y) => { x + y };`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		lambda, ok := stmt.Expression.(*ast.LambdaExpression)
+		if !ok {
+			t.Fatalf("exp not *ast.LambdaExpression. got=%T", stmt.Expression)
+		}
+		if len(lambda.Parameters) != 2 {
+			t.Errorf("expected 2 parameters, got %d", len(lambda.Parameters))
+		}
+	})
+
+	t.Run("empty block body", func(t *testing.T) {
+		input := `() => {};`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		lambda, ok := stmt.Expression.(*ast.LambdaExpression)
+		if !ok {
+			t.Fatalf("exp not *ast.LambdaExpression. got=%T", stmt.Expression)
+		}
+		doExpr, ok := lambda.Body.(*ast.DoExpression)
+		if !ok {
+			t.Fatalf("lambda body not *ast.DoExpression. got=%T", lambda.Body)
+		}
+		// Empty block should still have a final expression (placeholder)
+		if doExpr.FinalExpression == nil {
+			t.Error("expected final expression in empty block")
+		}
+	})
+
+	t.Run("block with assignments", func(t *testing.T) {
+		input := `(x) => { y = x + 1; y };`
+		l := lexer.New(input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt := program.Statements[0].(*ast.ExpressionStatement)
+		lambda, ok := stmt.Expression.(*ast.LambdaExpression)
+		if !ok {
+			t.Fatalf("exp not *ast.LambdaExpression. got=%T", stmt.Expression)
+		}
+		doExpr, ok := lambda.Body.(*ast.DoExpression)
+		if !ok {
+			t.Fatalf("lambda body not *ast.DoExpression. got=%T", lambda.Body)
+		}
+		if len(doExpr.Statements) != 1 {
+			t.Errorf("expected 1 intermediate statement, got %d", len(doExpr.Statements))
+		}
+	})
+}
+
+func TestNoPrefixParseFnErrors(t *testing.T) {
+	tests := []struct {
+		input       string
+		expectError bool
+	}{
+		{`= 5;`, true},          // ASSIGN
+		{`};`, true},            // RBRACE
+		{`];`, true},            // RBRACKET
+		{`);`, true},            // RPAREN
+		{`, 5;`, true},          // COMMA
+		{`;;`, true},            // SEMICOLON
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		p.ParseProgram()
+		errors := p.Errors()
+		if tt.expectError && len(errors) == 0 {
+			t.Errorf("expected errors for input %q, got none", tt.input)
+		}
+	}
+}
+
+func TestGetExpectationHints(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// Unclosed bracket
+		{`[1, 2, 3;`, "unclosed"},
+		// Unclosed brace
+		{`{name: 1;`, "unclosed"},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		p.ParseProgram()
+		errors := p.Errors()
+		if len(errors) == 0 {
+			t.Errorf("expected errors for input %q", tt.input)
+			continue
+		}
+		found := false
+		for _, e := range errors {
+			if containsString(e, tt.expected) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected error containing %q for input %q, got: %v",
+				tt.expected, tt.input, errors)
+		}
+	}
+}
+
+func TestDoBlockWithLastStatementNotExpression(t *testing.T) {
+	// do block where the last statement is an assignment
+	input := `do x = 5 end;`
+	l := lexer.New(input)
+	p := New(l)
+	p.ParseProgram()
+	errors := p.Errors()
+	if len(errors) == 0 {
+		t.Fatal("expected error when do block last item is assignment")
+	}
+	found := false
+	for _, e := range errors {
+		if containsString(e, "must be an expression") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected error about last item must be expression, got: %v", errors)
+	}
+}
+
+func TestAssignmentWithEffectHandle(t *testing.T) {
+	input := `x = getData() !? { success(v) => v failure(e) => 0 };`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Statements[0].(*ast.AssignmentStatement)
+	if !ok {
+		t.Fatalf("expected *ast.AssignmentStatement, got %T", program.Statements[0])
+	}
+
+	handle, ok := stmt.Value.(*ast.EffectHandleExpression)
+	if !ok {
+		t.Fatalf("expected value to be *ast.EffectHandleExpression, got %T", stmt.Value)
+	}
+	if handle.SuccessVar == nil || handle.FailureVar == nil {
+		t.Error("expected both success and failure vars")
+	}
+}
+
+func TestTypedAssignmentWithUnknownType(t *testing.T) {
+	input := `x: UnknownType = 42;`
+	l := lexer.New(input)
+	p := New(l)
+	p.ParseProgram()
+	errors := p.Errors()
+	if len(errors) == 0 {
+		t.Fatal("expected error for unknown type name")
+	}
+	found := false
+	for _, e := range errors {
+		if containsString(e, "unknown type name") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected error about unknown type name, got: %v", errors)
+	}
+}
+
+func TestFunctionDeclarationWithEffectHandle(t *testing.T) {
+	input := `func safe(x) = getData(x) !? { success(v) => v failure(e) => 0 };`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	fd, ok := program.Statements[0].(*ast.FunctionDeclaration)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionDeclaration, got %T", program.Statements[0])
+	}
+
+	_, ok = fd.Body.(*ast.EffectHandleExpression)
+	if !ok {
+		t.Fatalf("expected body to be *ast.EffectHandleExpression, got %T", fd.Body)
+	}
+}
+
+func TestFunctionDeclarationWithUnknownReturnType(t *testing.T) {
+	input := `func add(a, b): UnknownType = a + b;`
+	l := lexer.New(input)
+	p := New(l)
+	p.ParseProgram()
+	errors := p.Errors()
+	if len(errors) == 0 {
+		t.Fatal("expected error for unknown return type")
+	}
+	found := false
+	for _, e := range errors {
+		if containsString(e, "unknown return type") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected error about unknown return type, got: %v", errors)
+	}
+}
+
+func TestTypedAssignmentWithEffectHandle(t *testing.T) {
+	input := `x: Int = getData() !? { success(v) => v failure(e) => 0 };`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Statements[0].(*ast.AssignmentStatement)
+	if !ok {
+		t.Fatalf("expected *ast.AssignmentStatement, got %T", program.Statements[0])
+	}
+	if stmt.TypeAnnot == nil {
+		t.Fatal("expected type annotation")
+	}
+	_, ok = stmt.Value.(*ast.EffectHandleExpression)
+	if !ok {
+		t.Fatalf("expected value to be *ast.EffectHandleExpression, got %T", stmt.Value)
+	}
+}
+
+func TestExpressionStatementWithEffectHandle(t *testing.T) {
+	input := `getData() !? { success(v) => v failure(e) => 0 };`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	_, ok := stmt.Expression.(*ast.EffectHandleExpression)
+	if !ok {
+		t.Fatalf("expected *ast.EffectHandleExpression, got %T", stmt.Expression)
+	}
+}
+
+func TestGroupedExpression(t *testing.T) {
+	input := `(5 + 3) * 2;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	infix, ok := stmt.Expression.(*ast.InfixExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.InfixExpression. got=%T", stmt.Expression)
+	}
+	if infix.Operator != "*" {
+		t.Errorf("expected '*', got %q", infix.Operator)
+	}
+}
+
+func TestEmptyParenthesesError(t *testing.T) {
+	// () without => should be an error
+	input := `() + 1;`
+	l := lexer.New(input)
+	p := New(l)
+	p.ParseProgram()
+	errors := p.Errors()
+	if len(errors) == 0 {
+		t.Fatal("expected errors for empty parentheses without arrow")
+	}
+}
+
+func TestHashBuiltinAsIdentifier(t *testing.T) {
+	// "hash" is also a builtin
+	input := `hash(x);`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	call, ok := stmt.Expression.(*ast.CallExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.CallExpression. got=%T", stmt.Expression)
+	}
+	ident, ok := call.Function.(*ast.Identifier)
+	if !ok {
+		t.Fatalf("function not *ast.Identifier. got=%T", call.Function)
+	}
+	if ident.Value != "hash" {
+		t.Errorf("expected 'hash', got %q", ident.Value)
+	}
+}
+
+func TestDoBlockMultipleStatements(t *testing.T) {
+	input := `do
+		x = 1;
+		y = 2;
+		x + y
+	end;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	doExpr, ok := stmt.Expression.(*ast.DoExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.DoExpression. got=%T", stmt.Expression)
+	}
+	if len(doExpr.Statements) != 2 {
+		t.Errorf("expected 2 intermediate statements, got %d", len(doExpr.Statements))
+	}
+	if doExpr.FinalExpression == nil {
+		t.Fatal("expected final expression")
+	}
+}

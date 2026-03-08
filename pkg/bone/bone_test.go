@@ -346,11 +346,11 @@ func TestFindProjectRoot_NotFound(t *testing.T) {
 
 func TestParseModuleSpec(t *testing.T) {
 	tests := []struct {
-		spec          string
-		wantAuthor    string
-		wantName      string
-		wantVersion   string
-		wantErr       bool
+		spec        string
+		wantAuthor  string
+		wantName    string
+		wantVersion string
+		wantErr     bool
 	}{
 		{"alice/mymod", "alice", "mymod", "", false},
 		{"Alice/MyMod", "alice", "mymod", "", false},
@@ -1054,11 +1054,11 @@ func TestInit_WithStdin(t *testing.T) {
 	// Write stdin input: module name, author, description, license, keywords
 	go func() {
 		defer w.Close()
-		fmt.Fprintf(w, "\n")         // accept default module name
-		fmt.Fprintf(w, "testauthor\n") // author
+		fmt.Fprintf(w, "\n")              // accept default module name
+		fmt.Fprintf(w, "testauthor\n")    // author
 		fmt.Fprintf(w, "A test module\n") // description
-		fmt.Fprintf(w, "Apache-2.0\n")   // license
-		fmt.Fprintf(w, "test,module\n")  // keywords
+		fmt.Fprintf(w, "Apache-2.0\n")    // license
+		fmt.Fprintf(w, "test,module\n")   // keywords
 	}()
 
 	err = Init("")

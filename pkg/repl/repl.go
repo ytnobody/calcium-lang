@@ -278,7 +278,7 @@ func (s *Session) loadHistory() {
 	}
 	histPath := expandPath(s.config.HistoryFile)
 	if f, err := os.Open(histPath); err == nil {
-		s.liner.ReadHistory(f)
+		_, _ = s.liner.ReadHistory(f)
 		f.Close()
 	}
 }
@@ -294,7 +294,7 @@ func (s *Session) saveHistory() {
 		return
 	}
 	if f, err := os.Create(histPath); err == nil {
-		s.liner.WriteHistory(f)
+		_, _ = s.liner.WriteHistory(f)
 		f.Close()
 	}
 }

@@ -330,6 +330,7 @@ func (vm *VM) initModules() {
 	asyncModule.Exports["leave"] = value.BuiltinFunc(&value.Builtin{Name: "leave", Fn: vm.builtinAsyncLeave})
 	asyncModule.Exports["cancel"] = value.BuiltinFunc(&value.Builtin{Name: "cancel", Fn: vm.builtinAsyncCancel})
 	asyncModule.Exports["all"] = value.BuiltinFunc(&value.Builtin{Name: "all", Fn: vm.builtinAsyncAll})
+	asyncModule.Exports["channel"] = value.BuiltinFunc(&value.Builtin{Name: "channel", Fn: vm.builtinAsyncChannel})
 	vm.modules["core.async"] = asyncModule
 
 	// core.schedule! module - provides scheduling functions
@@ -1056,8 +1057,58 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			default:
 				return fmt.Errorf("property error: handler has no property '%s'\nhint: available handler properties are: ready, pause, resume, reset, status", propName)
 			}
+		case value.TYPE_CHANNEL:
+			ch := obj.AsChannel()
+			switch propName {
+			case "send":
+				vm.push(value.BuiltinFunc(&value.Builtin{
+					Name: "send",
+					Fn: func(args ...value.Value) value.Value {
+						if len(args) != 1 {
+							return value.Failure(value.String("channel.send: expected 1 argument"))
+						}
+						if ch.IsClosed() {
+							return value.Failure(value.String("channel.send: channel is closed"))
+						}
+						ok := ch.Send(args[0])
+						if !ok {
+							return value.Failure(value.String("channel.send: channel closed during send"))
+						}
+						return value.Null()
+					},
+				}))
+			case "receive":
+				vm.push(value.BuiltinFunc(&value.Builtin{
+					Name: "receive",
+					Fn: func(args ...value.Value) value.Value {
+						val, ok := ch.Receive()
+						if !ok {
+							return value.Failure(value.String("channel.receive: channel closed"))
+						}
+						return val
+					},
+				}))
+			case "close":
+				vm.push(value.BuiltinFunc(&value.Builtin{
+					Name: "close",
+					Fn: func(args ...value.Value) value.Value {
+						ch.Close()
+						return value.Null()
+					},
+				}))
+			case "source":
+				vm.push(value.EventSourceVal(ch.Source))
+			case "status":
+				if ch.IsClosed() {
+					vm.push(value.String("closed"))
+				} else {
+					vm.push(value.String("open"))
+				}
+			default:
+				return fmt.Errorf("property error: channel has no property '%s'\nhint: available channel properties are: send, receive, close, source, status", propName)
+			}
 		default:
-			return fmt.Errorf("type error: cannot access property '%s' on value of type %s\nhint: member access with '.' is supported for modules, hashes, tasks, and handlers", propName, obj.Type)
+			return fmt.Errorf("type error: cannot access property '%s' on value of type %s\nhint: member access with '.' is supported for modules, hashes, tasks, handlers, and channels", propName, obj.Type)
 		}
 
 	case bytecode.OpWrapSuccess:
@@ -3423,6 +3474,39 @@ func (vm *VM) builtinAsyncAll(args ...value.Value) value.Value {
 	}
 
 	return value.Array(results)
+}
+
+// builtinAsyncChannel - async.channel() or async.channel(capacity) creates a message-passing channel
+// Usage:
+//
+//	ch = async.channel()        // unbuffered channel
+//	ch = async.channel(10)      // buffered channel with capacity 10
+//
+// Channel supports:
+//
+//	ch.send(value)              // send a value (returns null or failure)
+//	ch.receive()                // receive a value (blocks until available)
+//	ch.close()                  // close the channel
+//	ch.source                   // EventSource for use with async.expects
+//	ch.status                   // "open" or "closed"
+func (vm *VM) builtinAsyncChannel(args ...value.Value) value.Value {
+	capacity := 0
+
+	if len(args) > 1 {
+		return value.Failure(value.String("async.channel: expected 0 or 1 arguments"))
+	}
+	if len(args) == 1 {
+		if args[0].Type != value.TYPE_INT {
+			return value.Failure(value.String(fmt.Sprintf("async.channel: capacity must be an integer, got %s", args[0].Type)))
+		}
+		capacity = int(args[0].AsInt())
+		if capacity < 0 {
+			return value.Failure(value.String("async.channel: capacity must be non-negative"))
+		}
+	}
+
+	ch := value.NewChannel(capacity)
+	return value.ChannelVal(ch)
 }
 
 // ============================================================

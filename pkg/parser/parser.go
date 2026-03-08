@@ -1274,7 +1274,12 @@ func (p *Parser) parseLambdaBody(tok token.Token, params []*ast.Identifier) ast.
 		Parameters: params,
 	}
 	p.nextToken()
-	lambda.Body = p.parseExpression(LOWEST)
+	// If the body starts with '{', parse it as a block body (sequence of statements)
+	if p.curTokenIs(token.LBRACE) {
+		lambda.Body = p.parseBraceBlockExpression()
+	} else {
+		lambda.Body = p.parseExpression(LOWEST)
+	}
 	return lambda
 }
 
@@ -1297,8 +1302,62 @@ func (p *Parser) parseLambdaFromIdent(left ast.Expression) ast.Expression {
 		Parameters: params,
 	}
 	p.nextToken()
-	lambda.Body = p.parseExpression(LOWEST)
+	// If the body starts with '{', parse it as a block body (sequence of statements)
+	if p.curTokenIs(token.LBRACE) {
+		lambda.Body = p.parseBraceBlockExpression()
+	} else {
+		lambda.Body = p.parseExpression(LOWEST)
+	}
 	return lambda
+}
+
+// parseBraceBlockExpression parses a block body enclosed in braces: { stmt1; stmt2; ...; lastExpr }
+// Used for block-body lambdas: (x) => { stmt1; stmt2; lastExpr }
+// Reuses DoExpression structure: intermediate statements are popped, last expression is the return value.
+func (p *Parser) parseBraceBlockExpression() ast.Expression {
+	expr := &ast.DoExpression{Token: p.curToken}
+	expr.Statements = []ast.Statement{}
+
+	// Advance past '{'
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			expr.Statements = append(expr.Statements, stmt)
+		}
+		if p.peekTokenIs(token.RBRACE) {
+			p.nextToken()
+			break
+		}
+		p.nextToken()
+	}
+
+	if p.curTokenIs(token.EOF) {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"unexpected end of file inside block body, expected '}'"))
+		return nil
+	}
+
+	// If block is empty, create a null-returning do expression
+	if len(expr.Statements) == 0 {
+		// Use integer 0 as a placeholder for null return from empty block
+		expr.FinalExpression = &ast.IntegerLiteral{Token: p.curToken, Value: 0}
+		return expr
+	}
+
+	// The last statement provides the return value of the block
+	last := expr.Statements[len(expr.Statements)-1]
+	if exprStmt, ok := last.(*ast.ExpressionStatement); ok {
+		expr.Statements = expr.Statements[:len(expr.Statements)-1]
+		expr.FinalExpression = exprStmt.Expression
+	} else {
+		// Last statement is an assignment or declaration; return 0 as placeholder
+		expr.FinalExpression = &ast.IntegerLiteral{Token: p.curToken, Value: 0}
+	}
+
+	return expr
 }
 
 func (p *Parser) exprToIdentifiers(expr ast.Expression) []*ast.Identifier {

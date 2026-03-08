@@ -74,8 +74,214 @@ async.stay(done: false) {
 }
 
 func TestStayWithMultipleTimeouts(t *testing.T) {
-	// Skip this test for now - needs state handling improvement
-	t.Skip("State handling in callbacks needs improvement")
+	// Test stay loop with multiple events: count up to 3 using interval
+	input := `
+use core.schedule!;
+use core.async!;
+
+async.stay(count: 0) {
+    src = schedule.interval(10);
+    h = async.expects((ev) => {
+        c = count + 1;
+        async.continue({count: c});
+        async.leave(c)
+    }, src);
+    h.ready()
+}
+`
+	result := testEvalWithTimeout(t, input, 2*time.Second)
+	if result.Type != value.TYPE_SUCCESS {
+		t.Fatalf("expected success, got %s: %s", result.Type, result.String())
+	}
+	inner := result.AsSuccess()
+	if inner.Type != value.TYPE_INT {
+		t.Fatalf("expected int result, got %s", inner.String())
+	}
+	// The loop should exit after at least 1 event with count=1
+	if inner.AsInt() < 1 {
+		t.Fatalf("expected count >= 1, got %d", inner.AsInt())
+	}
+}
+
+func TestAsyncChannel(t *testing.T) {
+	// Test creating a channel
+	input := `
+use core.async!
+async.channel()
+`
+	result := testEval(t, input)
+	if result.Type != value.TYPE_CHANNEL {
+		t.Fatalf("expected channel, got %s: %s", result.Type, result.String())
+	}
+	ch := result.AsChannel()
+	if ch.IsClosed() {
+		t.Fatal("expected open channel, got closed")
+	}
+}
+
+func TestAsyncChannelBuffered(t *testing.T) {
+	// Test creating a buffered channel
+	input := `
+use core.async!
+async.channel(10)
+`
+	result := testEval(t, input)
+	if result.Type != value.TYPE_CHANNEL {
+		t.Fatalf("expected channel, got %s: %s", result.Type, result.String())
+	}
+}
+
+func TestAsyncChannelStatus(t *testing.T) {
+	// Test channel status property
+	input := `
+use core.async!
+ch = async.channel();
+ch.status
+`
+	result := testEval(t, input)
+	if result.Type != value.TYPE_STRING {
+		t.Fatalf("expected string, got %s", result.Type)
+	}
+	if result.AsString() != "open" {
+		t.Fatalf("expected 'open', got '%s'", result.AsString())
+	}
+}
+
+func TestAsyncChannelSendReceive(t *testing.T) {
+	// Test sending and receiving via a buffered channel using spawn
+	input := `
+use core.async!;
+
+ch = async.channel(1);
+ch.send(99);
+ch.receive()
+`
+	result := testEvalWithTimeout(t, input, 2*time.Second)
+	if result.Type != value.TYPE_INT {
+		t.Fatalf("expected int, got %s: %s", result.Type, result.String())
+	}
+	if result.AsInt() != 99 {
+		t.Fatalf("expected 99, got %d", result.AsInt())
+	}
+}
+
+func TestAsyncChannelWithSpawn(t *testing.T) {
+	// Test channel send from a spawned task, received in a stay loop
+	input := `
+use core.async!;
+
+ch = async.channel(1);
+async.spawn(() => ch.send(42));
+async.stay(done: false) {
+    h = async.expects((val) => async.leave(val), ch.source);
+    h.ready()
+}
+`
+	result := testEvalWithTimeout(t, input, 2*time.Second)
+	if result.Type != value.TYPE_SUCCESS {
+		t.Fatalf("expected success, got %s: %s", result.Type, result.String())
+	}
+	inner := result.AsSuccess()
+	if inner.Type != value.TYPE_INT || inner.AsInt() != 42 {
+		t.Fatalf("expected success(42), got success(%s)", inner.String())
+	}
+}
+
+func TestAsyncChannelSource(t *testing.T) {
+	// Test channel.source returns an event source usable with async.expects
+	input := `
+use core.async!;
+
+ch = async.channel(1);
+ch.source
+`
+	result := testEval(t, input)
+	if result.Type != value.TYPE_EVENT_SOURCE {
+		t.Fatalf("expected event_source, got %s", result.Type)
+	}
+	es := result.AsEventSource()
+	if es.Kind != value.EventSourceChannel {
+		t.Fatalf("expected channel event source, got kind %d", es.Kind)
+	}
+}
+
+func TestAsyncChannelInStayLoop(t *testing.T) {
+	// Test channel as event source in a stay loop, with sender in spawned task
+	input := `
+use core.async!;
+
+ch = async.channel(1);
+async.spawn(() => ch.send(77));
+async.stay(done: false) {
+    h = async.expects((val) => async.leave(val), ch.source);
+    h.ready()
+}
+`
+	result := testEvalWithTimeout(t, input, 2*time.Second)
+	if result.Type != value.TYPE_SUCCESS {
+		t.Fatalf("expected success, got %s: %s", result.Type, result.String())
+	}
+	inner := result.AsSuccess()
+	if inner.Type != value.TYPE_INT || inner.AsInt() != 77 {
+		t.Fatalf("expected success(77), got success(%s)", inner.String())
+	}
+}
+
+func TestAsyncChannelClose(t *testing.T) {
+	// Test closing a channel
+	input := `
+use core.async!
+ch = async.channel();
+ch.close();
+ch.status
+`
+	result := testEval(t, input)
+	if result.Type != value.TYPE_STRING {
+		t.Fatalf("expected string, got %s", result.Type)
+	}
+	if result.AsString() != "closed" {
+		t.Fatalf("expected 'closed', got '%s'", result.AsString())
+	}
+}
+
+func TestAsyncAll(t *testing.T) {
+	// Test async.all waits for all tasks
+	input := `
+use core.async!;
+
+t1 = async.spawn(() => 1);
+t2 = async.spawn(() => 2);
+t3 = async.spawn(() => 3);
+async.all([t1, t2, t3])
+`
+	result := testEvalWithTimeout(t, input, 2*time.Second)
+	if result.Type != value.TYPE_ARRAY {
+		t.Fatalf("expected array, got %s: %s", result.Type, result.String())
+	}
+	arr := result.AsArray()
+	if len(arr) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(arr))
+	}
+}
+
+func TestAsyncCancel(t *testing.T) {
+	// Test async.cancel cancels a task
+	input := `
+use core.async!;
+use core.schedule!;
+
+src = schedule.timeout(100);
+h = async.expects(() => 1, src);
+async.cancel(h);
+h.status
+`
+	result := testEval(t, input)
+	if result.Type != value.TYPE_STRING {
+		t.Fatalf("expected string, got %s: %s", result.Type, result.String())
+	}
+	if result.AsString() != "cancelled" {
+		t.Fatalf("expected 'cancelled', got '%s'", result.AsString())
+	}
 }
 
 func testEvalWithTimeout(t *testing.T, input string, timeout time.Duration) value.Value {

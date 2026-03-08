@@ -31,6 +31,7 @@ const (
 	TYPE_HANDLER      // Return value of async.expects
 	TYPE_EVENT_SOURCE // Event source (stdin, timeout, interval, task.done)
 	TYPE_ADT          // Algebraic data type variant value
+	TYPE_CHANNEL      // User-level message passing channel
 )
 
 func (t Type) String() string {
@@ -75,6 +76,8 @@ func (t Type) String() string {
 		return "event_source"
 	case TYPE_ADT:
 		return "adt"
+	case TYPE_CHANNEL:
+		return "channel"
 	default:
 		return "unknown"
 	}
@@ -156,6 +159,7 @@ const (
 	EventSourceInterval
 	EventSourceTaskDone
 	EventSourceEOF
+	EventSourceChannel // Event source backed by a user-level channel
 )
 
 // Task represents an async task (result of async.spawn)
@@ -232,6 +236,103 @@ type ADT struct {
 	TypeName string  // e.g., "Maybe", "Tree"
 	Tag      string  // e.g., "Some", "None"
 	Values   []Value // contained values
+}
+
+// Channel represents a user-level message passing channel (created by async.channel)
+//
+// Design: The internal EventSource.Channel IS the shared buffer. Both ch.receive()
+// and the event handler goroutine (when ch.source is used with async.expects) compete
+// for values. This provides "consume once" semantics consistent with channel-based
+// message passing.
+type Channel struct {
+	mu       sync.Mutex
+	closed   bool
+	capacity int
+	Source   *EventSource // EventSource for use with async.expects; its Channel is the shared buffer
+}
+
+// NewChannel creates a new channel with the given capacity (0 = unbuffered).
+// The channel's internal buffer is backed by the EventSource.Channel.
+func NewChannel(capacity int) *Channel {
+	bufSize := capacity
+	if bufSize <= 0 {
+		// Unbuffered-style: allow a small buffer to avoid deadlock in stay loops
+		// when the event dispatcher reads values from the source channel.
+		bufSize = 1
+	}
+	es := &EventSource{
+		Kind: EventSourceChannel,
+		// Use max(bufSize, 64) so the event dispatcher doesn't block delivery.
+		Channel: make(chan Value, max(bufSize, 64)),
+		Done:    make(chan struct{}),
+	}
+	return &Channel{
+		capacity: capacity,
+		Source:   es,
+	}
+}
+
+// max returns the larger of a and b.
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// Send sends a value to the channel. Returns false if the channel is closed.
+func (c *Channel) Send(val Value) bool {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return false
+	}
+	c.mu.Unlock()
+
+	select {
+	case c.Source.Channel <- val:
+		return true
+	case <-c.Source.Done:
+		return false
+	}
+}
+
+// Receive receives a value from the channel. Blocks until a value is available
+// or the channel is closed.
+func (c *Channel) Receive() (Value, bool) {
+	select {
+	case val, ok := <-c.Source.Channel:
+		if !ok {
+			return Null(), false
+		}
+		return val, true
+	case <-c.Source.Done:
+		return Null(), false
+	}
+}
+
+// Close closes the channel.
+// Close closes the channel, preventing further sends and signaling receivers.
+func (c *Channel) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.closed {
+		c.closed = true
+		// Signal the Done channel to unblock any waiting receivers/handlers
+		select {
+		case <-c.Source.Done:
+			// Already closed
+		default:
+			close(c.Source.Done)
+		}
+	}
+}
+
+// IsClosed returns true if the channel is closed.
+func (c *Channel) IsClosed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closed
 }
 
 // ADTDef represents the definition of an algebraic data type
@@ -359,6 +460,11 @@ func RegexVal(r *Regex) Value {
 // ADTVal creates an ADT variant value
 func ADTVal(adt *ADT) Value {
 	return Value{Type: TYPE_ADT, Data: adt}
+}
+
+// ChannelVal creates a channel value
+func ChannelVal(c *Channel) Value {
+	return Value{Type: TYPE_CHANNEL, Data: c}
 }
 
 // NewHash creates a new empty hash
@@ -504,6 +610,11 @@ func (v Value) AsRegex() *Regex {
 // AsADT returns the ADT variant value
 func (v Value) AsADT() *ADT {
 	return v.Data.(*ADT)
+}
+
+// AsChannel returns the channel value
+func (v Value) AsChannel() *Channel {
+	return v.Data.(*Channel)
 }
 
 // ToNumber converts value to a numeric type for arithmetic
@@ -744,8 +855,16 @@ func (v Value) String() string {
 			kindStr = "task.done"
 		case EventSourceEOF:
 			kindStr = "eof"
+		case EventSourceChannel:
+			kindStr = "channel"
 		}
 		return fmt.Sprintf("<event_source:%s>", kindStr)
+	case TYPE_CHANNEL:
+		c := v.AsChannel()
+		if c.IsClosed() {
+			return "<channel:closed>"
+		}
+		return fmt.Sprintf("<channel:open(cap=%d)>", c.capacity)
 	default:
 		return "<unknown>"
 	}

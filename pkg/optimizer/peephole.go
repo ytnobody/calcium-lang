@@ -19,7 +19,7 @@ func PeepholeOptimize(instructions bytecode.Instructions) bytecode.Instructions 
 	optimized := parsed
 	for {
 		newOptimized := applyPeepholePass(optimized)
-		if len(newOptimized) == len(optimized) {
+		if instructionsEqual(newOptimized, optimized) {
 			// No more optimizations possible
 			break
 		}
@@ -196,6 +196,27 @@ func matchPattern(instructions []instruction, pos int) (int, []instruction) {
 	}
 
 	return 0, nil
+}
+
+// instructionsEqual checks if two instruction slices are identical
+func instructionsEqual(a, b []instruction) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].opcode != b[i].opcode {
+			return false
+		}
+		if len(a[i].operands) != len(b[i].operands) {
+			return false
+		}
+		for j := range a[i].operands {
+			if a[i].operands[j] != b[i].operands[j] {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // fixJumpOffsets recalculates jump offsets after optimization

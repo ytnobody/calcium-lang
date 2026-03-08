@@ -1576,18 +1576,18 @@ func TestCSEIsExpensiveExpr(t *testing.T) {
 
 	// Expensive: infix with expensive operand
 	if !opt.isExpensiveExpr(&ast.InfixExpression{
-		Token: tok,
-		Left:  &ast.CallExpression{Token: tok, Function: &ast.Identifier{Token: tok, Value: "f"}, Arguments: nil},
+		Token:    tok,
+		Left:     &ast.CallExpression{Token: tok, Function: &ast.Identifier{Token: tok, Value: "f"}, Arguments: nil},
 		Operator: "+",
-		Right: &ast.IntegerLiteral{Token: tok, Value: 1},
+		Right:    &ast.IntegerLiteral{Token: tok, Value: 1},
 	}) {
 		t.Error("InfixExpression with expensive left should be expensive")
 	}
 	if !opt.isExpensiveExpr(&ast.InfixExpression{
-		Token: tok,
-		Left:  &ast.IntegerLiteral{Token: tok, Value: 1},
+		Token:    tok,
+		Left:     &ast.IntegerLiteral{Token: tok, Value: 1},
 		Operator: "+",
-		Right: &ast.CallExpression{Token: tok, Function: &ast.Identifier{Token: tok, Value: "f"}, Arguments: nil},
+		Right:    &ast.CallExpression{Token: tok, Function: &ast.Identifier{Token: tok, Value: "f"}, Arguments: nil},
 	}) {
 		t.Error("InfixExpression with expensive right should be expensive")
 	}
@@ -2263,7 +2263,7 @@ func TestPeepholeMultiplePasses(t *testing.T) {
 	// Create a sequence that requires multiple passes
 	instructions := bytecode.Instructions{}
 	instructions = append(instructions, bytecode.Make(bytecode.OpTrue)...)
-	instructions = append(instructions, bytecode.Make(bytecode.OpNot)...)  // -> OpFalse
+	instructions = append(instructions, bytecode.Make(bytecode.OpNot)...) // -> OpFalse
 	instructions = append(instructions, bytecode.Make(bytecode.OpNot)...) // -> OpTrue
 
 	optimized := PeepholeOptimize(instructions)

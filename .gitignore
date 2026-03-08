@@ -48,6 +48,10 @@ ehthumbs.db
 .calcium/
 *.ca.cache
 
+# Web Playground built artifacts (generated, not committed)
+/playground/calcium.wasm
+/playground/wasm_exec.js
+
 # madflow generated files
 prompts/
 madflow.toml

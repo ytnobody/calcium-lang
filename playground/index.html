@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calcium Playground</title>
+  <!-- CodeMirror for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" />
+  <style>
+    :root {
+      --bg: #1e1e2e;
+      --surface: #181825;
+      --surface2: #313244;
+      --accent: #cba6f7;
+      --accent2: #89b4fa;
+      --text: #cdd6f4;
+      --subtext: #a6adc8;
+      --green: #a6e3a1;
+      --red: #f38ba8;
+      --yellow: #f9e2af;
+      --border: #45475a;
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+
+    .logo span {
+      color: var(--accent2);
+    }
+
+    .tagline {
+      color: var(--subtext);
+      font-size: 0.875rem;
+    }
+
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--surface);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      filter: brightness(1.1);
+    }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: var(--surface2);
+      color: var(--subtext);
+      border: 1px solid var(--border);
+    }
+
+    .status-badge.ready {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    .status-badge.loading {
+      color: var(--yellow);
+      border-color: var(--yellow);
+    }
+
+    .status-badge.error {
+      color: var(--red);
+      border-color: var(--red);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .loading-spinner {
+      width: 8px;
+      height: 8px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .main-layout {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      gap: 0;
+    }
+
+    .pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .pane-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--subtext);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+
+    .divider {
+      width: 1px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .editor-pane {
+      flex: 1.2;
+    }
+
+    .output-pane {
+      flex: 0.8;
+    }
+
+    /* CodeMirror overrides */
+    .CodeMirror {
+      height: 100%;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      background: var(--bg) !important;
+    }
+
+    .CodeMirror-scroll {
+      padding: 8px 0;
+    }
+
+    .cm-wrapper {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .output-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .output-content.empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--subtext);
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-style: italic;
+    }
+
+    .output-error {
+      color: var(--red);
+    }
+
+    .output-success {
+      color: var(--text);
+    }
+
+    .examples-bar {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      flex-shrink: 0;
+      scrollbar-width: none;
+    }
+
+    .examples-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .examples-label {
+      font-size: 0.75rem;
+      color: var(--subtext);
+      white-space: nowrap;
+      margin-right: 4px;
+    }
+
+    .example-chip {
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: var(--surface2);
+      color: var(--subtext);
+      font-size: 0.75rem;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    .example-chip:hover {
+      border-color: var(--accent2);
+      color: var(--accent2);
+    }
+
+    .shortcut-hint {
+      font-size: 0.7rem;
+      color: var(--subtext);
+      opacity: 0.6;
+    }
+
+    kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 0.7rem;
+      background: var(--surface2);
+    }
+
+    .run-time {
+      color: var(--subtext);
+      font-size: 0.7rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Ca<span>lcium</span></div>
+    <div class="tagline">Playground</div>
+    <div class="header-actions">
+      <span id="wasmStatus" class="status-badge loading">
+        <span class="loading-spinner"></span>
+        Loading runtime...
+      </span>
+      <button id="clearBtn" class="btn btn-secondary" onclick="clearOutput()">Clear</button>
+      <button id="runBtn" class="btn btn-primary" onclick="runCode()" disabled>
+        ▶ Run
+        <span class="shortcut-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
+      </button>
+    </div>
+  </header>
+
+  <div class="main-layout">
+    <!-- Editor pane -->
+    <div class="pane editor-pane">
+      <div class="pane-header">
+        <span>Editor</span>
+        <span class="shortcut-hint">calcium</span>
+      </div>
+      <div class="cm-wrapper">
+        <textarea id="codeInput"></textarea>
+      </div>
+      <div class="examples-bar">
+        <span class="examples-label">Examples:</span>
+        <button class="example-chip" onclick="loadExample('hello')">Hello World</button>
+        <button class="example-chip" onclick="loadExample('fibonacci')">Fibonacci</button>
+        <button class="example-chip" onclick="loadExample('pattern')">Pattern Matching</button>
+        <button class="example-chip" onclick="loadExample('adt')">ADT</button>
+        <button class="example-chip" onclick="loadExample('higher-order')">Higher Order</button>
+        <button class="example-chip" onclick="loadExample('pipeline')">Pipeline</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Output pane -->
+    <div class="pane output-pane">
+      <div class="pane-header">
+        <span>Output</span>
+        <span id="runTime" class="run-time"></span>
+      </div>
+      <div id="outputContent" class="output-content empty">
+        Run your code to see output here
+      </div>
+    </div>
+  </div>
+
+  <!-- CodeMirror -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+
+  <script>
+    // ============================================================
+    // Example code snippets
+    // ============================================================
+    const EXAMPLES = {
+      hello: `use core.io!;
+
+"Hello, Calcium!" !> io.say;
+
+name = "World";
+concat("Hello, ", name, "!") !> io.say;`,
+
+      fibonacci: `use core.io!;
+
+func fib(n) =
+  if n <= 1 then n
+  else fib(n - 1) + fib(n - 2);
+
+// Print first 10 Fibonacci numbers
+func print_fibs(i) =
+  if i > 10 then null
+  else {
+    concat("fib(", to_string(i), ") = ", to_string(fib(i))) !> io.say;
+    print_fibs(i + 1)
+  };
+
+print_fibs(0);`,
+
+      pattern: `use core.io!;
+
+// Pattern matching example
+func describe(x) = match x
+  0     => "zero"
+  1     => "one"
+  n     => concat("number: ", to_string(n));
+
+describe(0) !> io.say;
+describe(1) !> io.say;
+describe(42) !> io.say;
+
+// Matching on lists
+func list_info(lst) = match lst
+  []       => "empty list"
+  [x]      => concat("single element: ", to_string(x))
+  [x, ..rest] => concat("head: ", to_string(x), ", tail length: ", to_string(len(rest)));
+
+list_info([]) !> io.say;
+list_info([42]) !> io.say;
+list_info([1, 2, 3, 4]) !> io.say;`,
+
+      adt: `use core.io!;
+
+// Algebraic Data Types
+type Shape =
+  Circle(radius)
+  | Rectangle(width, height)
+  | Triangle(base, height);
+
+func area(shape) = match shape
+  Circle(r)          => 3.14159 * r * r
+  Rectangle(w, h)    => w * h
+  Triangle(b, h)     => 0.5 * b * h;
+
+func describe(shape) = match shape
+  Circle(r)          => concat("Circle(r=", to_string(r), ")")
+  Rectangle(w, h)    => concat("Rectangle(", to_string(w), "x", to_string(h), ")")
+  Triangle(b, h)     => concat("Triangle(b=", to_string(b), ", h=", to_string(h), ")");
+
+shapes = [Circle(5.0), Rectangle(4.0, 6.0), Triangle(3.0, 8.0)];
+
+func print_shapes(lst) = match lst
+  [] => null
+  [s, ..rest] => {
+    concat(describe(s), " -> area = ", to_string(area(s))) !> io.say;
+    print_shapes(rest)
+  };
+
+print_shapes(shapes);`,
+
+      'higher-order': `use core.io!;
+
+// Higher-order functions
+numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// Map: double each number
+doubled = map(numbers, fn(x) => x * 2);
+concat("Doubled: ", to_string(doubled)) !> io.say;
+
+// Filter: keep even numbers
+evens = filter(numbers, fn(x) => x % 2 == 0);
+concat("Evens: ", to_string(evens)) !> io.say;
+
+// Reduce: sum all numbers
+total = reduce(numbers, 0, fn(acc, x) => acc + x);
+concat("Sum: ", to_string(total)) !> io.say;
+
+// Compose operations
+result = numbers
+  |> filter(_, fn(x) => x % 2 != 0)
+  |> map(_, fn(x) => x * x)
+  |> reduce(_, 0, fn(acc, x) => acc + x);
+concat("Sum of squares of odds: ", to_string(result)) !> io.say;`,
+
+      pipeline: `use core.io!;
+
+// Pipeline operator |> and effect operator !>
+words = ["calcium", "is", "functional", "and", "fun"];
+
+// Using pipeline to transform data
+result = words
+  |> map(_, fn(w) => to_upper(w))
+  |> filter(_, fn(w) => len(w) > 2);
+
+result !> io.say;
+
+// Chaining with effect operator
+"Pipeline and effects in Calcium:" !> io.say;
+42 |> to_string |> fn(s) => concat("The answer is: ", s) |> io.say;`,
+    };
+
+    // ============================================================
+    // CodeMirror editor setup
+    // ============================================================
+    let editor;
+
+    function initEditor() {
+      // Simple Calcium syntax highlighting mode (based on Haskell-like syntax)
+      CodeMirror.defineMode('calcium', function() {
+        const keywords = /^(use|fn|func|if|then|else|match|type|let|in|and|or|not|true|false|null)\b/;
+        const operators = /^[+\-*\/%|><=!&^~]+/;
+        const builtinFuncs = /^(map|filter|reduce|len|concat|to_string|to_upper|to_lower|to_int|to_float|print|println|say|push|pop|keys|values|type_of)\b/;
+
+        return {
+          token: function(stream) {
+            if (stream.eatSpace()) return null;
+
+            // Comments
+            if (stream.match('//')) {
+              stream.skipToEnd();
+              return 'comment';
+            }
+
+            // Strings
+            if (stream.match('"')) {
+              while (!stream.eol()) {
+                if (stream.next() === '"') break;
+              }
+              return 'string';
+            }
+
+            // Numbers
+            if (stream.match(/^-?[0-9]+(\.[0-9]+)?/)) return 'number';
+
+            // Keywords
+            if (stream.match(keywords)) return 'keyword';
+
+            // Builtin functions
+            if (stream.match(builtinFuncs)) return 'builtin';
+
+            // Types (capitalized identifiers)
+            if (stream.match(/^[A-Z][a-zA-Z0-9_]*/)) return 'type';
+
+            // Identifiers
+            if (stream.match(/^[a-z_][a-zA-Z0-9_]*/)) return 'variable';
+
+            // Operators
+            if (stream.match(operators)) return 'operator';
+
+            stream.next();
+            return null;
+          }
+        };
+      });
+
+      editor = CodeMirror.fromTextArea(document.getElementById('codeInput'), {
+        mode: 'calcium',
+        theme: 'dracula',
+        lineNumbers: true,
+        autoCloseBrackets: true,
+        matchBrackets: true,
+        tabSize: 2,
+        indentWithTabs: false,
+        lineWrapping: false,
+        extraKeys: {
+          'Ctrl-Enter': runCode,
+          'Cmd-Enter': runCode,
+          'Ctrl-/': 'toggleComment',
+        },
+      });
+
+      // Set the default example
+      editor.setValue(EXAMPLES['hello']);
+    }
+
+    // ============================================================
+    // WASM loading
+    // ============================================================
+    async function loadWasm() {
+      const statusEl = document.getElementById('wasmStatus');
+      try {
+        const go = new Go();
+        const result = await WebAssembly.instantiateStreaming(
+          fetch('calcium.wasm'),
+          go.importObject
+        );
+        go.run(result.instance);
+        setStatus('ready', '● Ready');
+        document.getElementById('runBtn').disabled = false;
+      } catch (err) {
+        console.error('Failed to load WASM:', err);
+        setStatus('error', '✗ Runtime unavailable');
+        // Still allow editing but show error
+        showBuildInstructions();
+      }
+    }
+
+    function setStatus(type, text) {
+      const el = document.getElementById('wasmStatus');
+      el.className = 'status-badge ' + type;
+      el.innerHTML = type === 'loading'
+        ? '<span class="loading-spinner"></span> ' + text
+        : text;
+    }
+
+    function showBuildInstructions() {
+      const output = document.getElementById('outputContent');
+      output.className = 'output-content output-error';
+      output.textContent =
+        'WebAssembly runtime not found.\n\n' +
+        'To build the runtime, run:\n\n' +
+        '  GOOS=js GOARCH=wasm go build -o playground/calcium.wasm ./cmd/playground-wasm/\n\n' +
+        'Then serve this directory with an HTTP server:\n\n' +
+        '  go run ./cmd/playground-server/\n\n' +
+        'Or use any static file server.';
+      document.getElementById('runBtn').disabled = false;
+      document.getElementById('runBtn').textContent = '▶ Run (demo mode)';
+    }
+
+    // ============================================================
+    // Run code
+    // ============================================================
+    function runCode() {
+      const code = editor.getValue();
+      const output = document.getElementById('outputContent');
+      const runTimeEl = document.getElementById('runTime');
+
+      if (typeof runCalcium === 'undefined') {
+        output.className = 'output-content output-error';
+        output.textContent = 'Error: WebAssembly runtime not loaded.\nBuild calcium.wasm first.';
+        return;
+      }
+
+      const start = performance.now();
+      let result;
+      try {
+        result = runCalcium(code);
+      } catch (err) {
+        output.className = 'output-content output-error';
+        output.textContent = 'Internal error: ' + err.message;
+        return;
+      }
+      const elapsed = (performance.now() - start).toFixed(1);
+      runTimeEl.textContent = elapsed + 'ms';
+
+      if (result.error && result.error.length > 0) {
+        output.className = 'output-content output-error';
+        output.textContent = result.error;
+      } else if (result.output.length === 0) {
+        output.className = 'output-content empty';
+        output.textContent = '(no output)';
+      } else {
+        output.className = 'output-content output-success';
+        output.textContent = result.output;
+      }
+    }
+
+    function clearOutput() {
+      const output = document.getElementById('outputContent');
+      output.className = 'output-content empty';
+      output.textContent = 'Run your code to see output here';
+      document.getElementById('runTime').textContent = '';
+    }
+
+    function loadExample(name) {
+      if (EXAMPLES[name]) {
+        editor.setValue(EXAMPLES[name]);
+        editor.focus();
+        clearOutput();
+      }
+    }
+
+    // ============================================================
+    // Init
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      initEditor();
+      loadWasm();
+    });
+  </script>
+
+  <!-- Go WASM runtime support -->
+  <script src="wasm_exec.js"></script>
+</body>
+</html>

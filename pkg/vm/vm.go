@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"strings"
@@ -126,6 +127,9 @@ type VM struct {
 
 	// Source input for showing source lines in error messages
 	sourceInput string
+
+	// Output writer for print/println (default: os.Stdout)
+	output io.Writer
 }
 
 // SetSourcePath sets the source file path for external module resolution
@@ -141,6 +145,20 @@ func (vm *VM) SetSourceMap(sm *bytecode.SourceMap) {
 // SetSourceInput sets the source code text for error messages
 func (vm *VM) SetSourceInput(input string) {
 	vm.sourceInput = input
+}
+
+// SetOutput sets the writer used for print/println output.
+// If not set, os.Stdout is used by default.
+func (vm *VM) SetOutput(w io.Writer) {
+	vm.output = w
+}
+
+// getOutput returns the output writer, defaulting to os.Stdout.
+func (vm *VM) getOutput() io.Writer {
+	if vm.output != nil {
+		return vm.output
+	}
+	return os.Stdout
 }
 
 // SetRunOptions sets the run options for the VM
@@ -2705,24 +2723,26 @@ func builtinHashMerge(args ...value.Value) value.Value {
 
 // print - prints values without newline (core.io!)
 func (vm *VM) builtinPrint(args ...value.Value) value.Value {
+	w := vm.getOutput()
 	for i, arg := range args {
 		if i > 0 {
-			fmt.Print(" ")
+			fmt.Fprint(w, " ")
 		}
-		fmt.Print(arg.String())
+		fmt.Fprint(w, arg.String())
 	}
 	return value.Null()
 }
 
 // println - prints values with newline (core.io!)
 func (vm *VM) builtinPrintln(args ...value.Value) value.Value {
+	w := vm.getOutput()
 	for i, arg := range args {
 		if i > 0 {
-			fmt.Print(" ")
+			fmt.Fprint(w, " ")
 		}
-		fmt.Print(arg.String())
+		fmt.Fprint(w, arg.String())
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 	return value.Null()
 }
 

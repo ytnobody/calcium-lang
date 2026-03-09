@@ -329,8 +329,8 @@ func TestFunctionOverloading(t *testing.T) {
 		{
 			input: `
 				func greet() = "hello";
-				func greet(name) = "hello " ++ name;
-				func greet(first, last) = "hello " ++ first ++ " " ++ last;
+				func greet(name) = concat("hello ", name);
+				func greet(first, last) = concat(concat(concat("hello ", first), " "), last);
 				greet();
 			`,
 			expected: "hello",
@@ -338,8 +338,8 @@ func TestFunctionOverloading(t *testing.T) {
 		{
 			input: `
 				func greet() = "hello";
-				func greet(name) = "hello " ++ name;
-				func greet(first, last) = "hello " ++ first ++ " " ++ last;
+				func greet(name) = concat("hello ", name);
+				func greet(first, last) = concat(concat(concat("hello ", first), " "), last);
 				greet("world");
 			`,
 			expected: "hello world",
@@ -347,8 +347,8 @@ func TestFunctionOverloading(t *testing.T) {
 		{
 			input: `
 				func greet() = "hello";
-				func greet(name) = "hello " ++ name;
-				func greet(first, last) = "hello " ++ first ++ " " ++ last;
+				func greet(name) = concat("hello ", name);
+				func greet(first, last) = concat(concat(concat("hello ", first), " "), last);
 				greet("John", "Doe");
 			`,
 			expected: "hello John Doe",

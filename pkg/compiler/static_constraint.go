@@ -23,7 +23,7 @@ type funcConstraintInfo struct {
 
 // staticConstraintChecker performs compile-time constraint validation
 type staticConstraintChecker struct {
-	constraints    map[string]*constraintInfo    // constraint name -> definition
+	constraints    map[string]*constraintInfo     // constraint name -> definition
 	funcConstraint map[string]*funcConstraintInfo // function name -> param constraint info
 }
 

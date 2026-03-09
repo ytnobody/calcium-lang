@@ -256,7 +256,14 @@ func New() *Compiler {
 	}
 
 	// Define built-in functions
-	builtins := []string{"len", "concat", "to_string", "get", "has", "head", "tail", "push", "range", "map", "filter", "reduce", "keys", "values", "hash_set", "hash_merge"}
+	builtins := []string{
+		"len", "concat", "to_string", "get", "has", "head", "tail", "push", "range",
+		"map", "filter", "reduce",
+		"keys", "values", "hash_set", "hash_merge",
+		// Primitive type constraint checkers (usable as Name? in constraint expressions)
+		"Int", "Float", "String", "Bool", "Array", "Hash", "Tuple", "Null",
+		"Function", "Number",
+	}
 	for i, name := range builtins {
 		symbolTable.DefineBuiltin(i, name)
 	}

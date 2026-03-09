@@ -115,6 +115,9 @@ const (
 	// ADT operations
 	OpConstructADT // Create ADT variant: operands [tag_name_index (2), arity (1)]
 	OpMatchADT     // Match ADT variant: operands [tag_name_index (2), arity (1)]
+
+	// Function overloading
+	OpAddOverload // Pop new closure (TOS) and existing closure/overloaded (TOS-1), push overloaded closure
 )
 
 // Definition describes an opcode
@@ -214,6 +217,9 @@ var definitions = map[OpCode]*Definition{
 	// ADT operations
 	OpConstructADT: {"OpConstructADT", []int{2, 1}}, // 2-byte tag name constant index, 1-byte arity
 	OpMatchADT:     {"OpMatchADT", []int{2, 1}},     // 2-byte tag name constant index, 1-byte arity
+
+	// Function overloading
+	OpAddOverload: {"OpAddOverload", []int{}}, // No operands: pops new closure and existing, pushes overloaded
 }
 
 // Lookup returns the definition for an opcode

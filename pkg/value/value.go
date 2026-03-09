@@ -30,8 +30,9 @@ const (
 	TYPE_TASK         // Return value of async.spawn
 	TYPE_HANDLER      // Return value of async.expects
 	TYPE_EVENT_SOURCE // Event source (stdin, timeout, interval, task.done)
-	TYPE_ADT          // Algebraic data type variant value
-	TYPE_CHANNEL      // User-level message passing channel
+	TYPE_ADT                // Algebraic data type variant value
+	TYPE_CHANNEL            // User-level message passing channel
+	TYPE_OVERLOADED_CLOSURE // Multiple function overloads with different signatures
 )
 
 func (t Type) String() string {
@@ -78,6 +79,8 @@ func (t Type) String() string {
 		return "adt"
 	case TYPE_CHANNEL:
 		return "channel"
+	case TYPE_OVERLOADED_CLOSURE:
+		return "overloaded_closure"
 	default:
 		return "unknown"
 	}
@@ -91,15 +94,23 @@ type Value struct {
 
 // Function represents a user-defined function
 type Function struct {
-	Name       string
-	Parameters []string
-	Body       []byte      // Bytecode
-	NumLocals  int         // Number of local variables
-	Constants  []Value     // Constants pool
-	Globals    []Value     // Globals pool (for module functions)
-	Builtins   []*Builtin  // Builtins pool (for module functions)
-	IsEffect   bool        // true for func!
-	SourceMap  interface{} // *bytecode.SourceMap (stored as interface to avoid circular import)
+	Name           string
+	Parameters     []string
+	ParamTypeNames []string    // type annotation names for each parameter (empty string = untyped/any)
+	Body           []byte      // Bytecode
+	NumLocals      int         // Number of local variables
+	Constants      []Value     // Constants pool
+	Globals        []Value     // Globals pool (for module functions)
+	Builtins       []*Builtin  // Builtins pool (for module functions)
+	IsEffect       bool        // true for func!
+	SourceMap      interface{} // *bytecode.SourceMap (stored as interface to avoid circular import)
+}
+
+// OverloadedClosure holds multiple function variants with the same name but different signatures.
+// At call time, the appropriate variant is selected based on argument count and types.
+type OverloadedClosure struct {
+	Name     string      // function name (shared by all variants)
+	Variants []*Closure  // variants ordered by definition order
 }
 
 // BuiltinFn is the signature for built-in functions
@@ -467,6 +478,11 @@ func ChannelVal(c *Channel) Value {
 	return Value{Type: TYPE_CHANNEL, Data: c}
 }
 
+// OverloadedClosureVal creates an overloaded closure value
+func OverloadedClosureVal(oc *OverloadedClosure) Value {
+	return Value{Type: TYPE_OVERLOADED_CLOSURE, Data: oc}
+}
+
 // NewHash creates a new empty hash
 func NewHash() *Hash {
 	return &Hash{
@@ -615,6 +631,11 @@ func (v Value) AsADT() *ADT {
 // AsChannel returns the channel value
 func (v Value) AsChannel() *Channel {
 	return v.Data.(*Channel)
+}
+
+// AsOverloadedClosure returns the overloaded closure value
+func (v Value) AsOverloadedClosure() *OverloadedClosure {
+	return v.Data.(*OverloadedClosure)
 }
 
 // ToNumber converts value to a numeric type for arithmetic
@@ -865,6 +886,9 @@ func (v Value) String() string {
 			return "<channel:closed>"
 		}
 		return fmt.Sprintf("<channel:open(cap=%d)>", c.capacity)
+	case TYPE_OVERLOADED_CLOSURE:
+		oc := v.AsOverloadedClosure()
+		return fmt.Sprintf("<overloaded func %s (%d variants)>", oc.Name, len(oc.Variants))
 	default:
 		return "<unknown>"
 	}

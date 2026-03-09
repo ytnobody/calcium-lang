@@ -73,6 +73,10 @@ type Compiler struct {
 	// Source maps per scope (stack mirrors scopes)
 	sourceMaps     []*bytecode.SourceMap
 	sourceMapIndex int
+
+	// compiledFunctionNames tracks which function names have been compiled at least once
+	// in the current top-level scope. Used to detect overload definitions.
+	compiledFunctionNames map[string]bool
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -141,6 +145,26 @@ func (s *SymbolTable) Define(name string) Symbol {
 	s.store[name] = symbol
 	s.count++
 	return symbol
+}
+
+// DefineOrGet returns the existing symbol if the name is already defined in the current scope,
+// otherwise defines a new symbol. This is used to handle function overloading where multiple
+// function declarations share the same name and thus the same symbol slot.
+func (s *SymbolTable) DefineOrGet(name string) (Symbol, bool) {
+	if existing, ok := s.store[name]; ok {
+		return existing, false // false = already existed
+	}
+	sym := s.Define(name)
+	return sym, true // true = newly defined
+}
+
+// DefineEffectOrGet is like DefineOrGet but for effect functions.
+func (s *SymbolTable) DefineEffectOrGet(name string) (Symbol, bool) {
+	if existing, ok := s.store[name]; ok {
+		return existing, false
+	}
+	sym := s.DefineEffect(name)
+	return sym, true
 }
 
 // DefineEffect defines a new effect symbol (for func! or effect module members)
@@ -222,12 +246,13 @@ func New() *Compiler {
 	mainSourceMap := bytecode.NewSourceMap()
 
 	c := &Compiler{
-		constants:      []value.Value{},
-		symbolTable:    symbolTable,
-		scopes:         []CompilationScope{mainScope},
-		scopeIndex:     0,
-		sourceMaps:     []*bytecode.SourceMap{mainSourceMap},
-		sourceMapIndex: 0,
+		constants:             []value.Value{},
+		symbolTable:           symbolTable,
+		scopes:                []CompilationScope{mainScope},
+		scopeIndex:            0,
+		sourceMaps:            []*bytecode.SourceMap{mainSourceMap},
+		sourceMapIndex:        0,
+		compiledFunctionNames: make(map[string]bool),
 	}
 
 	// Define built-in functions
@@ -422,12 +447,13 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 	}
 
 	return &Compiler{
-		constants:      constants,
-		symbolTable:    symbolTable,
-		scopes:         []CompilationScope{mainScope},
-		scopeIndex:     0,
-		sourceMaps:     []*bytecode.SourceMap{bytecode.NewSourceMap()},
-		sourceMapIndex: 0,
+		constants:             constants,
+		symbolTable:           symbolTable,
+		scopes:                []CompilationScope{mainScope},
+		scopeIndex:            0,
+		sourceMaps:            []*bytecode.SourceMap{bytecode.NewSourceMap()},
+		sourceMapIndex:        0,
+		compiledFunctionNames: make(map[string]bool),
 	}
 }
 
@@ -436,21 +462,23 @@ func (c *Compiler) Compile(node ast.Node) error {
 	switch node := node.(type) {
 	case *ast.Program:
 		// First pass: register all function and constraint declarations
-		// This enables forward references (functions calling other functions defined later)
+		// This enables forward references (functions calling other functions defined later).
+		// For overloaded functions (same name, different signatures), we register the name
+		// only once so all overloads share the same symbol slot.
 		for _, s := range node.Statements {
 			switch stmt := s.(type) {
 			case *ast.FunctionDeclaration:
 				if stmt.IsEffect {
-					c.symbolTable.DefineEffect(stmt.Name.Value)
+					c.symbolTable.DefineEffectOrGet(stmt.Name.Value)
 				} else {
-					c.symbolTable.Define(stmt.Name.Value)
+					c.symbolTable.DefineOrGet(stmt.Name.Value)
 				}
 			case *ast.ConstraintDeclaration:
-				c.symbolTable.Define(stmt.Name.Value)
+				c.symbolTable.DefineOrGet(stmt.Name.Value)
 			case *ast.TypeDeclaration:
 				// Register all variant constructors
 				for _, v := range stmt.Variants {
-					c.symbolTable.Define(v.Name)
+					c.symbolTable.DefineOrGet(v.Name)
 				}
 			}
 		}
@@ -667,18 +695,38 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		// Create function object
 		fn := &value.Function{
-			Name:       node.Name.Value,
-			Parameters: make([]string, len(node.Parameters)),
-			Body:       instructions,
-			NumLocals:  numLocals,
-			IsEffect:   node.IsEffect || hasConstraints,
-			SourceMap:  fnSourceMap,
+			Name:           node.Name.Value,
+			Parameters:     make([]string, len(node.Parameters)),
+			ParamTypeNames: make([]string, len(node.Parameters)),
+			Body:           instructions,
+			NumLocals:      numLocals,
+			IsEffect:       node.IsEffect || hasConstraints,
+			SourceMap:      fnSourceMap,
 		}
 		for i, p := range node.Parameters {
 			fn.Parameters[i] = p.Value
 		}
+		// Record parameter type annotations for overload resolution
+		for i, pt := range node.ParamTypes {
+			if pt != nil {
+				fn.ParamTypeNames[i] = pt.Name
+			}
+		}
 
 		fnIndex := c.addConstant(value.Func(fn))
+
+		// Determine if this is an overloaded definition (same name compiled before)
+		isOverload := c.compiledFunctionNames[node.Name.Value]
+		c.compiledFunctionNames[node.Name.Value] = true
+
+		if isOverload {
+			// Load the existing value (closure or overloaded closure) from its symbol slot
+			if symbol.Scope == GlobalScope {
+				c.emit(bytecode.OpGetGlobal, symbol.Index)
+			} else {
+				c.emit(bytecode.OpGetLocal, symbol.Index)
+			}
+		}
 
 		// Emit instructions to load free variables onto stack
 		for _, s := range freeSymbols {
@@ -686,7 +734,12 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 		c.emit(bytecode.OpClosure, fnIndex, len(freeSymbols))
 
-		// Store the function in the pre-defined symbol
+		if isOverload {
+			// Merge the existing function and new closure into an overloaded closure
+			c.emit(bytecode.OpAddOverload)
+		}
+
+		// Store the function (or overloaded function) in the pre-defined symbol
 		if symbol.Scope == GlobalScope {
 			c.emit(bytecode.OpSetGlobal, symbol.Index)
 		} else {

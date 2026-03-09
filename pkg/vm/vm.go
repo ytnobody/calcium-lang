@@ -794,6 +794,31 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			return err
 		}
 
+	case bytecode.OpAddOverload:
+		// TOS = new closure, TOS-1 = existing value (closure or overloaded closure)
+		newClosure := vm.pop().AsClosure()
+		existing := vm.pop()
+
+		var oc *value.OverloadedClosure
+		switch existing.Type {
+		case value.TYPE_OVERLOADED_CLOSURE:
+			// Extend existing overloaded closure
+			oc = existing.AsOverloadedClosure()
+			oc.Variants = append(oc.Variants, newClosure)
+		case value.TYPE_CLOSURE:
+			// Wrap existing closure and new closure
+			oc = &value.OverloadedClosure{
+				Name:     newClosure.Fn.Name,
+				Variants: []*value.Closure{existing.AsClosure(), newClosure},
+			}
+		default:
+			return fmt.Errorf("internal error: OpAddOverload expected closure or overloaded_closure, got %s", existing.Type)
+		}
+		err := vm.push(value.OverloadedClosureVal(oc))
+		if err != nil {
+			return err
+		}
+
 	case bytecode.OpGetFree:
 		freeIndex := int(ins[ip+1])
 		vm.currentFrame().ip += 1
@@ -1448,6 +1473,12 @@ func (vm *VM) executeCall(numArgs int) error {
 		return vm.callBuiltin(callee.AsBuiltin(), numArgs)
 	case value.TYPE_PARTIAL_BUILTIN:
 		return vm.callPartialBuiltin(callee.AsPartialBuiltin(), numArgs)
+	case value.TYPE_OVERLOADED_CLOSURE:
+		cl, err := vm.resolveOverload(callee.AsOverloadedClosure(), numArgs)
+		if err != nil {
+			return err
+		}
+		return vm.callClosure(cl, numArgs)
 	default:
 		return fmt.Errorf("type error: cannot call value of type %s as a function\nhint: only functions, closures, and builtins can be called with '()'", callee.Type)
 	}
@@ -1468,6 +1499,17 @@ func (vm *VM) callClosure(cl *value.Closure, numArgs int) error {
 	return nil
 }
 
+// resolveOverload selects the appropriate variant from an OverloadedClosure
+// based on argument count. If no variant matches, an error is returned.
+func (vm *VM) resolveOverload(oc *value.OverloadedClosure, numArgs int) (*value.Closure, error) {
+	for _, variant := range oc.Variants {
+		if len(variant.Fn.Parameters) == numArgs {
+			return variant, nil
+		}
+	}
+	return nil, fmt.Errorf("argument error: no overload of function '%s' accepts %d argument(s)", oc.Name, numArgs)
+}
+
 // executeTailCall handles tail call optimization by reusing the current frame
 // instead of pushing a new one, preventing stack overflow in recursive calls.
 func (vm *VM) executeTailCall(numArgs int) error {
@@ -1484,6 +1526,12 @@ func (vm *VM) executeTailCall(numArgs int) error {
 		return vm.callBuiltin(callee.AsBuiltin(), numArgs)
 	case value.TYPE_PARTIAL_BUILTIN:
 		return vm.callPartialBuiltin(callee.AsPartialBuiltin(), numArgs)
+	case value.TYPE_OVERLOADED_CLOSURE:
+		cl, err := vm.resolveOverload(callee.AsOverloadedClosure(), numArgs)
+		if err != nil {
+			return err
+		}
+		return vm.tailCallClosure(cl, numArgs)
 	default:
 		return fmt.Errorf("type error: cannot call value of type %s as a function\nhint: only functions, closures, and builtins can be called with '()'", callee.Type)
 	}

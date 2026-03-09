@@ -25,11 +25,11 @@ const (
 	TYPE_SUCCESS
 	TYPE_FAILURE
 	TYPE_MODULE
-	TYPE_TUPLE        // Tuple (fixed-length, heterogeneous)
-	TYPE_REGEX        // Compiled regular expression
-	TYPE_TASK         // Return value of async.spawn
-	TYPE_HANDLER      // Return value of async.expects
-	TYPE_EVENT_SOURCE // Event source (stdin, timeout, interval, task.done)
+	TYPE_TUPLE              // Tuple (fixed-length, heterogeneous)
+	TYPE_REGEX              // Compiled regular expression
+	TYPE_TASK               // Return value of async.spawn
+	TYPE_HANDLER            // Return value of async.expects
+	TYPE_EVENT_SOURCE       // Event source (stdin, timeout, interval, task.done)
 	TYPE_ADT                // Algebraic data type variant value
 	TYPE_CHANNEL            // User-level message passing channel
 	TYPE_OVERLOADED_CLOSURE // Multiple function overloads with different signatures
@@ -109,8 +109,8 @@ type Function struct {
 // OverloadedClosure holds multiple function variants with the same name but different signatures.
 // At call time, the appropriate variant is selected based on argument count and types.
 type OverloadedClosure struct {
-	Name     string      // function name (shared by all variants)
-	Variants []*Closure  // variants ordered by definition order
+	Name     string     // function name (shared by all variants)
+	Variants []*Closure // variants ordered by definition order
 }
 
 // BuiltinFn is the signature for built-in functions

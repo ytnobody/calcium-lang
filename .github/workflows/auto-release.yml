@@ -1,0 +1,53 @@
+name: Auto Release on Merge to Main
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  auto-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get latest tag
+        id: latest_tag
+        run: |
+          LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.0.0"
+          fi
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST_TAG"
+
+      - name: Bump patch version
+        id: next_tag
+        run: |
+          LATEST="${{ steps.latest_tag.outputs.tag }}"
+          # Strip leading 'v'
+          VERSION="${LATEST#v}"
+          # Split into major, minor, patch
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          # Increment patch
+          NEXT_PATCH=$((PATCH + 1))
+          NEXT_TAG="v${MAJOR}.${MINOR}.${NEXT_PATCH}"
+          echo "tag=$NEXT_TAG" >> $GITHUB_OUTPUT
+          echo "Next tag: $NEXT_TAG"
+
+      - name: Create and push tag
+        run: |
+          NEXT_TAG="${{ steps.next_tag.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$NEXT_TAG"
+          git push origin "$NEXT_TAG"
+          echo "Created and pushed tag: $NEXT_TAG"

@@ -1912,24 +1912,31 @@ func TestFunctionDeclarationWithEffectHandle(t *testing.T) {
 	}
 }
 
-func TestFunctionDeclarationWithUnknownReturnType(t *testing.T) {
+func TestFunctionDeclarationWithReturnConstraint(t *testing.T) {
+	// Non-builtin return type names are now parsed as return constraints
 	input := `func add(a, b): UnknownType = a + b;`
 	l := lexer.New(input)
 	p := New(l)
-	p.ParseProgram()
-	errors := p.Errors()
-	if len(errors) == 0 {
-		t.Fatal("expected error for unknown return type")
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(program.Statements))
 	}
-	found := false
-	for _, e := range errors {
-		if containsString(e, "unknown return type") {
-			found = true
-			break
-		}
+
+	stmt, ok := program.Statements[0].(*ast.FunctionDeclaration)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionDeclaration, got %T", program.Statements[0])
 	}
-	if !found {
-		t.Errorf("expected error about unknown return type, got: %v", errors)
+
+	if stmt.ReturnConstraint == nil {
+		t.Fatal("expected return constraint to be set")
+	}
+	if stmt.ReturnConstraint.Value != "UnknownType" {
+		t.Errorf("expected return constraint 'UnknownType', got %q", stmt.ReturnConstraint.Value)
+	}
+	if stmt.ReturnType != nil {
+		t.Error("expected ReturnType to be nil when constraint is set")
 	}
 }
 

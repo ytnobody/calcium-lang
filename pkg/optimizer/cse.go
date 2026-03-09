@@ -80,12 +80,15 @@ func (o *CSEOptimizer) optimize(node ast.Node) ast.Node {
 		}
 	case *ast.FunctionDeclaration:
 		return &ast.FunctionDeclaration{
-			Token:       n.Token,
-			Name:        n.Name,
-			Parameters:  n.Parameters,
-			Constraints: n.Constraints,
-			Body:        o.optimizeExpr(n.Body),
-			IsEffect:    n.IsEffect,
+			Token:            n.Token,
+			Name:             n.Name,
+			Parameters:       n.Parameters,
+			Constraints:      n.Constraints,
+			ParamTypes:       n.ParamTypes,
+			ReturnType:       n.ReturnType,
+			ReturnConstraint: n.ReturnConstraint,
+			Body:             o.optimizeExpr(n.Body),
+			IsEffect:         n.IsEffect,
 		}
 	case *ast.ConstraintDeclaration:
 		return &ast.ConstraintDeclaration{

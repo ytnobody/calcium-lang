@@ -681,14 +681,115 @@ func (c *Compiler) Compile(node ast.Node) error {
 			}
 		}
 
+		// Also enforce type annotations as constraints when a constraint function
+		// with the same name exists (builtin like Int, String, etc. or user-defined).
+		// This allows: func sum(a: Int, b: Int) = a + b; to enforce Int constraint.
+		for i, typeAnnot := range node.ParamTypes {
+			if typeAnnot != nil && node.Constraints[i] == nil {
+				// Only if no explicit constraint already set for this parameter
+				constraintSymbol, ok := c.symbolTable.Resolve(typeAnnot.Name)
+				if ok {
+					hasConstraints = true
+					paramSymbol, _ := c.symbolTable.Resolve(node.Parameters[i].Value)
+
+					// Load parameter value (saved for failure message)
+					c.emit(bytecode.OpGetLocal, paramSymbol.Index)
+
+					// Load constraint function
+					c.loadSymbol(constraintSymbol)
+
+					// Load parameter value for the call
+					c.emit(bytecode.OpGetLocal, paramSymbol.Index)
+
+					// Call constraint(value)
+					c.emit(bytecode.OpCall, 1)
+
+					// Check constraint result - if false, return failure
+					jumpIfTruePos := c.emit(bytecode.OpJumpIfTrue, 9999)
+
+					// Constraint failed - return failure(value)
+					c.emit(bytecode.OpPop) // pop the saved value
+					c.emit(bytecode.OpGetLocal, paramSymbol.Index)
+					c.emit(bytecode.OpWrapFailure)
+					c.emit(bytecode.OpReturn)
+
+					// Constraint passed - continue
+					afterPos := len(c.currentInstructions())
+					c.changeOperand(jumpIfTruePos, afterPos)
+					c.emit(bytecode.OpPop) // pop the saved value
+				}
+			}
+		}
+
 		// Compile function body
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
 		}
 
+		// Check return constraint if specified (explicit constraint or type annotation)
+		// Determine the effective return constraint name:
+		// 1. Explicit ReturnConstraint (e.g., func add(a, b): Positive = ...)
+		// 2. ReturnType annotation with a resolvable constraint (e.g., func add(a, b): Int = ...)
+		var returnConstraintName string
+		var returnConstraintToken token.Token
+		if node.ReturnConstraint != nil {
+			returnConstraintName = node.ReturnConstraint.Value
+			returnConstraintToken = node.ReturnConstraint.Token
+		} else if node.ReturnType != nil {
+			// Check if the return type name resolves to a constraint function
+			if _, ok := c.symbolTable.Resolve(node.ReturnType.Name); ok {
+				returnConstraintName = node.ReturnType.Name
+				returnConstraintToken = node.ReturnType.Token
+			}
+		}
+
+		hasReturnConstraint := returnConstraintName != ""
+		if hasReturnConstraint {
+			hasConstraints = true
+
+			// Stack has: [return_value]
+			// We need to: dup value, call constraint, check result
+
+			// Store return value in a temporary local
+			tmpSymbol := c.symbolTable.Define("__return_tmp__")
+			c.emit(bytecode.OpSetLocal, tmpSymbol.Index)
+
+			// Load constraint function (from outer scope)
+			constraintSymbol, ok := c.symbolTable.Resolve(returnConstraintName)
+			if !ok {
+				msg := fmt.Sprintf("undefined return constraint '%s'", returnConstraintName)
+				candidates := c.getAllDefinedNames()
+				if similar := findSimilarName(returnConstraintName, candidates, 2); similar != "" {
+					msg += fmt.Sprintf(" (did you mean '%s'?)", similar)
+				}
+				return c.newCompileError(returnConstraintToken, msg)
+			}
+			c.loadSymbol(constraintSymbol)
+
+			// Load return value for the call
+			c.emit(bytecode.OpGetLocal, tmpSymbol.Index)
+
+			// Call constraint(return_value)
+			c.emit(bytecode.OpCall, 1)
+
+			// Check constraint result - if true, continue to wrap in success
+			// OpJumpIfTrue pops the condition value from the stack
+			jumpIfTruePos := c.emit(bytecode.OpJumpIfTrue, 9999)
+
+			// Constraint failed - return failure(value)
+			c.emit(bytecode.OpGetLocal, tmpSymbol.Index)
+			c.emit(bytecode.OpWrapFailure)
+			c.emit(bytecode.OpReturn)
+
+			// Constraint passed - push the original value for wrapping in success
+			afterPos := len(c.currentInstructions())
+			c.changeOperand(jumpIfTruePos, afterPos)
+			c.emit(bytecode.OpGetLocal, tmpSymbol.Index)
+		}
+
 		// For effect functions (func!), wrap return value in success
-		// Also wrap if function has parameter constraints (makes it return success/failure)
+		// Also wrap if function has parameter constraints or return constraint (makes it return success/failure)
 		if node.IsEffect || hasConstraints {
 			c.emit(bytecode.OpWrapSuccess)
 		}

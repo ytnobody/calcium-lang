@@ -77,6 +77,9 @@ type Compiler struct {
 	// compiledFunctionNames tracks which function names have been compiled at least once
 	// in the current top-level scope. Used to detect overload definitions.
 	compiledFunctionNames map[string]bool
+
+	// staticChecker performs compile-time constraint validation
+	staticChecker *staticConstraintChecker
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -253,6 +256,7 @@ func New() *Compiler {
 		sourceMaps:            []*bytecode.SourceMap{mainSourceMap},
 		sourceMapIndex:        0,
 		compiledFunctionNames: make(map[string]bool),
+		staticChecker:         newStaticConstraintChecker(),
 	}
 
 	// Define built-in functions
@@ -461,6 +465,7 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 		sourceMaps:            []*bytecode.SourceMap{bytecode.NewSourceMap()},
 		sourceMapIndex:        0,
 		compiledFunctionNames: make(map[string]bool),
+		staticChecker:         newStaticConstraintChecker(),
 	}
 }
 
@@ -480,8 +485,12 @@ func (c *Compiler) Compile(node ast.Node) error {
 				} else {
 					c.symbolTable.DefineOrGet(stmt.Name.Value)
 				}
+				// Register function constraint info for static checking
+				c.staticChecker.registerFunction(stmt)
 			case *ast.ConstraintDeclaration:
 				c.symbolTable.DefineOrGet(stmt.Name.Value)
+				// Register constraint definition for static checking
+				c.staticChecker.registerConstraint(stmt)
 			case *ast.TypeDeclaration:
 				// Register all variant constructors
 				for _, v := range stmt.Variants {
@@ -1142,6 +1151,15 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 	case *ast.CallExpression:
 		c.setPosFromToken(node.Token)
+
+		// Static constraint check: validate literal arguments at compile time
+		if ident, ok := node.Function.(*ast.Identifier); ok {
+			errs := c.staticChecker.checkCallExpression(ident.Value, node.Arguments, node.Token)
+			for _, errMsg := range errs {
+				return c.newCompileError(node.Token, errMsg)
+			}
+		}
+
 		err := c.Compile(node.Function)
 		if err != nil {
 			return err

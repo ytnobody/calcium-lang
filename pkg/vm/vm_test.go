@@ -314,6 +314,90 @@ func TestFunctions(t *testing.T) {
 	runVmTests(t, tests)
 }
 
+func TestFunctionOverloading(t *testing.T) {
+	tests := []vmTestCase{
+		// Basic overload: same name, different arity
+		{
+			input:    "func add(a) = a; func add(a, b) = a + b; add(5);",
+			expected: 5,
+		},
+		{
+			input:    "func add(a) = a; func add(a, b) = a + b; add(5, 10);",
+			expected: 15,
+		},
+		// Three overloads
+		{
+			input: `
+				func greet() = "hello";
+				func greet(name) = concat("hello ", name);
+				func greet(first, last) = concat(concat(concat("hello ", first), " "), last);
+				greet();
+			`,
+			expected: "hello",
+		},
+		{
+			input: `
+				func greet() = "hello";
+				func greet(name) = concat("hello ", name);
+				func greet(first, last) = concat(concat(concat("hello ", first), " "), last);
+				greet("world");
+			`,
+			expected: "hello world",
+		},
+		{
+			input: `
+				func greet() = "hello";
+				func greet(name) = concat("hello ", name);
+				func greet(first, last) = concat(concat(concat("hello ", first), " "), last);
+				greet("John", "Doe");
+			`,
+			expected: "hello John Doe",
+		},
+		// Overloaded functions with arithmetic
+		{
+			input: `
+				func sum(a) = a;
+				func sum(a, b) = a + b;
+				func sum(a, b, c) = a + b + c;
+				sum(1) + sum(2, 3) + sum(4, 5, 6);
+			`,
+			expected: 21,
+		},
+		// Overloaded function calling another overload
+		{
+			input: `
+				func f(x) = x * 2;
+				func f(x, y) = f(x) + f(y);
+				f(3, 4);
+			`,
+			expected: 14,
+		},
+	}
+
+	runVmTests(t, tests)
+}
+
+func TestFunctionOverloadingError(t *testing.T) {
+	// Calling with an arity that doesn't match any overload should error
+	input := "func add(a) = a; func add(a, b) = a + b; add(1, 2, 3);"
+	program := parse(input)
+
+	comp := compiler.New()
+	err := comp.Compile(program)
+	if err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	err = vm.Run(comp.Bytecode().Instructions)
+	if err == nil {
+		t.Fatal("expected error for mismatched overload arity, got none")
+	}
+	if !strings.Contains(err.Error(), "no overload") {
+		t.Fatalf("expected 'no overload' error, got: %s", err)
+	}
+}
+
 func TestFunctionsWithLocalBindings(t *testing.T) {
 	tests := []vmTestCase{
 		{
@@ -2056,4 +2140,98 @@ func testEvalVM(t *testing.T, input string) (string, error) {
 	}
 
 	return machine.LastPoppedStackElem().String(), nil
+}
+
+// =============================================================================
+// Function overloading tests
+// =============================================================================
+
+func TestFunctionOverloadByArity(t *testing.T) {
+	tests := []vmTestCase{
+		{
+			// Two overloads differing by arity; call the 1-arg variant
+			input: `
+func greet(name) = "Hello, " + name;
+func greet(first, last) = "Hello, " + first + " " + last;
+greet("World");
+`,
+			expected: "Hello, World",
+		},
+		{
+			// Call the 2-arg variant
+			input: `
+func greet(name) = "Hello, " + name;
+func greet(first, last) = "Hello, " + first + " " + last;
+greet("John", "Doe");
+`,
+			expected: "Hello, John Doe",
+		},
+		{
+			// Three overloads - call the 0-arg variant
+			input: `
+func describe() = "no args";
+func describe(a) = "one arg: " + a;
+func describe(a, b) = "two args: " + a + ", " + b;
+describe();
+`,
+			expected: "no args",
+		},
+		{
+			// Three overloads - call the 1-arg variant
+			input: `
+func describe() = "no args";
+func describe(a) = "one arg: " + a;
+func describe(a, b) = "two args: " + a + ", " + b;
+describe("x");
+`,
+			expected: "one arg: x",
+		},
+		{
+			// Three overloads - call the 2-arg variant
+			input: `
+func describe() = "no args";
+func describe(a) = "one arg: " + a;
+func describe(a, b) = "two args: " + a + ", " + b;
+describe("x", "y");
+`,
+			expected: "two args: x, y",
+		},
+		{
+			// Arithmetic overloads
+			input: `
+func add(a) = a + 10;
+func add(a, b) = a + b;
+add(5);
+`,
+			expected: 15,
+		},
+		{
+			// Arithmetic overloads - 2-arg variant
+			input: `
+func add(a) = a + 10;
+func add(a, b) = a + b;
+add(3, 4);
+`,
+			expected: 7,
+		},
+	}
+	runVmTests(t, tests)
+}
+
+func TestFunctionOverloadErrorOnNoMatchingArity(t *testing.T) {
+	input := `
+func greet(name) = "Hello, " + name;
+func greet(first, last) = "Hello, " + first + " " + last;
+greet("a", "b", "c");
+`
+	program := parse(input)
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+	machine := New(comp.Constants())
+	err := machine.Run(comp.Bytecode().Instructions)
+	if err == nil {
+		t.Fatal("expected error for unmatched arity overload, got nil")
+	}
 }

@@ -185,6 +185,8 @@ func (l *Lexer) NextToken() token.Token {
 			l.interpBraceDepth++
 		}
 		tok = newToken(token.LBRACE, l.ch, tok.Line, tok.Column)
+	case '~':
+		tok = newToken(token.TILDE, l.ch, tok.Line, tok.Column)
 	case '?':
 		tok = newToken(token.QUESTION, l.ch, tok.Line, tok.Column)
 	case '}':

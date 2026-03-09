@@ -56,6 +56,7 @@ var precedences = map[token.TokenType]int{
 	token.SPREAD:      SPREAD,
 	token.QUESTION:    SPREAD, // ? for constraint check (same precedence as spread)
 	token.ARROW:       LAMBDA, // => for lambda
+	token.TILDE:       EQUALS, // ~ for regex match
 }
 
 type (
@@ -141,6 +142,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.QUESTION, p.parseConstraintCheckExpression)
 	p.registerInfix(token.EFFECT_END, p.parseEffectHandleExpression)
 	p.registerInfix(token.ARROW, p.parseLambdaFromIdent)
+	p.registerInfix(token.TILDE, p.parseInfixExpression)
 
 	// Read two tokens, so curToken and peekToken are both set
 	p.nextToken()

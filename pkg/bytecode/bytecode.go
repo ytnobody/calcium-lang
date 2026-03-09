@@ -118,6 +118,9 @@ const (
 
 	// Function overloading
 	OpAddOverload // Pop new closure (TOS) and existing closure/overloaded (TOS-1), push overloaded closure
+
+	// Regex match
+	OpRegexMatch // left ~ right: match string against regex
 )
 
 // Definition describes an opcode
@@ -220,6 +223,9 @@ var definitions = map[OpCode]*Definition{
 
 	// Function overloading
 	OpAddOverload: {"OpAddOverload", []int{}}, // No operands: pops new closure and existing, pushes overloaded
+
+	// Regex match
+	OpRegexMatch: {"OpRegexMatch", []int{}}, // No operands: pops regex (TOS) and string (TOS-1), pushes bool
 }
 
 // Lookup returns the definition for an opcode

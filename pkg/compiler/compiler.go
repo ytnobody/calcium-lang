@@ -979,6 +979,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.emit(bytecode.OpLessEqual)
 		case ">=":
 			c.emit(bytecode.OpGreaterEqual)
+		case "~":
+			c.emit(bytecode.OpRegexMatch)
 		default:
 			return c.newCompileError(node.Token, fmt.Sprintf("unknown infix operator '%s'", node.Operator))
 		}

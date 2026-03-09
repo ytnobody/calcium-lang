@@ -630,6 +630,18 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		left := vm.pop()
 		vm.push(value.Bool(!left.Equals(right)))
 
+	case bytecode.OpRegexMatch:
+		right := vm.pop()
+		left := vm.pop()
+		if right.Type != value.TYPE_REGEX {
+			return fmt.Errorf("type error: right operand of '~' must be a regex, got %s", right.Type)
+		}
+		if left.Type != value.TYPE_STRING {
+			return fmt.Errorf("type error: left operand of '~' must be a string, got %s", left.Type)
+		}
+		re := right.AsRegex()
+		vm.push(value.Bool(re.Re.MatchString(left.AsString())))
+
 	case bytecode.OpLessThan:
 		err := vm.executeComparison(op)
 		if err != nil {

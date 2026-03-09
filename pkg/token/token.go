@@ -54,6 +54,9 @@ const (
 	EFFECT_PIPE TokenType = "!>"
 	EFFECT_END  TokenType = "!?"
 
+	// Regex match
+	TILDE TokenType = "~"
+
 	// Arrow
 	ARROW TokenType = "=>"
 

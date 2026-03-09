@@ -1,0 +1,32 @@
+// Regex Match Operator Test
+use core.io!;
+use test;
+
+io.println("# Regex Match Operator Tests");
+
+// === Basic regex match ===
+test.new()
+    |> test.plan(16)
+    // Basic match
+    |> test.ok("hello matches /hello/", "hello" ~ /hello/)
+    |> test.ok("hello123 matches /[a-z]+[0-9]+/", "hello123" ~ /[a-z]+[0-9]+/)
+    |> test.is("world does not match /hello/", "world" ~ /hello/, false)
+    // Integer pattern (from issue example)
+    |> test.ok("123 matches integer pattern", "123" ~ /^-?[1-9][0-9]*$/)
+    |> test.ok("-456 matches integer pattern", "-456" ~ /^-?[1-9][0-9]*$/)
+    |> test.is("0 does not match integer pattern", "0" ~ /^-?[1-9][0-9]*$/, false)
+    |> test.is("3.14 does not match integer pattern", "3.14" ~ /^-?[1-9][0-9]*$/, false)
+    |> test.is("abc does not match integer pattern", "abc" ~ /^-?[1-9][0-9]*$/, false)
+    // Case-insensitive flag
+    |> test.ok("HELLO matches /hello/i", "HELLO" ~ /hello/i)
+    |> test.ok("Hello matches /hello/i", "Hello" ~ /hello/i)
+    |> test.is("world does not match /hello/i", "world" ~ /hello/i, false)
+    // Email pattern
+    |> test.ok("valid email matches", "user@example.com" ~ /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)
+    |> test.is("invalid email does not match", "not-an-email" ~ /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, false)
+    // Empty string
+    |> test.ok("empty string matches empty pattern", "" ~ /^$/)
+    |> test.is("empty string does not match non-empty", "" ~ /[a-z]+/, false)
+    // Constraint using ~ operator
+    |> test.ok("42 matches digit pattern", "42" ~ /^\d+$/)
+    |> test.done();

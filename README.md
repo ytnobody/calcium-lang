@@ -31,6 +31,7 @@ A functional programming language with pipelines, pattern matching, and effect h
 - **Error Propagation** (`|>?`) - Short-circuit pipeline on failure, unwrap on success
 - **Gradual Typing** - Optional type annotations with compile-time checking
 - **Tail Call Optimization** - Automatic TCO for tail-recursive functions
+- **Function Overloading** - Define multiple functions with the same name but different argument counts
 - **Async & Channels** - Event-driven async programming with task spawning and message passing
 - **Module System** - Organize code with `use` statements, including GitHub imports
 - **Standard Library** - Math, string, array, regex, TOML, HTTP, time, OS, async modules
@@ -363,6 +364,44 @@ func make_adder(n) = x => x + n;
 add5 = make_adder(5);
 add5(10);  // 15
 ```
+
+### Function Overloading
+
+Calcium supports function overloading by argument count (arity). You can define multiple functions with the same name, each taking a different number of parameters. The runtime dispatches to the correct variant based on how many arguments are passed:
+
+```calcium
+// Define overloads for different arities
+func greet() = "Hello!";
+func greet(name) = "Hello, " + name + "!";
+func greet(first, last) = "Hello, " + first + " " + last + "!";
+
+greet();            // "Hello!"
+greet("World");     // "Hello, World!"
+greet("John", "Doe");  // "Hello, John Doe!"
+```
+
+Overloads work with any number of variants:
+
+```calcium
+func sum(a) = a;
+func sum(a, b) = a + b;
+func sum(a, b, c) = a + b + c;
+
+sum(1);        // 1
+sum(2, 3);     // 5
+sum(4, 5, 6);  // 15
+```
+
+If no overload matches the number of arguments provided, a runtime error is raised:
+
+```calcium
+func add(a) = a;
+func add(a, b) = a + b;
+
+add(1, 2, 3);  // runtime error: no overload of 'add' matches arity 3
+```
+
+> **Note:** Overloading is based solely on the number of arguments (arity). Type-based dispatch is not yet supported.
 
 ### Arrays
 

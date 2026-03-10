@@ -667,11 +667,12 @@ func TestParameterConstraints(t *testing.T) {
 			expectedValue: 10,
 		},
 		{
-			// Constraint fails
+			// Constraint fails (use identity function to bypass static check)
 			input: `
 				constraint Positive(n) = n > 0;
 				func double(x: Positive?) = x * 2;
-				double(-5);
+				func identity(x) = x;
+				double(identity(-5));
 			`,
 			expectSuccess: false,
 			expectedValue: -5,
@@ -687,11 +688,12 @@ func TestParameterConstraints(t *testing.T) {
 			expectedValue: 8,
 		},
 		{
-			// Multiple parameters, both constrained, first fails
+			// Multiple parameters, both constrained, first fails (use identity to bypass static check)
 			input: `
 				constraint Positive(n) = n > 0;
 				func add(a: Positive?, b: Positive?) = a + b;
-				add(-1, 3);
+				func identity(x) = x;
+				add(identity(-1), 3);
 			`,
 			expectSuccess: false,
 			expectedValue: -1,

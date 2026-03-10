@@ -56,6 +56,7 @@ var precedences = map[token.TokenType]int{
 	token.SPREAD:      SPREAD,
 	token.QUESTION:    SPREAD, // ? for constraint check (same precedence as spread)
 	token.ARROW:       LAMBDA, // => for lambda
+	token.TILDE:       EQUALS, // ~ for regex match
 }
 
 type (
@@ -141,6 +142,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.QUESTION, p.parseConstraintCheckExpression)
 	p.registerInfix(token.EFFECT_END, p.parseEffectHandleExpression)
 	p.registerInfix(token.ARROW, p.parseLambdaFromIdent)
+	p.registerInfix(token.TILDE, p.parseInfixExpression)
 
 	// Read two tokens, so curToken and peekToken are both set
 	p.nextToken()
@@ -627,21 +629,24 @@ func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 
 	stmt.Parameters, stmt.Constraints, stmt.ParamTypes = p.parseFunctionParametersWithConstraints()
 
-	// Optional return type annotation: ): ReturnType =
+	// Optional return type/constraint annotation: ): ReturnType =
 	// Syntax: func add(a: Int, b: Int): Int = a + b
+	// With constraint: func add(a: Positive, b: Positive): Positive = a + b
 	if p.peekTokenIs(token.COLON) {
 		p.nextToken() // consume ':'
-		p.nextToken() // get return type name
+		p.nextToken() // get return type/constraint name
 		retTypeTok := p.curToken
 		retTypeName := retTypeTok.Literal
-		if types.IsBuiltinTypeName(retTypeName) {
+
+		// If it's a known built-in type name and NOT followed by '?', treat as type annotation.
+		if types.IsBuiltinTypeName(retTypeName) && !p.peekTokenIs(token.QUESTION) {
 			stmt.ReturnType = &ast.TypeAnnotation{Token: retTypeTok, Name: retTypeName}
 		} else {
-			p.errors = append(p.errors, p.formatErrorWithContext(
-				retTypeTok.Line, retTypeTok.Column,
-				fmt.Sprintf("unknown return type %q; expected a built-in type (Int, Float, String, Bool, Null, Array, Hash, Tuple, Func, Regex, Any, Success, Failure)", retTypeName),
-			))
-			return nil
+			// Otherwise treat as a return constraint (user-defined constraint name)
+			stmt.ReturnConstraint = &ast.Identifier{Token: retTypeTok, Value: retTypeName}
+			if p.peekTokenIs(token.QUESTION) {
+				p.nextToken() // consume '?'
+			}
 		}
 	}
 

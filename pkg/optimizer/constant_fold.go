@@ -100,12 +100,15 @@ func foldAssignmentStatement(as *ast.AssignmentStatement) *ast.AssignmentStateme
 
 func foldFunctionDeclaration(fd *ast.FunctionDeclaration) *ast.FunctionDeclaration {
 	return &ast.FunctionDeclaration{
-		Token:       fd.Token,
-		Name:        fd.Name,
-		Parameters:  fd.Parameters,
-		Constraints: fd.Constraints,
-		Body:        foldNode(fd.Body).(ast.Expression),
-		IsEffect:    fd.IsEffect,
+		Token:            fd.Token,
+		Name:             fd.Name,
+		Parameters:       fd.Parameters,
+		Constraints:      fd.Constraints,
+		ParamTypes:       fd.ParamTypes,
+		ReturnType:       fd.ReturnType,
+		ReturnConstraint: fd.ReturnConstraint,
+		Body:             foldNode(fd.Body).(ast.Expression),
+		IsEffect:         fd.IsEffect,
 	}
 }
 

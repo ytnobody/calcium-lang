@@ -91,15 +91,17 @@ func (ht *HeadTailDestructuringStatement) TokenLiteral() string { return ht.Toke
 
 // FunctionDeclaration represents: func name(params) = body;
 // Optionally typed: func name(a: Int, b: Int): Int = body;
+// Constraint on return: func name(a: Positive, b: Positive): Positive = body;
 type FunctionDeclaration struct {
-	Token       token.Token // the FUNC token
-	Name        *Identifier
-	Parameters  []*Identifier
-	Constraints []*Identifier     // constraint for each parameter (nil if none)
-	ParamTypes  []*TypeAnnotation // optional type annotation for each parameter (nil if not annotated)
-	ReturnType  *TypeAnnotation   // optional return type annotation (nil if not annotated)
-	Body        Expression
-	IsEffect    bool // true for func! (side-effect function)
+	Token            token.Token // the FUNC token
+	Name             *Identifier
+	Parameters       []*Identifier
+	Constraints      []*Identifier     // constraint for each parameter (nil if none)
+	ParamTypes       []*TypeAnnotation // optional type annotation for each parameter (nil if not annotated)
+	ReturnType       *TypeAnnotation   // optional return type annotation (nil if not annotated)
+	ReturnConstraint *Identifier       // optional return constraint (nil if not annotated with constraint)
+	Body             Expression
+	IsEffect         bool // true for func! (side-effect function)
 }
 
 func (fd *FunctionDeclaration) statementNode()       {}

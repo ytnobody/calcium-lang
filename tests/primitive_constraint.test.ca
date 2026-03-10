@@ -1,0 +1,71 @@
+// Primitive Constraint Test
+use core.io!;
+use test;
+use core.types;
+
+io.println("# Primitive Constraint Tests");
+
+// Get a null value for testing
+null_val = types.null;
+
+// Helper functions using constraint check syntax
+func is_int(x) = x |> Int? !? { success(_) => true  failure(_) => false };
+func is_float(x) = x |> Float? !? { success(_) => true  failure(_) => false };
+func is_string(x) = x |> String? !? { success(_) => true  failure(_) => false };
+func is_bool(x) = x |> Bool? !? { success(_) => true  failure(_) => false };
+func is_array(x) = x |> Array? !? { success(_) => true  failure(_) => false };
+func is_null(x) = x |> Null? !? { success(_) => true  failure(_) => false };
+func is_function(x) = x |> Function? !? { success(_) => true  failure(_) => false };
+func is_number(x) = x |> Number? !? { success(_) => true  failure(_) => false };
+
+func add(a, b) = a + b;
+
+test.new()
+    |> test.plan(38)
+    // Int?
+    |> test.ok("42 is Int", is_int(42))
+    |> test.ok("-1 is Int", is_int(-1))
+    |> test.ok("0 is Int", is_int(0))
+    |> test.is("3.14 is not Int", is_int(3.14), false)
+    |> test.is("\"hi\" is not Int", is_int("hi"), false)
+    |> test.is("true is not Int", is_int(true), false)
+    |> test.is("null is not Int", is_int(null_val), false)
+    // Float?
+    |> test.ok("3.14 is Float", is_float(3.14))
+    |> test.ok("-1.5 is Float", is_float(-1.5))
+    |> test.is("42 is not Float", is_float(42), false)
+    |> test.is("\"hi\" is not Float", is_float("hi"), false)
+    // String?
+    |> test.ok("\"hello\" is String", is_string("hello"))
+    |> test.ok("\"\" is String", is_string(""))
+    |> test.is("42 is not String", is_string(42), false)
+    |> test.is("true is not String", is_string(true), false)
+    // Bool?
+    |> test.ok("true is Bool", is_bool(true))
+    |> test.ok("false is Bool", is_bool(false))
+    |> test.is("1 is not Bool", is_bool(1), false)
+    |> test.is("\"true\" is not Bool", is_bool("true"), false)
+    // Array?
+    |> test.ok("[1, 2, 3] is Array", is_array([1, 2, 3]))
+    |> test.ok("[] is Array", is_array([]))
+    |> test.is("42 is not Array", is_array(42), false)
+    |> test.is("\"arr\" is not Array", is_array("arr"), false)
+    // Null?
+    |> test.ok("null is Null", is_null(null_val))
+    |> test.is("0 is not Null", is_null(0), false)
+    |> test.is("false is not Null", is_null(false), false)
+    |> test.is("\"\" is not Null", is_null(""), false)
+    // Function?
+    |> test.ok("add is Function", is_function(add))
+    |> test.ok("len is Function", is_function(len))
+    |> test.is("42 is not Function", is_function(42), false)
+    |> test.is("\"fn\" is not Function", is_function("fn"), false)
+    // Number?
+    |> test.ok("42 is Number", is_number(42))
+    |> test.ok("3.14 is Number", is_number(3.14))
+    |> test.ok("-1 is Number", is_number(-1))
+    |> test.ok("-1.5 is Number", is_number(-1.5))
+    |> test.is("\"42\" is not Number", is_number("42"), false)
+    |> test.is("true is not Number", is_number(true), false)
+    |> test.is("null is not Number", is_number(null_val), false)
+    |> test.done();

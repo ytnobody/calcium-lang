@@ -1,0 +1,45 @@
+// Static Constraint Check Test
+// This test verifies that constraints on literal values are checked at compile time.
+// Each test case creates a small program and verifies it produces a compile error.
+use core.io!;
+use test;
+
+io.println("# Static Constraint Tests");
+
+// === Helper: wrap dynamic values to bypass static checking ===
+func identity(x) = x;
+
+// === Define Constraints ===
+constraint Positive(x) = x > 0;
+constraint NonNeg(x) = x >= 0;
+constraint Even(n) = n % 2 == 0;
+constraint InRange(x) = x >= 0 && x <= 100;
+
+// === Functions with constraints ===
+func add_positive(a: Positive, b: Positive) = a + b;
+func double_even(n: Even) = n * 2;
+func safe_add(a: Positive, b: Positive): Positive = a + b;
+func safe_sub(a: NonNeg, b: NonNeg): NonNeg = a - b;
+func int_add(a: Int, b: Int): Int = a + b;
+func str_len(s: String): Int = len(s);
+func check_range(x: InRange) = x;
+
+// Test that valid literal arguments compile and work correctly
+test.new()
+    |> test.plan(12)
+    // Valid literal arguments - should pass static check and run correctly
+    |> test.is("add_positive(1, 2)", add_positive(1, 2) !? { success(v) => v  failure(_) => "fail" }, 3)
+    |> test.is("double_even(4)", double_even(4) !? { success(v) => v  failure(_) => "fail" }, 8)
+    |> test.is("safe_add(3, 5)", safe_add(3, 5) !? { success(v) => v  failure(_) => "fail" }, 8)
+    |> test.is("safe_sub(10, 3)", safe_sub(10, 3) !? { success(v) => v  failure(_) => "fail" }, 7)
+    |> test.is("int_add(1, 2)", int_add(1, 2) !? { success(v) => v  failure(_) => "fail" }, 3)
+    |> test.is("str_len(\"hello\")", str_len("hello") !? { success(v) => v  failure(_) => "fail" }, 5)
+    |> test.is("check_range(50)", check_range(50) !? { success(v) => v  failure(_) => "fail" }, 50)
+    |> test.is("check_range(0)", check_range(0) !? { success(v) => v  failure(_) => "fail" }, 0)
+    |> test.is("check_range(100)", check_range(100) !? { success(v) => v  failure(_) => "fail" }, 100)
+    // Dynamic values still work at runtime (constraint checked at runtime)
+    |> test.is("dynamic positive", add_positive(identity(5), identity(3)) !? { success(v) => v  failure(_) => "fail" }, 8)
+    |> test.is("dynamic fails", add_positive(identity(-1), identity(5)) !? { success(_) => "pass"  failure(_) => "fail" }, "fail")
+    // Compound constraint static check
+    |> test.is("double_even(10)", double_even(10) !? { success(v) => v  failure(_) => "fail" }, 20)
+    |> test.done();

@@ -308,6 +308,17 @@ func (vm *VM) initBuiltins() {
 		{Name: "values", Fn: builtinValues},
 		{Name: "hash_set", Fn: builtinHashSet},
 		{Name: "hash_merge", Fn: builtinHashMerge},
+		// Primitive type constraint checkers
+		{Name: "Int", Fn: builtinIsInt},
+		{Name: "Float", Fn: builtinIsFloat},
+		{Name: "String", Fn: builtinIsString},
+		{Name: "Bool", Fn: builtinIsBool},
+		{Name: "Array", Fn: builtinIsArray},
+		{Name: "Hash", Fn: builtinIsHash},
+		{Name: "Tuple", Fn: builtinIsTuple},
+		{Name: "Null", Fn: builtinIsNull},
+		{Name: "Function", Fn: builtinIsFunction},
+		{Name: "Number", Fn: builtinIsNumber},
 	}
 }
 
@@ -629,6 +640,18 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		right := vm.pop()
 		left := vm.pop()
 		vm.push(value.Bool(!left.Equals(right)))
+
+	case bytecode.OpRegexMatch:
+		right := vm.pop()
+		left := vm.pop()
+		if right.Type != value.TYPE_REGEX {
+			return fmt.Errorf("type error: right operand of '~' must be a regex, got %s", right.Type)
+		}
+		if left.Type != value.TYPE_STRING {
+			return fmt.Errorf("type error: left operand of '~' must be a string, got %s", left.Type)
+		}
+		re := right.AsRegex()
+		vm.push(value.Bool(re.Re.MatchString(left.AsString())))
 
 	case bytecode.OpLessThan:
 		err := vm.executeComparison(op)
@@ -3917,4 +3940,101 @@ func mapKeys(m map[string]value.Value) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// builtinIsInt checks whether the argument is an integer value.
+// Used as a primitive constraint: 42 |> Int?
+func builtinIsInt(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_INT)
+}
+
+// builtinIsFloat checks whether the argument is a float value.
+// Used as a primitive constraint: 3.14 |> Float?
+func builtinIsFloat(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_FLOAT)
+}
+
+// builtinIsString checks whether the argument is a string value.
+// Used as a primitive constraint: "hello" |> String?
+func builtinIsString(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_STRING)
+}
+
+// builtinIsBool checks whether the argument is a boolean value.
+// Used as a primitive constraint: true |> Bool?
+func builtinIsBool(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_BOOL)
+}
+
+// builtinIsArray checks whether the argument is an array value.
+// Used as a primitive constraint: [1, 2, 3] |> Array?
+func builtinIsArray(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_ARRAY)
+}
+
+// builtinIsHash checks whether the argument is a hash (map) value.
+// Used as a primitive constraint: {a: 1} |> Hash?
+func builtinIsHash(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_HASH)
+}
+
+// builtinIsTuple checks whether the argument is a tuple value.
+// Used as a primitive constraint: (1, 2) |> Tuple?
+func builtinIsTuple(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_TUPLE)
+}
+
+// builtinIsNull checks whether the argument is null.
+// Used as a primitive constraint: null |> Null?
+func builtinIsNull(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_NULL)
+}
+
+// builtinIsFunction checks whether the argument is a callable function value.
+// This includes closures, built-in functions, and overloaded closures.
+// Used as a primitive constraint: fn |> Function?
+func builtinIsFunction(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	switch args[0].Type {
+	case value.TYPE_FUNCTION, value.TYPE_CLOSURE, value.TYPE_BUILTIN,
+		value.TYPE_PARTIAL_BUILTIN, value.TYPE_OVERLOADED_CLOSURE:
+		return value.Bool(true)
+	default:
+		return value.Bool(false)
+	}
+}
+
+// builtinIsNumber checks whether the argument is an integer or float value.
+// Used as a primitive constraint: 42 |> Number?
+func builtinIsNumber(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].Type == value.TYPE_INT || args[0].Type == value.TYPE_FLOAT)
 }

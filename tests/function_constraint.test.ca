@@ -1,0 +1,91 @@
+// Function Argument and Return Constraint Test
+use core.io!;
+use test;
+
+io.println("# Function Constraint Tests");
+
+// === Define Constraints ===
+constraint Positive(x) = x > 0;
+constraint NonNeg(x) = x >= 0;
+constraint Even(n) = n % 2 == 0;
+constraint NonEmpty(s) = len(s) > 0;
+
+// === Functions with parameter constraints ===
+func add_positive(a: Positive, b: Positive) = a + b;
+func double_even(n: Even) = n * 2;
+
+// === Functions with parameter AND return constraints ===
+func safe_add(a: Positive, b: Positive): Positive = a + b;
+func safe_sub(a: NonNeg, b: NonNeg): NonNeg = a - b;
+
+// === Functions with return constraint only ===
+func make_positive(x): Positive = x * x + 1;
+func make_negative(x): Positive = 0 - x;
+
+// === Functions with constraints using primitives ===
+constraint IsInt(n) = n |> Int? !? { success(_) => true  failure(_) => false };
+func typed_add(a: IsInt, b: IsInt): IsInt = a + b;
+
+// === Functions with built-in type annotations as constraints ===
+// Type annotations (Int, String, etc.) are enforced as constraints at runtime
+func int_add(a: Int, b: Int): Int = a + b;
+func str_len(s: String): Int = len(s);
+func to_array(x): Array = [x];
+
+// === User-defined constraint shadowing built-in type name ===
+// User can redefine constraint with same name as built-in type
+constraint MyInt(n) = n |> Int? !? { success(_) => true  failure(_) => false };
+func my_int_add(a: MyInt, b: MyInt): MyInt = a + b;
+
+// === Identity function to make values dynamic (prevent static constraint checking) ===
+func identity(x) = x;
+
+test.new()
+    |> test.plan(29)
+    // Parameter constraints - passing
+    |> test.is("add_positive(3, 5)", add_positive(3, 5) !? { success(v) => v  failure(_) => "fail" }, 8)
+    |> test.is("double_even(4)", double_even(4) !? { success(v) => v  failure(_) => "fail" }, 8)
+    // Parameter constraints - failing (use dynamic values to test runtime behavior)
+    |> test.is("add_positive(-1, 5) fails", add_positive(identity(-1), 5) !? { success(_) => "pass"  failure(_) => "fail" }, "fail")
+    |> test.is("double_even(3) fails", double_even(identity(3)) !? { success(_) => "pass"  failure(_) => "fail" }, "fail")
+    // Return constraint - passing
+    |> test.is("safe_add(3, 5) passes return", safe_add(3, 5) !? { success(v) => v  failure(_) => "fail" }, 8)
+    |> test.is("make_positive(3) passes return", make_positive(3) !? { success(v) => v  failure(_) => "fail" }, 10)
+    // Return constraint - failing (return value cannot be checked statically)
+    |> test.is("safe_sub(3, 5) fails return", safe_sub(3, 5) !? { success(_) => "pass"  failure(v) => v }, -2)
+    |> test.is("make_negative(5) fails return", make_negative(5) !? { success(_) => "pass"  failure(v) => v }, -5)
+    // Both param and return constraint passing
+    |> test.is("safe_add(1, 2) both pass", safe_add(1, 2) !? { success(v) => v  failure(_) => "fail" }, 3)
+    |> test.is("safe_sub(10, 3) both pass", safe_sub(10, 3) !? { success(v) => v  failure(_) => "fail" }, 7)
+    // Both param and return constraint - param fails (use dynamic value)
+    |> test.is("safe_add(-1, 2) param fails", safe_add(identity(-1), 2) !? { success(_) => "pass"  failure(_) => "fail" }, "fail")
+    // Both param and return constraint - return fails
+    |> test.is("safe_sub(2, 5) return fails", safe_sub(2, 5) !? { success(_) => "pass"  failure(v) => v }, -3)
+    // Primitive constraint as parameter and return
+    |> test.is("typed_add(3, 5) passes", typed_add(3, 5) !? { success(v) => v  failure(_) => "fail" }, 8)
+    // Return constraint only functions
+    |> test.is("make_positive(0) passes", make_positive(0) !? { success(v) => v  failure(_) => "fail" }, 1)
+    |> test.is("make_negative(3) fails", make_negative(3) !? { success(_) => "pass"  failure(v) => v }, -3)
+    // Constraint composition in function
+    |> test.is("safe_add(10, 20) = 30", safe_add(10, 20) !? { success(v) => v  failure(_) => "fail" }, 30)
+    |> test.is("safe_sub(0, 0) = 0", safe_sub(0, 0) !? { success(v) => v  failure(_) => "fail" }, 0)
+    |> test.is("safe_sub(5, 5) = 0", safe_sub(5, 5) !? { success(v) => v  failure(_) => "fail" }, 0)
+    // Built-in type annotation as constraint - passing
+    |> test.is("int_add(3, 5) passes", int_add(3, 5) !? { success(v) => v  failure(_) => "fail" }, 8)
+    |> test.is("str_len(\"hello\") passes", str_len("hello") !? { success(v) => v  failure(_) => "fail" }, 5)
+    |> test.is("to_array(42) passes", to_array(42) !? { success(v) => v  failure(_) => "fail" }, [42])
+    // Built-in type annotation as constraint - failing (use dynamic values)
+    |> test.is("int_add(\"a\", 5) fails", int_add(identity("a"), 5) !? { success(_) => "pass"  failure(_) => "fail" }, "fail")
+    |> test.is("str_len(42) fails", str_len(identity(42)) !? { success(_) => "pass"  failure(_) => "fail" }, "fail")
+    // Built-in return type constraint - failing
+    |> test.is("str_len(\"hi\") return Int", str_len("hi") !? { success(v) => v  failure(_) => "fail" }, 2)
+    // User-defined constraint with type check
+    |> test.is("my_int_add(3, 5) passes", my_int_add(3, 5) !? { success(v) => v  failure(_) => "fail" }, 8)
+    |> test.is("my_int_add(\"a\", 5) fails", my_int_add(identity("a"), 5) !? { success(_) => "pass"  failure(_) => "fail" }, "fail")
+    // int_add with both ints
+    |> test.is("int_add(10, 20) = 30", int_add(10, 20) !? { success(v) => v  failure(_) => "fail" }, 30)
+    // int_add return constraint check
+    |> test.is("int_add(1, 2) return check", int_add(1, 2) !? { success(v) => v  failure(_) => "fail" }, 3)
+    // str_len with empty string
+    |> test.is("str_len(\"\") = 0", str_len("") !? { success(v) => v  failure(_) => "fail" }, 0)
+    |> test.done();

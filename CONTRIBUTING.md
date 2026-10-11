@@ -32,6 +32,19 @@ Changing any *other* job (e.g. adding a `test (1.24)` matrix row) does **not**
 require a protection update, because the aggregator still emits the same final
 check.
 
+## Calcium source linting
+
+Run the language's own static linter on source files before opening a PR:
+
+```bash
+go build -o /tmp/calcium ./cmd/calcium
+/tmp/calcium lint <file.ca> ...
+```
+
+The CI `lint` job also runs `calcium lint` over the well-formed example files.
+If you add a new example that uses constraints or types deliberately, keep any
+intentional constraint violations out of the files the CI lint check scans.
+
 ## Adding a builtin
 
 If you add a function to the standard library (e.g. `core.string`):

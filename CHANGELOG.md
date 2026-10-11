@@ -25,6 +25,10 @@
 - Static analysis now applies **constant propagation**: a variable assigned a literal is known to the checker, so `x = 0; f(x)` compiled against a `: Positive` param is a compile error (rather than only a runtime failure).
 - Static analysis now resolves simple **function aliases** (`g = f`), so `g(0)` is checked against `f`'s constraints.
 
+### Features
+
+- Added a standalone **linter** command `calcium lint [--json] <file.ca> [...]`, backed by the new `pkg/linter` package. It performs static analysis of Calcium source without executing it, reporting parse errors, gradual-type mismatches, and static constraint violations (including constant propagation, function aliases, and return constraints). Exits `1` when findings are reported, making it suitable for CI. The CI lint job now also runs `calcium lint` over well-formed example sources.
+
 ### CI / Releases
 
 - Fixed release publishing: tags pushed by the auto-release workflow (via the repository `GITHUB_TOKEN`) never triggered the GoReleaser `Release` workflow, so GitHub Releases stalled at `v0.2.0` while git tags advanced to `v0.2.21`. The auto-release workflow now explicitly dispatches `Release` (`workflow_dispatch`, an allowed exception to the GITHUB_TOKEN rule) for each new tag.

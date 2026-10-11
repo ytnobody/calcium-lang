@@ -76,6 +76,21 @@ jobs:
       - name: Check spec covers core.string stdlib
         run: bash scripts/check-spec-stdlib.sh
 
+      # Lint well-formed Calcium sources with the language's own static linter.
+      # Only clean example files are checked; example/test files that
+      # intentionally demonstrate constraint failures are excluded.
+      - name: Lint Calcium source examples
+        run: |
+          go build -o /tmp/calcium-lint-bin ./cmd/calcium
+          /tmp/calcium-lint-bin lint \
+            examples/adt.ca \
+            examples/adt_simple.ca \
+            examples/factorial.ca \
+            examples/hash.ca \
+            examples/hello.ca \
+            examples/pipeline.ca \
+            examples/strings.ca
+
   build:
     runs-on: ubuntu-latest
     steps:

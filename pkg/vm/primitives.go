@@ -467,6 +467,24 @@ func primitiveStrCharAt(args ...value.Value) value.Value {
 	return value.String(string(runes[idx]))
 }
 
+// __str_from_code converts a unicode code point to its string representation
+func primitiveStrFromCode(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__str_from_code: expected 1 argument (code point)"))
+	}
+	if args[0].Type != value.TYPE_INT {
+		return value.Failure(value.String("__str_from_code: argument must be integer (code point)"))
+	}
+	cp := args[0].AsInt()
+	if cp < 0 || cp > 0x10FFFF {
+		return value.Failure(value.String("__str_from_code: code point out of range"))
+	}
+	if cp >= 0xD800 && cp <= 0xDFFF {
+		return value.Failure(value.String("__str_from_code: code point is a surrogate, use a scalar value"))
+	}
+	return value.Success(value.String(string(rune(cp))))
+}
+
 // __str_index_of finds the index of a substring
 func primitiveStrIndexOf(args ...value.Value) value.Value {
 	if len(args) != 2 {
@@ -1486,6 +1504,7 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__str_replace":     {Name: "__str_replace", Fn: primitiveStrReplace},
 		"__str_substring":   {Name: "__str_substring", Fn: primitiveStrSubstring},
 		"__str_char_at":     {Name: "__str_char_at", Fn: primitiveStrCharAt},
+		"__str_from_code":   {Name: "__str_from_code", Fn: primitiveStrFromCode},
 		"__str_index_of":    {Name: "__str_index_of", Fn: primitiveStrIndexOf},
 		"__str_starts_with": {Name: "__str_starts_with", Fn: primitiveStrStartsWith},
 		"__str_ends_with":   {Name: "__str_ends_with", Fn: primitiveStrEndsWith},

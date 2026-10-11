@@ -80,3 +80,7 @@ func words(s) = __str_split(__str_trim(s), " ") |> filter(w => __str_len(w) > 0)
 
 // reverse reverses a string
 func reverse(s) = reduce(__str_split(s, ""), (acc, c) => concat(c, acc), "");
+
+// from_code converts a unicode code point to its string representation
+// Returns success(character) on success, failure(message) on error
+func from_code(cp) = __str_from_code(cp);

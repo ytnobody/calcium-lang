@@ -69,7 +69,9 @@ func runLint(args []string) int {
 func printLintJSON(w io.Writer, results []lintFileResult) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(results)
+	if err := enc.Encode(results); err != nil {
+		fmt.Fprintf(os.Stderr, "calcium lint: failed to encode JSON output: %v\n", err)
+	}
 }
 
 func printLintHuman(w io.Writer, results []lintFileResult) {

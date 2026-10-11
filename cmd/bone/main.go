@@ -26,6 +26,8 @@ func main() {
 		handleInstall()
 	case "remove", "rm":
 		handleRemove(args[1:])
+	case "search":
+		handleSearch(args[1:])
 	case "list", "ls":
 		handleList(args[1:])
 	case "update":
@@ -59,6 +61,9 @@ Commands:
                            Examples: bone add AUTHOR/module
                                      bone add AUTHOR/module@1.0.0
                                      bone add --global AUTHOR/module
+  search <query>           Search the Boneyard registry
+                           Examples: bone search json
+                                     bone search AUTHOR/name
   remove <module>          Remove an installed module
   list                     List installed modules
   update [module]          Update modules to latest versions
@@ -142,6 +147,33 @@ func handleList(args []string) {
 	if err := bone.List(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func handleSearch(args []string) {
+	if len(args) == 0 || args[0] == "" {
+		fmt.Fprintln(os.Stderr, "Error: search query required")
+		fmt.Fprintln(os.Stderr, "Usage: bone search <query>")
+		os.Exit(1)
+	}
+
+	results, err := bone.Search(args[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(results) == 0 {
+		fmt.Printf("No modules found for %q\n", args[0])
+		return
+	}
+
+	for _, r := range results {
+		version := r.LatestVersion
+		if version == "" {
+			version = "latest"
+		}
+		fmt.Printf("%s/%s\t%s\t%s\n", r.Author, r.Name, version, r.Description)
 	}
 }
 

@@ -17,6 +17,10 @@
 
 - Added `string.from_code(cp)`: converts a Unicode code point to its string representation (returns `success`/`failure`; rejects surrogates and out-of-range values).
 
+### Language
+
+- Added built-in common constraints available everywhere (as parameter annotations and `?` checks): `NonZero`, `Positive`, `NonNegative`, `Natural`, `Finite`, `NonEmpty`, `Empty`, `Digits`, `Lowercase`, `Uppercase`. Statically-detectable violations on literal call arguments are caught at compile time. User-defined constraints with the same name shadow the built-ins.
+
 ---
 
 ## How releases are tagged

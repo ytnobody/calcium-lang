@@ -391,6 +391,29 @@ Add `?` to a constraint name to check it. Returns a boolean.
 "test@example.com" |> Email?  // true
 ```
 
+### Built-in Common Constraints
+
+The following cross-type constraints are always available (no `constraint`
+declaration needed), usable as parameter annotations (`func f(x: Positive) = x;`)
+and as `?` checks (`3 |> Positive?`). They work with the static checker:
+calls with a statically-detectable violation are compile errors.
+
+| Constraint | Parameter(s) allowed | Definition |
+|---|---|---|
+| `NonZero` | Int, Float | `n != 0` |
+| `Positive` | Int, Float | `n > 0` |
+| `NonNegative` | Int, Float | `n >= 0` |
+| `Natural` | Int | non-negative integer (`n >= 0` and Int) |
+| `Finite` | Int, Float | not NaN and not +/-Inf |
+| `NonEmpty` | String, Array, Hash, Tuple | `len(x) > 0` (runes for strings) |
+| `Empty` | String, Array, Hash, Tuple | `len(x) == 0` |
+| `Digits` | String | non-empty, all ASCII digits |
+| `Lowercase` | String | non-empty, equal to its lowercased form |
+| `Uppercase` | String | non-empty, equal to its uppercased form |
+
+Precedence: a user-defined `constraint` with the same name shadows a built-in
+constraint in that scope.
+
 ### Combining Constraints
 
 ```calcium

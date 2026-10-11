@@ -115,10 +115,13 @@ s;
 		t.Fatalf("expected Int|String to accept a string, got %q", got3.AsString())
 	}
 
-	// UNION: a float violates `Int | String` -> failure
+	// UNION: a runtime (non-constant) float violates `Int | String` -> failure.
+	// (A literal `x = 1.5` would now be caught statically; route through a
+	// helper so the value is dynamic.)
 	got4 := runCommonProg(t, `
+func pass(v) = v;
 func f(a: Int | String) = a;
-x = 1.5;
+x = pass(1.5);
 r = f(x) !? { success(v) => "OK" failure(_) => "NOPE" };
 r;
 `)

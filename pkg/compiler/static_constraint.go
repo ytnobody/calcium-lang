@@ -28,13 +28,68 @@ type funcConstraintInfo struct {
 type staticConstraintChecker struct {
 	constraints    map[string]*constraintInfo     // constraint name -> definition
 	funcConstraint map[string]*funcConstraintInfo // function name -> param constraint info
+
+	// constants tracks identifier -> literal for simple constant propagation
+	// (e.g. x = 5; f(x)). Referenced during static constraint checking.
+	constants  map[string]ast.Expression
+	constStack []map[string]ast.Expression // backups for function scopes
 }
 
 func newStaticConstraintChecker() *staticConstraintChecker {
 	return &staticConstraintChecker{
 		constraints:    make(map[string]*constraintInfo),
 		funcConstraint: make(map[string]*funcConstraintInfo),
+		constants:      make(map[string]ast.Expression),
 	}
+}
+
+// enterFunc snapshots the current constant set before compiling a function
+// body so local assignments do not leak and params are not mistaken for globals.
+func (sc *staticConstraintChecker) enterFunc() {
+	backup := make(map[string]ast.Expression, len(sc.constants))
+	for k, v := range sc.constants {
+		backup[k] = v
+	}
+	sc.constStack = append(sc.constStack, backup)
+}
+
+// leaveFunc restores the constant set captured at enterFunc.
+func (sc *staticConstraintChecker) leaveFunc() {
+	if len(sc.constStack) == 0 {
+		return
+	}
+	sc.constants = sc.constStack[len(sc.constStack)-1]
+	sc.constStack = sc.constStack[:len(sc.constStack)-1]
+}
+
+// trackConst records an identifier as a constant literal when assignable.
+func (sc *staticConstraintChecker) trackConst(name string, expr ast.Expression) {
+	if expr == nil {
+		delete(sc.constants, name)
+		return
+	}
+	if _, ok := extractLiteralValue(expr); ok {
+		sc.constants[name] = expr
+	} else if id, ok := expr.(*ast.Identifier); ok {
+		// Propagate chained assignments: a = b (where b is a known constant).
+		if c, ok := sc.constants[id.Value]; ok {
+			sc.constants[name] = c
+		} else {
+			delete(sc.constants, name)
+		}
+	} else {
+		delete(sc.constants, name)
+	}
+}
+
+// resolveArg substitutes a known constant for an identifier argument.
+func (sc *staticConstraintChecker) resolveArg(arg ast.Expression) ast.Expression {
+	if id, ok := arg.(*ast.Identifier); ok {
+		if c, ok := sc.constants[id.Value]; ok {
+			return c
+		}
+	}
+	return arg
 }
 
 // registerConstraint registers a constraint definition for static checking
@@ -143,6 +198,9 @@ func (sc *staticConstraintChecker) checkCallExpression(funcName string, args []a
 		if constraintName == "" {
 			continue
 		}
+
+		// Resolve identifier arguments through known constants before checking.
+		arg = sc.resolveArg(arg)
 
 		// Check if the argument is a literal value
 		litValue, isLiteral := extractLiteralValue(arg)

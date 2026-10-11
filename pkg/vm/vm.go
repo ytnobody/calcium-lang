@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 	"github.com/ytnobody/calcium-lang/pkg/value"
@@ -319,6 +320,17 @@ func (vm *VM) initBuiltins() {
 		{Name: "Null", Fn: builtinIsNull},
 		{Name: "Function", Fn: builtinIsFunction},
 		{Name: "Number", Fn: builtinIsNumber},
+		// Built-in common constraints
+		{Name: "NonZero", Fn: builtinConstraintNonZero},
+		{Name: "Positive", Fn: builtinConstraintPositive},
+		{Name: "NonNegative", Fn: builtinConstraintNonNegative},
+		{Name: "Natural", Fn: builtinConstraintNatural},
+		{Name: "Finite", Fn: builtinConstraintFinite},
+		{Name: "NonEmpty", Fn: builtinConstraintNonEmpty},
+		{Name: "Empty", Fn: builtinConstraintEmpty},
+		{Name: "Digits", Fn: builtinConstraintDigits},
+		{Name: "Lowercase", Fn: builtinConstraintLowercase},
+		{Name: "Uppercase", Fn: builtinConstraintUppercase},
 	}
 }
 
@@ -4045,4 +4057,145 @@ func builtinIsNumber(args ...value.Value) value.Value {
 		return value.Bool(false)
 	}
 	return value.Bool(args[0].Type == value.TYPE_INT || args[0].Type == value.TYPE_FLOAT)
+}
+
+// =============================================================================
+// Built-in common constraints (usable as param annotations, e.g. func f(x: Positive))
+// =============================================================================
+
+// builtinConstraintNonZero: n != 0
+func builtinConstraintNonZero(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	switch args[0].Type {
+	case value.TYPE_INT:
+		return value.Bool(args[0].AsInt() != 0)
+	case value.TYPE_FLOAT:
+		return value.Bool(args[0].AsFloat() != 0.0)
+	default:
+		return value.Bool(false)
+	}
+}
+
+// builtinConstraintPositive: n > 0
+func builtinConstraintPositive(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	switch args[0].Type {
+	case value.TYPE_INT:
+		return value.Bool(args[0].AsInt() > 0)
+	case value.TYPE_FLOAT:
+		return value.Bool(args[0].AsFloat() > 0)
+	default:
+		return value.Bool(false)
+	}
+}
+
+// builtinConstraintNonNegative: n >= 0
+func builtinConstraintNonNegative(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	switch args[0].Type {
+	case value.TYPE_INT:
+		return value.Bool(args[0].AsInt() >= 0)
+	case value.TYPE_FLOAT:
+		return value.Bool(args[0].AsFloat() >= 0)
+	default:
+		return value.Bool(false)
+	}
+}
+
+// builtinConstraintNatural: integer >= 0
+func builtinConstraintNatural(args ...value.Value) value.Value {
+	if len(args) != 1 || args[0].Type != value.TYPE_INT {
+		return value.Bool(false)
+	}
+	return value.Bool(args[0].AsInt() >= 0)
+}
+
+// builtinConstraintFinite: not NaN and not +/-Inf
+func builtinConstraintFinite(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	switch args[0].Type {
+	case value.TYPE_INT:
+		return value.Bool(true)
+	case value.TYPE_FLOAT:
+		f := args[0].AsFloat()
+		return value.Bool(!math.IsNaN(f) && !math.IsInf(f, 0))
+	default:
+		return value.Bool(false)
+	}
+}
+
+// builtinConstraintNonEmpty: len(value) > 0 (strings, arrays, hashes, tuples)
+func builtinConstraintNonEmpty(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	switch args[0].Type {
+	case value.TYPE_STRING:
+		return value.Bool(utf8.RuneCountInString(args[0].AsString()) > 0)
+	case value.TYPE_ARRAY:
+		return value.Bool(len(args[0].AsArray()) > 0)
+	case value.TYPE_TUPLE:
+		return value.Bool(len(args[0].AsTuple()) > 0)
+	case value.TYPE_HASH:
+		return value.Bool(len(args[0].AsHash().Keys()) > 0)
+	default:
+		return value.Bool(false)
+	}
+}
+
+// builtinConstraintEmpty: len(value) == 0
+func builtinConstraintEmpty(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Bool(false)
+	}
+	// Empty is the logical negation of NonEmpty over the same supported types.
+	switch args[0].Type {
+	case value.TYPE_STRING, value.TYPE_ARRAY, value.TYPE_TUPLE, value.TYPE_HASH:
+		return value.Bool(!builtinConstraintNonEmpty(args...).AsBool())
+	default:
+		return value.Bool(false)
+	}
+}
+
+// builtinConstraintDigits: non-empty string consisting solely of ASCII digits
+func builtinConstraintDigits(args ...value.Value) value.Value {
+	if len(args) != 1 || args[0].Type != value.TYPE_STRING {
+		return value.Bool(false)
+	}
+	s := args[0].AsString()
+	if len(s) == 0 {
+		return value.Bool(false)
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return value.Bool(false)
+		}
+	}
+	return value.Bool(true)
+}
+
+// builtinConstraintLowercase: non-empty string equal to its lowercased form
+func builtinConstraintLowercase(args ...value.Value) value.Value {
+	if len(args) != 1 || args[0].Type != value.TYPE_STRING {
+		return value.Bool(false)
+	}
+	s := args[0].AsString()
+	return value.Bool(len(s) > 0 && s == strings.ToLower(s))
+}
+
+// builtinConstraintUppercase: non-empty string equal to its uppercased form
+func builtinConstraintUppercase(args ...value.Value) value.Value {
+	if len(args) != 1 || args[0].Type != value.TYPE_STRING {
+		return value.Bool(false)
+	}
+	s := args[0].AsString()
+	return value.Bool(len(s) > 0 && s == strings.ToUpper(s))
 }

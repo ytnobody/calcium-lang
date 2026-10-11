@@ -2,6 +2,9 @@ package compiler
 
 import (
 	"fmt"
+	"math"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"
 	"github.com/ytnobody/calcium-lang/pkg/token"
@@ -109,6 +112,17 @@ func (sc *staticConstraintChecker) checkCallExpression(funcName string, args []a
 
 		// Try to check built-in type constraints first
 		if result, ok := checkBuiltinTypeConstraint(constraintName, arg); ok {
+			if !result {
+				errors = append(errors, fmt.Sprintf(
+					"constraint `%s` violated: argument %d (`%s`) with value %s does not satisfy constraint `%s`",
+					constraintName, i+1, info.ParamNames[i], litValue, constraintName,
+				))
+			}
+			continue
+		}
+
+		// Check built-in common constraints (Positive, NonZero, NonEmpty, ...)
+		if result, ok := checkBuiltinCommonConstraint(constraintName, arg); ok {
 			if !result {
 				errors = append(errors, fmt.Sprintf(
 					"constraint `%s` violated: argument %d (`%s`) with value %s does not satisfy constraint `%s`",
@@ -244,6 +258,102 @@ func checkBuiltinTypeConstraint(constraintName string, arg ast.Expression) (bool
 	default:
 		return false, false
 	}
+}
+
+// checkBuiltinCommonConstraint statically evaluates the built-in common
+// constraints (Positive, NonZero, NonEmpty, ...) against a literal argument.
+// Returns (result, isRecognizedCommonConstraint).
+func checkBuiltinCommonConstraint(constraintName string, arg ast.Expression) (bool, bool) {
+	switch constraintName {
+	case "Positive", "NonZero", "NonNegative", "Natural", "Finite":
+		num, ok := extractNumericFloat(arg)
+		if !ok {
+			return false, false
+		}
+		switch constraintName {
+		case "Positive":
+			return num > 0, true
+		case "NonZero":
+			return num != 0, true
+		case "NonNegative":
+			return num >= 0, true
+		case "Natural":
+			return num >= 0 && num == math.Trunc(num), true
+		case "Finite":
+			return num == num && !math.IsInf(num, 0), true // literals are always finite
+		}
+	case "NonEmpty", "Empty":
+		if str, ok := extractStringLiteral(arg); ok {
+			switch constraintName {
+			case "NonEmpty":
+				return utf8.RuneCountInString(str) > 0, true
+			case "Empty":
+				return utf8.RuneCountInString(str) == 0, true
+			}
+		} else if arr, ok := extractArrayLiteral(arg); ok {
+			switch constraintName {
+			case "NonEmpty":
+				return len(arr) > 0, true
+			case "Empty":
+				return len(arr) == 0, true
+			}
+		}
+	case "Digits", "Lowercase", "Uppercase":
+		str, ok := extractStringLiteral(arg)
+		if !ok {
+			return false, false
+		}
+		switch constraintName {
+		case "Digits":
+			if len(str) == 0 {
+				return false, true
+			}
+			for _, r := range str {
+				if r < '0' || r > '9' {
+					return false, true
+				}
+			}
+			return true, true
+		case "Lowercase":
+			return len(str) > 0 && str == strings.ToLower(str), true
+		case "Uppercase":
+			return len(str) > 0 && str == strings.ToUpper(str), true
+		}
+	}
+	return false, false
+}
+
+// extractNumericFloat returns the float value of a numeric literal (incl. negatives).
+func extractNumericFloat(expr ast.Expression) (float64, bool) {
+	switch e := expr.(type) {
+	case *ast.IntegerLiteral:
+		return float64(e.Value), true
+	case *ast.FloatLiteral:
+		return e.Value, true
+	case *ast.PrefixExpression:
+		if e.Operator == "-" {
+			if v, ok := extractNumericFloat(e.Right); ok {
+				return -v, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// extractStringLiteral returns the value of a string literal.
+func extractStringLiteral(expr ast.Expression) (string, bool) {
+	if s, ok := expr.(*ast.StringLiteral); ok {
+		return s.Value, true
+	}
+	return "", false
+}
+
+// extractArrayLiteral returns the elements of an array literal.
+func extractArrayLiteral(expr ast.Expression) ([]ast.Expression, bool) {
+	if a, ok := expr.(*ast.ArrayLiteral); ok {
+		return a.Elements, true
+	}
+	return nil, false
 }
 
 // staticEval evaluates an AST expression with a given variable environment

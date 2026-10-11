@@ -321,6 +321,91 @@ add_pos(0, 5);
 		t.Error("error should mention the value")
 	}
 }
+func TestStaticConstraintCheck_BuiltinCommon_Violation(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr string
+	}{
+		{
+			name:    "positive violation with 0",
+			input:   `func f(x: Positive) = x; f(0);`,
+			wantErr: "`Positive` violated",
+		},
+		{
+			name:    "nonZero violation with 0",
+			input:   `func f(x: NonZero) = x; f(0);`,
+			wantErr: "`NonZero` violated",
+		},
+		{
+			name:    "nonNegative violation with -1",
+			input:   `func f(x: NonNegative) = x; f(-1);`,
+			wantErr: "`NonNegative` violated",
+		},
+		{
+			name:    "natural violation with -1",
+			input:   `func f(x: Natural) = x; f(-1);`,
+			wantErr: "`Natural` violated",
+		},
+		{
+			name:    "nonEmpty violation with empty string",
+			input:   `func f(x: NonEmpty) = x; f("");`,
+			wantErr: "`NonEmpty` violated",
+		},
+		{
+			name:    "empty violation with non-empty",
+			input:   `func f(x: Empty) = x; f("a");`,
+			wantErr: "`Empty` violated",
+		},
+		{ // array literals are runtime-checked only, not statically
+			name:    "digits violation with letter",
+			input:   `func f(x: Digits) = x; f("12a");`,
+			wantErr: "`Digits` violated",
+		},
+		{
+			name:    "lowercase violation with upper",
+			input:   `func f(x: Lowercase) = x; f("Hi");`,
+			wantErr: "`Lowercase` violated",
+		},
+		{
+			name:    "uppercase violation with lower",
+			input:   `func f(x: Uppercase) = x; f("hi");`,
+			wantErr: "`Uppercase` violated",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := compileSource(tt.input)
+			if err == nil {
+				t.Fatalf("expected compile error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("expected error containing %q, got %q", tt.wantErr, err.Error())
+			}
+		})
+	}
+}
+
+func TestStaticConstraintCheck_BuiltinCommon_Valid(t *testing.T) {
+	inputs := []string{
+		`func f(x: Positive) = x; f(5);`,
+		`func f(x: NonZero) = x; f(-3);`,
+		`func f(x: NonNegative) = x; f(0);`,
+		`func f(x: Natural) = x; f(7);`,
+		`func f(x: NonEmpty) = x; f("hello");`,
+		`func f(x: NonEmpty) = x; f([1, 2]);`,
+		`func f(x: Empty) = x; f([]);`,
+		`func f(x: Empty) = x; f("");`,
+		`func f(x: Digits) = x; f("123");`,
+		`func f(x: Lowercase) = x; f("abc123");`,
+		`func f(x: Uppercase) = x; f("ABC123");`,
+	}
+	for _, input := range inputs {
+		if _, err := compileSource(input); err != nil {
+			t.Errorf("expected no error for %q, got: %v", input, err)
+		}
+	}
+}
 
 // Refactor-safety regression: tightening a function's constraint is caught at
 // statically-detectable call sites (at refactoring time, not runtime).

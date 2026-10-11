@@ -267,6 +267,9 @@ func New() *Compiler {
 		// Primitive type constraint checkers (usable as Name? in constraint expressions)
 		"Int", "Float", "String", "Bool", "Array", "Hash", "Tuple", "Null",
 		"Function", "Number",
+		// Built-in common constraints
+		"NonZero", "Positive", "NonNegative", "Natural", "Finite",
+		"NonEmpty", "Empty", "Digits", "Lowercase", "Uppercase",
 	}
 	for i, name := range builtins {
 		symbolTable.DefineBuiltin(i, name)

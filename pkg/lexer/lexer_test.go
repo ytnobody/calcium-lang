@@ -394,6 +394,26 @@ func TestStringEscapeUnicode(t *testing.T) {
 	}
 }
 
+func TestStringEscapeSurrogatePair(t *testing.T) {
+	// \uD83D\uDE00 is a surrogate pair that decodes to 😀 (U+1F600).
+	input := `"\uD83D\uDE00"`
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Literal != "😀" {
+		t.Fatalf("expected %q, got %q", "😀", tok.Literal)
+	}
+}
+
+func TestStringEscapeLoneSurrogateKept(t *testing.T) {
+	// A lone high surrogate with no following low surrogate is kept as literal text.
+	input := `"\uD800x"`
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Literal != "\\uD800x" {
+		t.Fatalf("expected %q, got %q", "\\uD800x", tok.Literal)
+	}
+}
+
 func TestStringEscapeInvalidUnicodeKept(t *testing.T) {
 	// Invalid hex (\u12Z4) and lone surrogate (\uD800) are kept as literal text.
 	input := `"\u12Z4"`

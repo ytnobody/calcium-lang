@@ -40,7 +40,7 @@ from_emoji = string.from_code(0x1F600) !? {
 };
 
 test.new()
-    |> test.plan(51)
+    |> test.plan(53)
     // Basic Operations
     |> test.is("len hello", len("hello"), 5)
     |> test.is("len empty", len(""), 0)
@@ -103,4 +103,7 @@ test.new()
     |> test.is("from_code control", from_ctrl, "\n")
     |> test.is("from_code katakana", from_kata, "ア")
     |> test.is("from_code emoji", from_emoji, "😀")
+    // \uXXXX surrogate pair in a string literal decodes to a supplementary char
+    |> test.is("literal surrogate pair", "\uD83D\uDE00", "😀")
+    |> test.is("literal unicode BMP", "\u30A2", "ア")
     |> test.done();

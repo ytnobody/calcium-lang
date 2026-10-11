@@ -494,12 +494,35 @@ func processEscapeSequences(s string) string {
 				result = append(result, '\f')
 				i += 2
 			case 'u':
-				// \uXXXX unicode escape (BMP code point)
+				// \uXXXX unicode escape. Supports a single BMP code point or a
+				// surrogate pair (\\uD83D\\uDE00 -> 😀), matching the JSON module.
 				if i+6 <= len(s) {
-					if r, ok := parseHexRune(s[i+2 : i+6]); ok {
-						result = append(result, []byte(string(r))...)
-						i += 6
-						continue
+					if v, ok := parseHex4(s[i+2 : i+6]); ok {
+						switch {
+						case v >= 0xD800 && v <= 0xDBFF:
+							// High surrogate: expect a following \u low surrogate.
+							if i+12 <= len(s) && s[i+6] == '\\' && s[i+7] == 'u' {
+								if lo, ok2 := parseHex4(s[i+8 : i+12]); ok2 && lo >= 0xDC00 && lo <= 0xDFFF {
+									cp := 0x10000 + (v-0xD800)<<10 + (lo - 0xDC00)
+									result = append(result, []byte(string(rune(cp)))...)
+									i += 12
+									continue
+								}
+							}
+							// Lone high surrogate: keep literal text.
+							result = append(result, s[i])
+							i++
+							continue
+						case v >= 0xDC00 && v <= 0xDFFF:
+							// Lone low surrogate: keep literal text.
+							result = append(result, s[i])
+							i++
+							continue
+						default:
+							result = append(result, []byte(string(rune(v)))...)
+							i += 6
+							continue
+						}
 					}
 				}
 				// Invalid \u escape, keep as-is
@@ -527,25 +550,21 @@ func processEscapeSequences(s string) string {
 	return string(result)
 }
 
-// parseHexRune parses exactly 4 hex digits into a valid BMP rune.
-func parseHexRune(s string) (rune, bool) {
-	var v rune
+// parseHex4 parses exactly 4 hex digits into a raw scalar value (0x0000-0xFFFF).
+func parseHex4(s string) (uint32, bool) {
+	var v uint32
 	for idx := 0; idx < len(s); idx++ {
 		c := s[idx]
 		switch {
 		case c >= '0' && c <= '9':
-			v = v*16 + rune(c-'0')
+			v = v*16 + uint32(c-'0')
 		case c >= 'a' && c <= 'f':
-			v = v*16 + rune(c-'a'+10)
+			v = v*16 + uint32(c-'a'+10)
 		case c >= 'A' && c <= 'F':
-			v = v*16 + rune(c-'A'+10)
+			v = v*16 + uint32(c-'A'+10)
 		default:
 			return 0, false
 		}
-	}
-	// Reject invalid code points (out of range, lone surrogates).
-	if v < 0 || v > 0x10FFFF || (v >= 0xD800 && v <= 0xDFFF) {
-		return 0, false
 	}
 	return v, true
 }

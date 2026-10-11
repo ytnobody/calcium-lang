@@ -30,6 +30,7 @@ A functional programming language with pipelines, pattern matching, and effect h
 - **Result Types** - Built-in `success(value)` and `failure(error)` for error handling
 - **Error Propagation** (`|>?`) - Short-circuit pipeline on failure, unwrap on success
 - **Gradual Typing** - Optional type annotations with compile-time checking
+- **Linter** (`calcium lint`) - Static analysis of Calcium source (parse, type, and constraint checks)
 - **Tail Call Optimization** - Automatic TCO for tail-recursive functions
 - **Function Overloading** - Define multiple functions with the same name but different argument counts
 - **Async & Channels** - Event-driven async programming with task spawning and message passing
@@ -855,6 +856,19 @@ calcium fmt program.ca            # Format in-place
 calcium fmt file1.ca file2.ca     # Format multiple files
 calcium fmt --check program.ca    # Check without modifying (exits 1 if changes needed)
 ```
+
+### Linter (`calcium lint`)
+
+Perform static analysis of Calcium source files without executing them. It
+reports parse errors, gradual-type annotation mismatches, and static
+constraint violations (e.g. calling a `: Positive` function with `0`):
+
+```bash
+calcium lint program.ca                # Human-readable findings
+calcium lint --json a.ca b.ca          # Machine-readable JSON (useful in CI)
+```
+
+Exits with status `1` if any findings are reported, `0` otherwise.
 
 ### LSP Server (`calcium-lsp`)
 

@@ -175,6 +175,9 @@ func main() {
 		}
 		runTests(dir)
 
+	case "lint":
+		os.Exit(runLint(args[1:]))
+
 	case "fmt":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: calcium fmt [--check] <file.ca> [...]")
@@ -286,6 +289,7 @@ Usage:
   calcium compile [-O0|-O1|-O2] <file> [-o out]  Compile to bytecode (.bone)
   calcium build [-O0|-O1|-O2] <file> [-o out]    Build standalone executable
   calcium fmt [--check] <file.ca> [...]      Format source files
+  calcium lint [--json] <file.ca> [...]      Static analysis of source files
   calcium test [dir]                         Run all .test.ca files in directory
   calcium cache <file.ca>                    Pre-fetch dependencies recursively
   calcium cache --list                       List cached modules

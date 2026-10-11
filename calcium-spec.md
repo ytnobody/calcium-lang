@@ -466,6 +466,18 @@ x = 0;  f(x);  // compile error (x is known to be 0)
 Constants are scoped to the enclosing function; values that cannot be proven to
 be literal are still enforced at runtime.
 
+Simple **function aliases** (`g = f`) are also resolved, so an indirect call
+through an alias is checked against the aliased function's constraints:
+
+```calcium
+func f(a: Positive) = a;
+g = f;
+g(0); // compile error (resolves to f's : Positive)
+```
+
+Method/member calls and cross-branch flow analysis are outside the current
+static scope and remain enforced at runtime.
+
 ### Combining Constraints
 
 ```calcium

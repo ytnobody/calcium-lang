@@ -33,6 +33,10 @@ type staticConstraintChecker struct {
 	// (e.g. x = 5; f(x)). Referenced during static constraint checking.
 	constants  map[string]ast.Expression
 	constStack []map[string]ast.Expression // backups for function scopes
+
+	// funcAlias tracks simple function aliases (g = f) so indirect call sites
+	// (g(0)) can be checked against the aliased function's constraints.
+	funcAlias map[string]string
 }
 
 func newStaticConstraintChecker() *staticConstraintChecker {
@@ -40,6 +44,7 @@ func newStaticConstraintChecker() *staticConstraintChecker {
 		constraints:    make(map[string]*constraintInfo),
 		funcConstraint: make(map[string]*funcConstraintInfo),
 		constants:      make(map[string]ast.Expression),
+		funcAlias:      make(map[string]string),
 	}
 }
 
@@ -71,14 +76,24 @@ func (sc *staticConstraintChecker) trackConst(name string, expr ast.Expression) 
 	if _, ok := extractLiteralValue(expr); ok {
 		sc.constants[name] = expr
 	} else if id, ok := expr.(*ast.Identifier); ok {
-		// Propagate chained assignments: a = b (where b is a known constant).
+		// If the assigned name references a function, record a function alias
+		// (g = f) so indirect call sites can be checked.
+		if _, isFunc := sc.funcConstraint[id.Value]; isFunc {
+			sc.funcAlias[name] = id.Value
+			delete(sc.constants, name)
+			return
+		}
+		// Otherwise propagate chained constant assignments: a = b (b known).
 		if c, ok := sc.constants[id.Value]; ok {
 			sc.constants[name] = c
+			sc.funcAlias[name] = sc.funcAlias[id.Value]
 		} else {
 			delete(sc.constants, name)
+			delete(sc.funcAlias, name)
 		}
 	} else {
 		delete(sc.constants, name)
+		delete(sc.funcAlias, name)
 	}
 }
 
@@ -182,6 +197,12 @@ func (sc *staticConstraintChecker) checkReturnConstraint(fd *ast.FunctionDeclara
 // checkCallExpression checks if a function call with literal arguments violates constraints
 // Returns a list of error messages (empty if no violations or can't check statically)
 func (sc *staticConstraintChecker) checkCallExpression(funcName string, args []ast.Expression, _ token.Token) []string {
+	// Resolve a simple function alias (g = f) to the aliased function.
+	if _, ok := sc.funcConstraint[funcName]; !ok {
+		if alias, ok := sc.funcAlias[funcName]; ok {
+			funcName = alias
+		}
+	}
 	info, ok := sc.funcConstraint[funcName]
 	if !ok {
 		return nil

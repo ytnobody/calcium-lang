@@ -479,6 +479,28 @@ func TestStaticConstraintCheck_ConstantPropagation(t *testing.T) {
 		}
 	}
 }
+func TestStaticConstraintCheck_FunctionAlias(t *testing.T) {
+	// A simple function alias (g = f) is resolved so indirect call sites are checked.
+	violations := []string{
+		`func f(a: Positive) = a; g = f; g(0);`,
+		`func f(a: Positive) = a; g = f; x = 0; g(x);`,
+		`func f(a: NonEmpty) = a; g = f; g("");`,
+	}
+	for _, input := range violations {
+		if _, err := compileSource(input); err == nil {
+			t.Errorf("expected compile error for %q", input)
+		}
+	}
+
+	valid := []string{
+		`func f(a: Positive) = a; g = f; g(5);`,
+	}
+	for _, input := range valid {
+		if _, err := compileSource(input); err != nil {
+			t.Errorf("unexpected compile error for %q: %v", input, err)
+		}
+	}
+}
 
 // Refactor-safety regression: tightening a function's constraint is caught at
 // statically-detectable call sites (at refactoring time, not runtime).

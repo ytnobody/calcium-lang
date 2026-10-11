@@ -1245,11 +1245,30 @@ hash(keys, values)       // Create hash from key array and value array
 ```calcium
 use string;
 
-string.trim(s)           // Remove leading/trailing whitespace
-string.upper(s)          // Convert to uppercase
-string.lower(s)          // Convert to lowercase
-string.split(s, sep)     // Split -> array
-string.join(xs, sep)     // Join -> string
+string.split(s, sep)         // Split -> array
+string.join(xs, sep)         // Join -> string
+string.trim(s)               // Remove leading/trailing whitespace
+string.upper(s)              // Convert to uppercase
+string.to_upper(s)           // Alias for upper
+string.lower(s)              // Convert to lowercase
+string.to_lower(s)           // Alias for lower
+string.replace(s, old, new)  // Replace all occurrences
+string.substring(s, start, end) // Extract rune-indexed substring [start, end)
+string.substring_from(s, start) // Extract substring from start to end
+string.char_at(s, index)     // Character (rune) at index
+string.index_of(s, substr)   // First index of substring, -1 if absent
+string.starts_with(s, prefix)// Prefix check
+string.ends_with(s, suffix)  // Suffix check
+string.contains(s, substr)   // Substring containment
+string.length(s)             // Length in runes (same as len)
+string.is_empty(s)           // true if length == 0
+string.repeat(s, n)          // Repeat s n times
+string.pad_left(s, len, ch)  // Pad on left to target rune length
+string.pad_right(s, len, ch) // Pad on right to target rune length
+string.lines(s)              // Split into lines
+string.words(s)              // Split into words (whitespace)
+string.reverse(s)            // Reverse characters (runes)
+string.from_code(cp)         // Code point -> string (success/failure)
 ```
 
 ### math Namespace

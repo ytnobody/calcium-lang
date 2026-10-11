@@ -46,4 +46,10 @@ If you add a function to the standard library (e.g. `core.string`):
 
 Releases are tagged automatically on merge to `main` (patch bump via
 `.github/workflows/auto-release.yml`) and published by GoReleaser
-(`.goreleaser.yml`). Breaking changes are called out in `CHANGELOG.md`.
+(`.goreleaser.yml` with the `Release` workflow). Because tags pushed by the
+repository `GITHUB_TOKEN` do not trigger other workflows, `auto-release.yml`
+explicitly dispatches the `Release` workflow (`workflow_dispatch`, an allowed
+exception) for each new tag. The `Release` workflow can also be run manually
+for any tag, and the `Backfill Releases` workflow publishes a Release for every
+tag that lacks one. A scheduled `Release Sync Check` fails if the latest tag
+ever lacks a Release again. Breaking changes are called out in `CHANGELOG.md`.

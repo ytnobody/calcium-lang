@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   auto-release:
@@ -51,3 +52,16 @@ jobs:
           git tag "$NEXT_TAG"
           git push origin "$NEXT_TAG"
           echo "Created and pushed tag: $NEXT_TAG"
+
+      # Tags pushed with the repository GITHUB_TOKEN do NOT trigger other
+      # workflows (GitHub Actions restriction), which is why the Release
+      # workflow stopped running after v0.2.0. `workflow_dispatch` is an
+      # explicit exception to that rule, so we start the Release workflow
+      # (GoReleaser) explicitly here for the newly created tag.
+      - name: Trigger Release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEXT_TAG="${{ steps.next_tag.outputs.tag }}"
+          echo "Dispatching Release workflow for $NEXT_TAG"
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$NEXT_TAG" -f tag="$NEXT_TAG"

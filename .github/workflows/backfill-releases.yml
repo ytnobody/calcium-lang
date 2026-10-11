@@ -51,9 +51,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Dispatch against the default branch (whose release.yml declares
+          # workflow_dispatch) and pass the target tag as input; older tags
+          # predate the workflow_dispatch trigger so --ref <tag> would 422.
           for t in ${{ steps.missing.outputs.tags }}; do
             echo "::group::Dispatching Release workflow for $t"
-            gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$t" -f tag="$t"
+            gh workflow run release.yml --repo "$GITHUB_REPOSITORY" -f tag="$t"
             echo "::endgroup::"
           done
           echo "Dispatched ${{ steps.missing.outputs.tags }}"

@@ -47,6 +47,8 @@ const (
 	// Logical
 	AND TokenType = "&&"
 	OR  TokenType = "||"
+	// AMPERSAND is the single '&' used for AND-composite constraints (e.g. `: A & B`).
+	AMPERSAND TokenType = "&"
 
 	// Pipelines
 	PIPE        TokenType = "|>"

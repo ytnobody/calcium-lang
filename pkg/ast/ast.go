@@ -93,15 +93,16 @@ func (ht *HeadTailDestructuringStatement) TokenLiteral() string { return ht.Toke
 // Optionally typed: func name(a: Int, b: Int): Int = body;
 // Constraint on return: func name(a: Positive, b: Positive): Positive = body;
 type FunctionDeclaration struct {
-	Token            token.Token // the FUNC token
-	Name             *Identifier
-	Parameters       []*Identifier
-	Constraints      []*Identifier     // constraint for each parameter (nil if none)
-	ParamTypes       []*TypeAnnotation // optional type annotation for each parameter (nil if not annotated)
-	ReturnType       *TypeAnnotation   // optional return type annotation (nil if not annotated)
-	ReturnConstraint *Identifier       // optional return constraint (nil if not annotated with constraint)
-	Body             Expression
-	IsEffect         bool // true for func! (side-effect function)
+	Token                token.Token // the FUNC token
+	Name                 *Identifier
+	Parameters           []*Identifier
+	Constraints          []*Identifier          // constraint for each parameter (nil if none)
+	ParamTypes           []*TypeAnnotation      // optional type annotation for each parameter (nil if not annotated)
+	CompositeConstraints []*CompositeConstraint // composite annotation per parameter (nil if none)
+	ReturnType           *TypeAnnotation        // optional return type annotation (nil if not annotated)
+	ReturnConstraint     *Identifier            // optional return constraint (nil if not annotated with constraint)
+	Body                 Expression
+	IsEffect             bool // true for func! (side-effect function)
 }
 
 func (fd *FunctionDeclaration) statementNode()       {}
@@ -113,6 +114,18 @@ type ConstraintDeclaration struct {
 	Name       *Identifier
 	Parameters []*Identifier
 	Body       Expression
+}
+
+// CompositeConstraint is a parameter annotation expressed as `A & B` (AND) or
+// `A | B` (OR). It is an annotation-time construct; the compiler expands it
+// into a synthetic named constraint before lowering.
+type CompositeConstraint struct {
+	// Token of the first name (for error positions).
+	Token token.Token
+	// Parts are the constituent constraint/type names, e.g. [Positive, NonZero].
+	Parts []*Identifier
+	// Operator is "&" (AND) or "|" (OR).
+	Operator string
 }
 
 func (cd *ConstraintDeclaration) statementNode()       {}

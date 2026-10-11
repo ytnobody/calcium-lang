@@ -476,6 +476,12 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 func (c *Compiler) Compile(node ast.Node) error {
 	switch node := node.(type) {
 	case *ast.Program:
+		// Expand composite parameter annotations (`A & B` / `A | B`) into
+		// synthetic constraint declarations before registration/lowering.
+		// Prepend so a synthetic constraint is compiled before the function
+		// that references it (no runtime forward-reference issue).
+		node.Statements = append(expandCompositeConstraints(node), node.Statements...)
+
 		// First pass: register all function and constraint declarations
 		// This enables forward references (functions calling other functions defined later).
 		// For overloaded functions (same name, different signatures), we register the name

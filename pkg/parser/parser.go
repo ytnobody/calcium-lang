@@ -627,7 +627,7 @@ func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 		return nil
 	}
 
-	stmt.Parameters, stmt.Constraints, stmt.ParamTypes = p.parseFunctionParametersWithConstraints()
+	stmt.Parameters, stmt.Constraints, stmt.ParamTypes, stmt.CompositeConstraints = p.parseFunctionParametersWithConstraints()
 
 	// Optional return type/constraint annotation: ): ReturnType =
 	// Syntax: func add(a: Int, b: Int): Int = a + b
@@ -671,7 +671,7 @@ func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 }
 
 func (p *Parser) parseFunctionParameters() []*ast.Identifier {
-	params, _, _ := p.parseFunctionParametersWithConstraints()
+	params, _, _, _ := p.parseFunctionParametersWithConstraints()
 	return params
 }
 
@@ -684,44 +684,47 @@ func (p *Parser) parseFunctionParameters() []*ast.Identifier {
 //   - param: Int          → type annotation (built-in type name, no trailing '?')
 //   - param: Positive?    → constraint (trailing '?')
 //   - param: Positive     → constraint (user-defined name without '?', backward compat)
-func (p *Parser) parseFunctionParametersWithConstraints() ([]*ast.Identifier, []*ast.Identifier, []*ast.TypeAnnotation) {
+func (p *Parser) parseFunctionParametersWithConstraints() ([]*ast.Identifier, []*ast.Identifier, []*ast.TypeAnnotation, []*ast.CompositeConstraint) {
 	identifiers := []*ast.Identifier{}
 	constraints := []*ast.Identifier{}
 	typeAnnots := []*ast.TypeAnnotation{}
+	composites := []*ast.CompositeConstraint{}
 
 	if p.peekTokenIs(token.RPAREN) {
 		p.nextToken()
-		return identifiers, constraints, typeAnnots
+		return identifiers, constraints, typeAnnots, composites
 	}
 
 	p.nextToken()
 
-	ident, constraint, typeAnnot := p.parseParameterWithConstraint()
+	ident, constraint, typeAnnot, composite := p.parseParameterWithConstraint()
 	identifiers = append(identifiers, ident)
 	constraints = append(constraints, constraint)
 	typeAnnots = append(typeAnnots, typeAnnot)
+	composites = append(composites, composite)
 
 	for p.peekTokenIs(token.COMMA) {
 		p.nextToken()
 		p.nextToken()
-		ident, constraint, typeAnnot := p.parseParameterWithConstraint()
+		ident, constraint, typeAnnot, composite := p.parseParameterWithConstraint()
 		identifiers = append(identifiers, ident)
 		constraints = append(constraints, constraint)
 		typeAnnots = append(typeAnnots, typeAnnot)
+		composites = append(composites, composite)
 	}
 
 	if !p.expectPeek(token.RPAREN) {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
-	return identifiers, constraints, typeAnnots
+	return identifiers, constraints, typeAnnots, composites
 }
 
 // parseParameterWithConstraint parses a single parameter, which may have:
 //   - a type annotation:  param: Int
 //   - a constraint:       param: Positive?  or  param: Positive
 //   - nothing:            param
-func (p *Parser) parseParameterWithConstraint() (*ast.Identifier, *ast.Identifier, *ast.TypeAnnotation) {
+func (p *Parser) parseParameterWithConstraint() (*ast.Identifier, *ast.Identifier, *ast.TypeAnnotation, *ast.CompositeConstraint) {
 	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
 	// Check for annotation after ':'
@@ -732,10 +735,42 @@ func (p *Parser) parseParameterWithConstraint() (*ast.Identifier, *ast.Identifie
 		annotTok := p.curToken
 		annotName := annotTok.Literal
 
+		first := &ast.Identifier{Token: annotTok, Value: annotName}
+
+		// Composite annotation: `A & B` (AND) or `A | B` (OR)
+		if p.peekTokenIs(token.AMPERSAND) || p.peekTokenIs(token.PIPE_CHAR) {
+			operator := "&"
+			if p.peekTokenIs(token.PIPE_CHAR) {
+				operator = "|"
+			}
+			parts := []*ast.Identifier{first}
+			// Consume all `OP name` pairs.
+			for p.peekTokenIs(token.AMPERSAND) || p.peekTokenIs(token.PIPE_CHAR) {
+				setOp := "&"
+				if p.peekTokenIs(token.PIPE_CHAR) {
+					setOp = "|"
+				}
+				if setOp != operator {
+					p.errors = append(p.errors, p.formatErrorWithContext(
+						p.curToken.Line, p.curToken.Column,
+						"cannot mix '&' and '|' in constraint annotation"))
+					break
+				}
+				p.nextToken() // consume '&' or '|'
+				p.nextToken() // next name
+				parts = append(parts, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+			}
+			if p.peekTokenIs(token.QUESTION) {
+				p.nextToken() // consume '?'
+			}
+			composite := &ast.CompositeConstraint{Token: first.Token, Parts: parts, Operator: operator}
+			return ident, nil, nil, composite
+		}
+
 		// If it's a known built-in type name and NOT followed by '?', treat as type annotation.
 		if types.IsBuiltinTypeName(annotName) && !p.peekTokenIs(token.QUESTION) {
 			typeAnnot := &ast.TypeAnnotation{Token: annotTok, Name: annotName}
-			return ident, nil, typeAnnot
+			return ident, nil, typeAnnot, nil
 		}
 
 		// Otherwise treat as a constraint (legacy behaviour)
@@ -743,10 +778,10 @@ func (p *Parser) parseParameterWithConstraint() (*ast.Identifier, *ast.Identifie
 		if p.peekTokenIs(token.QUESTION) {
 			p.nextToken() // consume '?'
 		}
-		return ident, constraint, nil
+		return ident, constraint, nil, nil
 	}
 
-	return ident, nil, nil
+	return ident, nil, nil, nil
 }
 
 func (p *Parser) parseConstraintDeclaration() *ast.ConstraintDeclaration {

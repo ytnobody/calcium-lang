@@ -348,6 +348,75 @@ func extractStringLiteral(expr ast.Expression) (string, bool) {
 	return "", false
 }
 
+// expandCompositeConstraints rewrites parameter annotations of the form
+// `A & B` / `A | B` into synthetic named constraint declarations, so the
+// existing static + runtime constraint machinery handles them unchanged.
+// It may append generated statements to the program. Returns the generated
+// statements.
+func expandCompositeConstraints(node *ast.Program) []ast.Statement {
+	var generated []ast.Statement
+	counter := 0
+
+	for _, s := range node.Statements {
+		fd, ok := s.(*ast.FunctionDeclaration)
+		if !ok {
+			continue
+		}
+		for i, comp := range fd.CompositeConstraints {
+			if comp == nil || i >= len(fd.Parameters) {
+				continue
+			}
+			counter++
+			op := comp.Operator
+			logicalOp := "&&"
+			namePrefix := "__comp_and"
+			if op == "|" {
+				logicalOp = "||"
+				namePrefix = "__comp_or"
+			}
+			name := fmt.Sprintf("%s_%d", namePrefix, counter)
+			paramName := fd.Parameters[i].Value
+
+			// Build body: p0(x) <op> p1(x) <op> ...
+			var body ast.Expression
+			for _, part := range comp.Parts {
+				callExpr := &ast.CallExpression{
+					Token:     part.Token,
+					Function:  &ast.Identifier{Token: part.Token, Value: part.Value},
+					Arguments: []ast.Expression{&ast.Identifier{Token: part.Token, Value: paramName}},
+				}
+				if body == nil {
+					body = callExpr
+					continue
+				}
+				body = &ast.InfixExpression{
+					Token:    part.Token,
+					Left:     body,
+					Operator: logicalOp,
+					Right:    callExpr,
+				}
+			}
+
+			synth := &ast.ConstraintDeclaration{
+				Token:      comp.Token,
+				Name:       &ast.Identifier{Token: comp.Token, Value: name},
+				Parameters: []*ast.Identifier{&ast.Identifier{Token: comp.Token, Value: paramName}},
+				Body:       body,
+			}
+			generated = append(generated, synth)
+
+			// Point the parameter's constraint at the synthetic name.
+			if len(fd.Constraints) <= i {
+				for len(fd.Constraints) <= i {
+					fd.Constraints = append(fd.Constraints, nil)
+				}
+			}
+			fd.Constraints[i] = &ast.Identifier{Token: comp.Token, Value: name}
+		}
+	}
+	return generated
+}
+
 // extractArrayLiteral returns the elements of an array literal.
 func extractArrayLiteral(expr ast.Expression) ([]ast.Expression, bool) {
 	if a, ok := expr.(*ast.ArrayLiteral); ok {
@@ -445,6 +514,20 @@ func staticEval(expr ast.Expression, env map[string]ast.Expression, sc *staticCo
 							cInfo.Parameters[0].Value: argVal,
 						}
 						return staticEval(cInfo.Body, innerEnv, sc)
+					}
+				}
+				return nil
+			}
+			// Otherwise evaluate a call to a built-in constraint / type checker
+			// (e.g. Positive(x), Int(x)) against a literal argument.
+			if len(e.Arguments) == 1 {
+				argVal := staticEval(e.Arguments[0], env, sc)
+				if argVal != nil {
+					if res, ok := checkBuiltinTypeConstraint(ident.Value, argVal); ok {
+						return &ast.BooleanLiteral{Token: e.Token, Value: res}
+					}
+					if res, ok := checkBuiltinCommonConstraint(ident.Value, argVal); ok {
+						return &ast.BooleanLiteral{Token: e.Token, Value: res}
 					}
 				}
 			}

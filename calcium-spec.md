@@ -414,6 +414,35 @@ calls with a statically-detectable violation are compile errors.
 Precedence: a user-defined `constraint` with the same name shadows a built-in
 constraint in that scope.
 
+#### Composite annotations (`A & B` / `A | B`)
+
+Parameter annotations may combine two or more constraint/type names to build a
+composite without declaring a named constraint:
+
+```calcium
+// AND (intersection): the value must satisfy every part.
+func divide(a: Positive & NonZero) = a;
+
+// UNION (choice): the value must satisfy at least one part.
+func id(v: Int | String) = v;
+```
+
+Semantics:
+- `A & B` ≡ a synthetic constraint `x => A(x) && B(x)` (AND).
+- `A | B` ≡ a synthetic constraint `x => A(x) || B(x)` (OR).
+- Parts may be built-in constraints (`Positive`), built-in type checkers (`Int`, `String`), or user-defined constraints.
+- Mixing `&` and `|` in one annotation is a parse error.
+- Static checking applies: a call with a literal argument that violates the
+  composite is a compile error; dynamic values are enforced at runtime.
+
+```calcium
+func f(a: Positive & NonZero) = a;
+f(0);   // compile error (violates both)
+
+func g(v: Int | String) = v;
+g(1.5); // compile error (violates both alternatives)
+```
+
 ### Combining Constraints
 
 ```calcium

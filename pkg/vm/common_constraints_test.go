@@ -80,3 +80,49 @@ r;
 		t.Fatalf("expected success value 5, got %s", got2.Type)
 	}
 }
+
+// Composite annotations (A & B, A | B) are enforced at runtime.
+func TestBuiltinCompositeConstraintRuntime(t *testing.T) {
+	// AND: negative dynamic value must violate `Positive & NonZero` -> failure.
+	got := runCommonProg(t, `
+func f(a: Positive & NonZero) = a;
+neg = 0 - 1;
+r = f(neg) !? { success(v) => 1 failure(_) => 0 };
+r;
+`)
+	if got.Type != value.TYPE_INT || got.AsInt() != 0 {
+		t.Fatalf("expected AND violation (failure), got %v", got)
+	}
+
+	// AND: valid value passes and is wrapped in success.
+	got2 := runCommonProg(t, `
+func f(a: Positive & NonZero) = a;
+p = 0 + 5;
+r = f(p) !? { success(v) => v failure(_) => -999 };
+r;
+`)
+	if got2.Type == value.TYPE_FAILURE || got2.AsInt() != 5 {
+		t.Fatalf("expected AND pass value 5, got %v", got2)
+	}
+
+	// UNION: a string value satisfies `Int | String`, an int violates Strict
+	got3 := runCommonProg(t, `
+func f(a: Int | String) = a;
+s = f("hi") !? { success(v) => "OK" failure(_) => "NOPE" };
+s;
+`)
+	if got3.AsString() != "OK" {
+		t.Fatalf("expected Int|String to accept a string, got %q", got3.AsString())
+	}
+
+	// UNION: a float violates `Int | String` -> failure
+	got4 := runCommonProg(t, `
+func f(a: Int | String) = a;
+x = 1.5;
+r = f(x) !? { success(v) => "OK" failure(_) => "NOPE" };
+r;
+`)
+	if got4.AsString() != "NOPE" {
+		t.Fatalf("expected Int|String to reject a float, got %q", got4.AsString())
+	}
+}

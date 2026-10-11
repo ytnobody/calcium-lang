@@ -25,6 +25,12 @@
 - Static analysis now applies **constant propagation**: a variable assigned a literal is known to the checker, so `x = 0; f(x)` compiled against a `: Positive` param is a compile error (rather than only a runtime failure).
 - Static analysis now resolves simple **function aliases** (`g = f`), so `g(0)` is checked against `f`'s constraints.
 
+### CI / Releases
+
+- Fixed release publishing: tags pushed by the auto-release workflow (via the repository `GITHUB_TOKEN`) never triggered the GoReleaser `Release` workflow, so GitHub Releases stalled at `v0.2.0` while git tags advanced to `v0.2.21`. The auto-release workflow now explicitly dispatches `Release` (`workflow_dispatch`, an allowed exception to the GITHUB_TOKEN rule) for each new tag.
+- The `Release` workflow now accepts a manual `tag` input (via `workflow_dispatch`) so any tag can be published on demand.
+- Added a `Backfill Releases` workflow that publishes a GitHub Release for every existing `vX.Y.Z` tag that lacks one, and a scheduled `Release Sync Check` that fails if the latest tag ever has no matching Release again.
+
 ---
 
 ## How releases are tagged

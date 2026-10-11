@@ -1,0 +1,58 @@
+name: Backfill Releases
+
+# Publishes releases for every existing vX.Y.Z tag that has no GitHub Release
+# yet. This was added because the Release workflow stopped running after
+# v0.2.0 while tagging continued through v0.2.21.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list missing tags without publishing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.22"
+
+      - name: Find tags without releases
+        id: missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          all_tags=$(git tag --sort=version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
+          missing=""
+          for t in $all_tags; do
+            if ! gh release view "$t" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              missing="$missing $t"
+            fi
+          done
+          missing="$(tr ' ' '\n' <<< "$missing" | grep -E '.' | tr '\n' ' ' | sed 's/ $//')"
+          echo "tags=$missing" >> "$GITHUB_OUTPUT"
+          echo "Missing releases: ${missing:-none}"
+
+      - name: Publish missing releases
+        if: ${{ inputs.dry_run == false && steps.missing.outputs.tags != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for t in ${{ steps.missing.outputs.tags }}; do
+            echo "::group::Dispatching Release workflow for $t"
+            gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$t" -f tag="$t"
+            echo "::endgroup::"
+          done
+          echo "Dispatched ${{ steps.missing.outputs.tags }}"

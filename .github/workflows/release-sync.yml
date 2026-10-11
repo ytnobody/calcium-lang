@@ -1,0 +1,38 @@
+name: Release Sync Check
+
+# Guards against the tag/release divergence that previously caused this issue:
+# fails (and so notifies) whenever the latest vX.Y.Z git tag has no matching
+# GitHub Release.
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check latest tag has a release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LATEST_TAG=$(git ls-remote --tags --refs "https://github.com/$GITHUB_REPOSITORY.git" \
+            | awk '{print $2}' | sed 's#refs/tags/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No version tags found"
+            exit 0
+          fi
+          HAS_RELEASE=$(gh release view "$LATEST_TAG" --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)
+          echo "Latest tag:    $LATEST_TAG"
+          echo "Has release:   ${HAS_RELEASE:-none}"
+          if [ "$HAS_RELEASE" != "$LATEST_TAG" ]; then
+            echo "::error::Latest tag $LATEST_TAG has no GitHub Release yet. Run the Backfill Releases workflow or dispatch the Release workflow for it."
+            exit 1
+          fi
+          echo "OK: latest tag $LATEST_TAG is released"

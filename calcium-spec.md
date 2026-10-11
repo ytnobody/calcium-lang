@@ -413,6 +413,24 @@ constraint User(u) =
 - Numeric constraints: Validated with comparison operations
 - String constraints: Validated with regular expressions
 - Enumeration constraints: Validated with containment check
+- Literal values are validated at compile time (static checking in the compiler). A call with a statically-detectable violation is a compile error. Dynamic values are validated at runtime.
+
+### Constraints vs match
+
+Constraints and `match` are complementary and should not overlap:
+
+| | Constraints | `match` |
+|---|---|---|
+| Purpose | Validate/guarantee a value satisfies a predicate | Enumerate cases and destructure a value |
+| Result on mismatch | Compile-time (static) or run-time error | Falls through to the next pattern / `_` |
+| Typical use | Function parameter guards, invariants | Branching on known shapes/values |
+
+- Use **constraints** when a value must *always* satisfy a condition (an invariant). Violation is an error.
+- Use **match** when a value may take one of several shapes and each shape has different handling.
+- Prefer match over a constraint when the set of valid values is fully enumerable and each branch needs distinct logic.
+- Prefer constraints over match when the predicate is a general condition (range, regex, numeric) that cannot be enumerated.
+
+Refactor-safety guarantee: because constraints on literal/dynamic arguments are checked (statically where possible, at runtime otherwise), renaming or tightening a constraint is caught at the earliest point — not silently.
 
 ## Functions
 

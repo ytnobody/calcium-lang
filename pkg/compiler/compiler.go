@@ -633,6 +633,10 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 	case *ast.FunctionDeclaration:
 		c.setPosFromToken(node.Token)
+		// Statically validate a literal return value against the return constraint.
+		if msg := c.staticChecker.checkReturnConstraint(node); msg != "" {
+			return c.newCompileError(node.Token, msg)
+		}
 		// Resolve the function name (already registered in first pass for forward references)
 		// If not found, define it (for nested scopes or REPL)
 		symbol, ok := c.symbolTable.Resolve(node.Name.Value)

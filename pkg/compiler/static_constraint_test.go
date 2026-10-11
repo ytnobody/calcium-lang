@@ -429,6 +429,33 @@ func TestStaticConstraintCheck_CompositeAnnotation(t *testing.T) {
 		}
 	}
 }
+func TestStaticConstraintCheck_Return(t *testing.T) {
+	violations := []string{
+		`func f(): NonZero = 0;`,
+		`func f(): Positive = -1;`,
+		`func f(): Int = 3.14;`,
+		`func f(): String = 42;`,
+		`constraint Pos(n) = n > 0; func f(): Pos = 0;`,
+	}
+	for _, input := range violations {
+		if _, err := compileSource(input); err == nil {
+			t.Errorf("expected compile error for %q", input)
+		}
+	}
+
+	valid := []string{
+		`func f(): NonZero = 5;`,
+		`func f(): Positive = 5;`,
+		`func f(): Int = 7;`,
+		`func f(): String = "hi";`,
+		`func f(x): Positive = x;`, // non-literal return: skipped statically
+	}
+	for _, input := range valid {
+		if _, err := compileSource(input); err != nil {
+			t.Errorf("unexpected compile error for %q: %v", input, err)
+		}
+	}
+}
 
 // Refactor-safety regression: tightening a function's constraint is caught at
 // statically-detectable call sites (at refactoring time, not runtime).

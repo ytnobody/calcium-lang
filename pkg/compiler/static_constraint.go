@@ -84,6 +84,46 @@ func (sc *staticConstraintChecker) registerFunction(fd *ast.FunctionDeclaration)
 	sc.funcConstraint[fd.Name.Value] = info
 }
 
+// checkReturnConstraint statically validates a function's return value when it
+// is a literal. Returns an error message if the literal violates the return
+// constraint, otherwise "".
+func (sc *staticConstraintChecker) checkReturnConstraint(fd *ast.FunctionDeclaration) string {
+	var constraintName string
+	if fd.ReturnConstraint != nil {
+		constraintName = fd.ReturnConstraint.Value
+	} else if fd.ReturnType != nil {
+		constraintName = fd.ReturnType.Name
+	} else {
+		return ""
+	}
+
+	body := fd.Body
+	if body == nil {
+		return ""
+	}
+
+	lit, _ := extractLiteralValue(body)
+
+	if result, recognized := checkBuiltinTypeConstraint(constraintName, body); recognized {
+		if !result {
+			return fmt.Sprintf("return constraint `%s` violated: function returns %s which does not satisfy `%s`", constraintName, lit, constraintName)
+		}
+		return ""
+	}
+	if result, recognized := checkBuiltinCommonConstraint(constraintName, body); recognized {
+		if !result {
+			return fmt.Sprintf("return constraint `%s` violated: function returns %s which does not satisfy `%s`", constraintName, lit, constraintName)
+		}
+		return ""
+	}
+	if cInfo, ok := sc.constraints[constraintName]; ok {
+		if result, canEval := sc.evaluateConstraint(cInfo, body); canEval && !result {
+			return fmt.Sprintf("return constraint `%s` violated: function returns %s which does not satisfy `%s`", constraintName, lit, constraintName)
+		}
+	}
+	return ""
+}
+
 // checkCallExpression checks if a function call with literal arguments violates constraints
 // Returns a list of error messages (empty if no violations or can't check statically)
 func (sc *staticConstraintChecker) checkCallExpression(funcName string, args []ast.Expression, _ token.Token) []string {

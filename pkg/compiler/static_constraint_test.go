@@ -321,3 +321,33 @@ add_pos(0, 5);
 		t.Error("error should mention the value")
 	}
 }
+
+// Refactor-safety regression: tightening a function's constraint is caught at
+// statically-detectable call sites (at refactoring time, not runtime).
+func TestStaticConstraintCheck_RefactorSafety(t *testing.T) {
+	// Before refactor: a general, unconstrained helper used by several callers.
+	if _, err := compileSource(`
+func discount(price) = price * 0.9;
+discount(100);
+discount(0);
+discount(-5);
+`); err != nil {
+		t.Fatalf("pre-refactor code should compile, got: %v", err)
+	}
+
+	// After refactor: tighten the contract to require a positive price.
+	// The call with a negative literal must be flagged at compile time.
+	_, err := compileSource(`
+constraint Positive(p) = p > 0;
+func discount(p: Positive) = p * 0.9;
+discount(100);
+discount(0);
+discount(-5);
+`)
+	if err == nil {
+		t.Fatal("expected compile error after tightening constraint, got nil")
+	}
+	if !strings.Contains(err.Error(), "Positive") {
+		t.Errorf("expected error to mention 'Positive', got %q", err.Error())
+	}
+}

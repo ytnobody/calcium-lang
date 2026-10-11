@@ -542,6 +542,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 		// New variable
 		symbol := c.symbolTable.Define(node.Name.Value)
+		// Track simple constants for static constraint checking (x = 5; f(x)).
+		c.staticChecker.trackConst(node.Name.Value, node.Value)
 		err := c.Compile(node.Value)
 		if err != nil {
 			return err
@@ -649,6 +651,10 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 
 		c.enterScopeWithName(node.Name.Value)
+		// Snapshot constants so function-local assignments/params don't pollute
+		// the enclosing scope for static checking.
+		c.staticChecker.enterFunc()
+		defer c.staticChecker.leaveFunc()
 
 		// For recursion: the function can reference itself
 		// We need to resolve the function name from the outer scope

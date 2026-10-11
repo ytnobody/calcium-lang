@@ -22,6 +22,7 @@
 - Added built-in common constraints available everywhere (as parameter annotations and `?` checks): `NonZero`, `Positive`, `NonNegative`, `Natural`, `Finite`, `NonEmpty`, `Empty`, `Digits`, `Lowercase`, `Uppercase`. Statically-detectable violations on literal call arguments are caught at compile time. User-defined constraints with the same name shadow the built-ins.
 - Added composite parameter annotations: `func f(a: Positive & NonZero)` (AND) and `func f(a: Int | String)` (UNION), which expand to synthetic constraints with static + runtime enforcement. Mixing `&` and `|` in one annotation is a parse error.
 - Static analysis now also validates **return constraints**: a function whose literal (or constant-folded) return value violates its return constraint is a compile error.
+- Static analysis now applies **constant propagation**: a variable assigned a literal is known to the checker, so `x = 0; f(x)` compiled against a `: Positive` param is a compile error (rather than only a runtime failure).
 
 ---
 

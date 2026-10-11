@@ -456,6 +456,29 @@ func TestStaticConstraintCheck_Return(t *testing.T) {
 		}
 	}
 }
+func TestStaticConstraintCheck_ConstantPropagation(t *testing.T) {
+	// A non-literal identifier resolved to a known constant is checked statically.
+	violations := []string{
+		`func f(a: Positive) = a; x = 0; f(x);`,
+		`func f(a: Positive) = a; x = -1; f(x);`,
+		`func f(a: NonEmpty) = a; x = ""; f(x);`,
+	}
+	for _, input := range violations {
+		if _, err := compileSource(input); err == nil {
+			t.Errorf("expected compile error for %q", input)
+		}
+	}
+
+	valid := []string{
+		`func f(a: Positive) = a; x = 5; f(x);`,
+		`func f(a: NonEmpty) = a; x = "hi"; f(x);`,
+	}
+	for _, input := range valid {
+		if _, err := compileSource(input); err != nil {
+			t.Errorf("unexpected compile error for %q: %v", input, err)
+		}
+	}
+}
 
 // Refactor-safety regression: tightening a function's constraint is caught at
 // statically-detectable call sites (at refactoring time, not runtime).

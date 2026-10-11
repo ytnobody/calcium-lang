@@ -453,6 +453,19 @@ func g(): Int = 3.14;     // compile error
 func h(x): Positive = x;  // non-literal return is enforced at runtime
 ```
 
+Simple **constant propagation** is applied: assigning a literal to a variable makes
+that variable's value known to the static checker, so a later call using the
+variable is checked at compile time.
+
+```calcium
+func f(a: Positive) = a;
+x = 5;  f(x);  // OK
+x = 0;  f(x);  // compile error (x is known to be 0)
+```
+
+Constants are scoped to the enclosing function; values that cannot be proven to
+be literal are still enforced at runtime.
+
 ### Combining Constraints
 
 ```calcium

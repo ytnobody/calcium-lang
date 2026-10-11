@@ -40,7 +40,7 @@ from_emoji = string.from_code(0x1F600) !? {
 };
 
 test.new()
-    |> test.plan(47)
+    |> test.plan(51)
     // Basic Operations
     |> test.is("len hello", len("hello"), 5)
     |> test.is("len empty", len(""), 0)
@@ -48,6 +48,11 @@ test.new()
     // Character Access
     |> test.is("char_at first", string.char_at("hello", 0), "h")
     |> test.is("char_at last", string.char_at("hello", 4), "o")
+    // Multi-byte: string ops index by rune (Unicode code point), not byte
+    |> test.is("char_at multibyte", string.char_at("aアb😀", 1), "ア")
+    |> test.is("char_at multibyte emoji", string.char_at("aアb😀", 3), "😀")
+    |> test.is("len multibyte", len("aアb😀"), 4)
+    |> test.is("substring multibyte", string.substring("aアb😀", 1, 3), "アb")
     // Substring
     |> test.is("substring first word", string.substring("hello world", 0, 5), "hello")
     |> test.is("substring second word", string.substring("hello world", 6, 11), "world")

@@ -443,6 +443,16 @@ func g(v: Int | String) = v;
 g(1.5); // compile error (violates both alternatives)
 ```
 
+Static checking also applies to **return constraints**: if a function's return
+value is a literal (directly or after constant folding) that violates its return
+constraint, it is a compile error.
+
+```calcium
+func f(): Positive = -1;  // compile error (return violates Positive)
+func g(): Int = 3.14;     // compile error
+func h(x): Positive = x;  // non-literal return is enforced at runtime
+```
+
 ### Combining Constraints
 
 ```calcium

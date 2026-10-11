@@ -61,6 +61,7 @@ Calcium can handle the following 6 types of values:
 - Strings: `"hello"`, `"world"`
   - Escape sequences: `\\`(backslash), `\"`(double quote), `\'`(single quote), `\n`(newline), `\r`(carriage return), `\t`(tab), `\b`(backspace), `\f`(formfeed)
   - Unicode escapes: `\uXXXX` decodes a single BMP code point (4 hex digits, e.g. `\u0041` → `A`, `\u30A2` → `ア`). Invalid hex or lone surrogates are left as-is. Supplementary characters (non-BMP) should be written directly.
+  - **String semantics are rune-based (Unicode code points), not byte-based.** `len`, `char_at`, and `substring` index/count by rune. Every string operation in `core.string` and the builtin `len` MUST use rune semantics; byte-level access is an implementation detail and must never leak into the public API.
 - Arrays: `[1, 2, 3]`, `["a", "b", "c"]`
 - Functions: `(x) => x * 2`
 - Result types: `success(value)`, `failure(error)`
@@ -1342,3 +1343,14 @@ return
 ```
 
 Note: Async-related features (`stay`, `spawn`, `expects`, `continue`, `leave`, `cancel`, etc.) are not language keywords but functions provided by the `core.async!` module. Similarly, `timeout` and `interval` are provided by `core.schedule!`, and `stdin` is provided by the `core.io!` module.
+
+## Spec Maintenance
+
+This document is the single source of truth for the Calcium language. Behavior changes to the lexer, type checker, VM, or standard library MUST be accompanied by an update to this document in the same pull request.
+
+- **When you change behavior**, update the relevant section here so the spec always reflects the implementation.
+- **When you add a builtin**, document its signature and semantics here (see `core.string` rune semantics above).
+- **Disagreements** between this spec and the implementation are bugs; fix the side that is wrong.
+- Do not add a feature to the implementation without first or simultaneously specifying it here.
+
+This policy keeps the spec trustworthy enough to derive tests and documentation from it.

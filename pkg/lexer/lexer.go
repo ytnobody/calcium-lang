@@ -487,6 +487,24 @@ func processEscapeSequences(s string) string {
 			case 't':
 				result = append(result, '\t')
 				i += 2
+			case 'b':
+				result = append(result, '\b')
+				i += 2
+			case 'f':
+				result = append(result, '\f')
+				i += 2
+			case 'u':
+				// \uXXXX unicode escape (BMP code point)
+				if i+6 <= len(s) {
+					if r, ok := parseHexRune(s[i+2 : i+6]); ok {
+						result = append(result, []byte(string(r))...)
+						i += 6
+						continue
+					}
+				}
+				// Invalid \u escape, keep as-is
+				result = append(result, s[i])
+				i++
 			case '\\':
 				result = append(result, '\\')
 				i += 2
@@ -507,6 +525,29 @@ func processEscapeSequences(s string) string {
 		}
 	}
 	return string(result)
+}
+
+// parseHexRune parses exactly 4 hex digits into a valid BMP rune.
+func parseHexRune(s string) (rune, bool) {
+	var v rune
+	for idx := 0; idx < len(s); idx++ {
+		c := s[idx]
+		switch {
+		case c >= '0' && c <= '9':
+			v = v*16 + rune(c-'0')
+		case c >= 'a' && c <= 'f':
+			v = v*16 + rune(c-'a'+10)
+		case c >= 'A' && c <= 'F':
+			v = v*16 + rune(c-'A'+10)
+		default:
+			return 0, false
+		}
+	}
+	// Reject invalid code points (out of range, lone surrogates).
+	if v < 0 || v > 0x10FFFF || (v >= 0xD800 && v <= 0xDFFF) {
+		return 0, false
+	}
+	return v, true
 }
 
 // peekStringContent checks if a string contains interpolation markers

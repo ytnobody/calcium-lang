@@ -59,7 +59,8 @@ Calcium can handle the following 6 types of values:
   - Scientific notation: `1.5e10`, `2.5e-3`
   - Numeric separators: `1_000_000`, `0xFF_FF`
 - Strings: `"hello"`, `"world"`
-  - Escape sequences: `\\`(backslash), `\"`(double quote), `\n`(newline), `\t`(tab), `\r`(carriage return)
+  - Escape sequences: `\\`(backslash), `\"`(double quote), `\'`(single quote), `\n`(newline), `\r`(carriage return), `\t`(tab), `\b`(backspace), `\f`(formfeed)
+  - Unicode escapes: `\uXXXX` decodes a single BMP code point (4 hex digits, e.g. `\u0041` → `A`, `\u30A2` → `ア`). Invalid hex or lone surrogates are left as-is. Supplementary characters (non-BMP) should be written directly.
 - Arrays: `[1, 2, 3]`, `["a", "b", "c"]`
 - Functions: `(x) => x * 2`
 - Result types: `success(value)`, `failure(error)`

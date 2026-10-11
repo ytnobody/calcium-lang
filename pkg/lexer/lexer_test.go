@@ -357,6 +357,53 @@ func TestStringEscape(t *testing.T) {
 	}
 }
 
+func TestStringEscapeBackspaceFormfeed(t *testing.T) {
+	input := `"a\bb" "a\fb"`
+
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Type != token.STRING {
+		t.Fatalf("expected STRING, got %q", tok.Type)
+	}
+	// \b -> backspace, \f -> formfeed
+	if tok.Literal != "a\bb" {
+		t.Fatalf("expected %q, got %q", "a\bb", tok.Literal)
+	}
+	tok = l.NextToken()
+	if tok.Literal != "a\fb" {
+		t.Fatalf("expected %q, got %q", "a\fb", tok.Literal)
+	}
+}
+
+func TestStringEscapeUnicode(t *testing.T) {
+	input := `"\u0041" "\u30A2" "\uFFFD"`
+
+	l := New(input)
+
+	tok := l.NextToken()
+	if tok.Literal != "A" {
+		t.Fatalf("expected %q, got %q", "A", tok.Literal)
+	}
+	tok = l.NextToken()
+	if tok.Literal != "ア" {
+		t.Fatalf("expected %q, got %q", "ア", tok.Literal)
+	}
+	tok = l.NextToken()
+	if tok.Literal != "�" {
+		t.Fatalf("expected %q, got %q", "�", tok.Literal)
+	}
+}
+
+func TestStringEscapeInvalidUnicodeKept(t *testing.T) {
+	// Invalid hex (\u12Z4) and lone surrogate (\uD800) are kept as literal text.
+	input := `"\u12Z4"`
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Literal != "\\u12Z4" {
+		t.Fatalf("expected %q, got %q", "\\u12Z4", tok.Literal)
+	}
+}
+
 func TestRegexLiteral(t *testing.T) {
 	tests := []struct {
 		input    string

@@ -339,6 +339,12 @@ func TestBuiltinSubstring(t *testing.T) {
 			expected: "hi",
 		},
 		{
+			// Multi-byte: substring indices count runes, not bytes.
+			name:     "multibyte rune indices",
+			args:     []value.Value{value.String("aアb😀c"), value.Int(1), value.Int(3)},
+			expected: "アb",
+		},
+		{
 			name:    "wrong arg count",
 			args:    []value.Value{value.String("hello")},
 			wantErr: true,
@@ -407,6 +413,20 @@ func TestBuiltinCharAt(t *testing.T) {
 	result = builtinCharAt(value.String("hi"), value.String("0"))
 	if result.Type != value.TYPE_FAILURE {
 		t.Error("expected failure for non-int index")
+	}
+
+	// Multi-byte: char_at indexes by rune, not byte.
+	result = builtinCharAt(value.String("aアb😀"), value.Int(1))
+	if result.AsString() != "ア" {
+		t.Errorf("expected 'ア', got %q", result.AsString())
+	}
+	result = builtinCharAt(value.String("aアb😀"), value.Int(3))
+	if result.AsString() != "😀" {
+		t.Errorf("expected '😀', got %q", result.AsString())
+	}
+	result = builtinCharAt(value.String("aアb😀"), value.Int(4))
+	if result.Type != value.TYPE_NULL {
+		t.Errorf("expected null for out-of-range rune index, got %s", result.Type)
 	}
 }
 

@@ -2488,7 +2488,8 @@ func builtinLen(args ...value.Value) value.Value {
 	}
 	switch args[0].Type {
 	case value.TYPE_STRING:
-		return value.Int(int64(len(args[0].AsString())))
+		// len counts runes (Unicode code points), matching string.length.
+		return value.Int(int64(len([]rune(args[0].AsString()))))
 	case value.TYPE_ARRAY:
 		return value.Int(int64(len(args[0].AsArray())))
 	case value.TYPE_TUPLE:
@@ -3090,28 +3091,33 @@ func builtinSubstring(args ...value.Value) value.Value {
 	if args[1].Type != value.TYPE_INT {
 		return value.Failure(value.String("substring: start must be integer"))
 	}
-	s := args[0].AsString()
+	// Note: substring operates on runes (Unicode code points) to match the
+	// canonical core.string implementation (see __str_substring in primitives.go).
+	runes := []rune(args[0].AsString())
 	start := int(args[1].AsInt())
 	if start < 0 {
 		start = 0
 	}
-	if start >= len(s) {
-		return value.String("")
+	if start > len(runes) {
+		start = len(runes)
 	}
-	end := len(s)
+	end := len(runes)
 	if len(args) == 3 {
 		if args[2].Type != value.TYPE_INT {
 			return value.Failure(value.String("substring: end must be integer"))
 		}
 		end = int(args[2].AsInt())
-		if end > len(s) {
-			end = len(s)
+		if end > len(runes) {
+			end = len(runes)
+		}
+		if end < 0 {
+			end = 0
 		}
 	}
 	if start >= end {
 		return value.String("")
 	}
-	return value.String(s[start:end])
+	return value.String(string(runes[start:end]))
 }
 
 // char_at - gets character at index (core.string)
@@ -3125,12 +3131,14 @@ func builtinCharAt(args ...value.Value) value.Value {
 	if args[1].Type != value.TYPE_INT {
 		return value.Failure(value.String("char_at: index must be integer"))
 	}
-	s := args[0].AsString()
+	// Note: char_at operates on runes (Unicode code points) to match the
+	// canonical core.string implementation (see __str_char_at in primitives.go).
+	runes := []rune(args[0].AsString())
 	idx := int(args[1].AsInt())
-	if idx < 0 || idx >= len(s) {
+	if idx < 0 || idx >= len(runes) {
 		return value.Null()
 	}
-	return value.String(string(s[idx]))
+	return value.String(string(runes[idx]))
 }
 
 // index_of - finds first index of substring (core.string)

@@ -710,6 +710,8 @@ func runREPL() {
 
 	line := liner.NewLiner()
 	defer line.Close()
+	// Tear down any spawned child processes when the REPL exits.
+	defer vm.KillAll()
 	line.SetCtrlCAborts(true)
 
 	// Load history from file
@@ -870,6 +872,10 @@ func executeWithFilenameOpt(input, filename string, optLevel optimizer.Level) (s
 }
 
 func executeWithOptions(input, filename string, optLevel optimizer.Level, runOpts *vm.RunOptions) (string, error) {
+	// Ensure any spawned child processes (e.g. DBI backends) are terminated
+	// when this program finishes, so children never outlive the parent.
+	defer vm.KillAll()
+
 	useColor := isTerminal()
 
 	l := lexer.New(input)

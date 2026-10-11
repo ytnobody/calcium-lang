@@ -1418,6 +1418,56 @@ async.stay(lines: []) {
 
 See the "I/O: core.io!" section for details.
 
+### Process Execution: core.os!
+
+The `core.os!` module provides operating-system and process facilities. In
+addition to environment and argument access (`os.env`, `os.args`, `os.exit`),
+it can launch long-lived external programs and exchange a text stream over
+their stdin/stdout. This is used by drivers such as `dbd-sqlite` to talk to a
+backend process over a line-delimited JSON protocol.
+
+```calcium
+use core.os!
+
+// Launch a long-lived backend and return a process handle
+handle = os.proc_start("dbd-sqlite", ["app.db"]) !? {
+    success(h) => h
+    failure(e)  => /* handle */
+};
+
+// Send a protocol request line to its stdin
+os.proc_write(handle, concat(request_json, "\n")) !? { /* ... */ };
+
+// Read one response line from its stdout (blocks until a line is available)
+response = os.proc_read_line(handle) !? {
+    success(line) => line
+    failure(e)     => e
+};
+
+// Stop the child (and reap it)
+os.proc_close(handle);
+```
+
+Process functions:
+
+| Function | Description | Returns |
+|----------|-------------|---------|
+| `os.proc_start(cmd, args)` | Launch a persistent external program | `success(handle)` / `failure(msg)` |
+| `os.proc_write(handle, data)` | Write a string to the process stdin | `success(true)` / `failure(msg)` |
+| `os.proc_read_line(handle)` | Block and read one `\n`-terminated line from stdout | `success(line)` / `failure(msg)` |
+| `os.proc_close(handle)` | Forcefully terminate and reap the child | `success(true)` |
+| `os.proc_wait(handle)` | Block until exit; return the exit code | `success(code)` / `failure(msg)` |
+
+Lifecycle guarantees:
+
+- A spawned child runs in the parent's process group, so terminal signals
+  (e.g. Ctrl+C on the foreground group) propagate to it naturally.
+- All still-tracking children are terminated when the owning program or REPL
+  exits (and on `os.exit`), so `proc_start`'d processes never outlive their
+  parent.
+- Errors are surfaced as `failure(...)`. A closed/EOF stdout yields a
+  `failure` from `proc_read_line`.
+
 ## Entry Point
 
 Top-level code is executed directly. No `main` function is required.

@@ -1,5 +1,6 @@
 // core.os - Operating system and process interface
-// Uses primitives: __env_get, __env_set, __env_unset, __env_list, __os_args, __os_exit
+// Uses primitives: __env_get, __env_set, __env_unset, __env_list, __os_args, __os_exit,
+//                  __proc_start, __proc_write, __proc_read_line, __proc_close, __proc_wait
 
 // env(name) - Get an environment variable by name
 // Returns success(value) if the variable is set, or failure(error) if not set
@@ -23,3 +24,26 @@ func args() = __os_args();
 // exit(code) - Terminate the process with the given exit code
 // code must be an integer (e.g. 0 for success, 1 for error)
 func! exit(code) = __os_exit(code);
+
+// proc_start(cmd, args) - Launch a long-lived external program and return a
+// process handle for talking to it over stdin/stdout as a text stream.
+// Returns success(handle) or failure(message).
+// Example: os.proc_start("sqlite3", ["app.db"]) -> success(1)
+func proc_start(cmd, args) = __proc_start(cmd, args);
+
+// proc_write(handle, data) - Write a string to a process's stdin.
+// Returns success(true) or failure(message).
+func proc_write(handle, data) = __proc_write(handle, data);
+
+// proc_read_line(handle) - Read one line ('\n'-terminated) from a process's
+// stdout. Blocks until data is available or the process closes its stdout.
+// Returns success(line) or failure(message).
+func proc_read_line(handle) = __proc_read_line(handle);
+
+// proc_close(handle) - Forcefully stop a child process and reap it. Safe to
+// call even if the process has already exited. Returns success(true).
+func proc_close(handle) = __proc_close(handle);
+
+// proc_wait(handle) - Block until the process exits and return its exit code.
+// Returns success(code) or failure(message).
+func proc_wait(handle) = __proc_wait(handle);

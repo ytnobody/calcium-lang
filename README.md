@@ -681,6 +681,7 @@ Module resolution order:
 | `string.substring(s, start, end)` | Extract substring |
 | `string.index_of(s, sub)` | Find substring position |
 | `string.char_at(s, index)` | Get character at index |
+| `string.from_code(cp)` | Convert a unicode code point to its string representation (success/failure) |
 | `string.repeat(s, n)` | Repeat string n times |
 | `string.pad_left(s, len, char)` | Pad on left |
 | `string.pad_right(s, len, char)` | Pad on right |

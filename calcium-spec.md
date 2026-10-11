@@ -60,7 +60,7 @@ Calcium can handle the following 6 types of values:
   - Numeric separators: `1_000_000`, `0xFF_FF`
 - Strings: `"hello"`, `"world"`
   - Escape sequences: `\\`(backslash), `\"`(double quote), `\'`(single quote), `\n`(newline), `\r`(carriage return), `\t`(tab), `\b`(backspace), `\f`(formfeed)
-  - Unicode escapes: `\uXXXX` decodes a single BMP code point (4 hex digits, e.g. `\u0041` → `A`, `\u30A2` → `ア`). Invalid hex or lone surrogates are left as-is. Supplementary characters (non-BMP) should be written directly.
+  - Unicode escapes: `\uXXXX` decodes a single BMP code point (4 hex digits, e.g. `\u0041` → `A`, `\u30A2` → `ア`). A surrogate pair written as two escapes (`\uD83D\uDE00`) decodes to a supplementary character (`😀`, U+1F600), consistent with the JSON module. Invalid hex, lone high/low surrogates, and out-of-range values are left as-is.
   - **String semantics are rune-based (Unicode code points), not byte-based.** `len`, `char_at`, and `substring` index/count by rune. Every string operation in `core.string` and the builtin `len` MUST use rune semantics; byte-level access is an implementation detail and must never leak into the public API.
 - Arrays: `[1, 2, 3]`, `["a", "b", "c"]`
 - Functions: `(x) => x * 2`

@@ -21,6 +21,9 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Verify Go version meets go.mod requirement
+        run: bash scripts/check-go-min-version.sh "${{ matrix.go-version }}"
+
       - name: Cache Go modules
         uses: actions/cache@v6
         with:
@@ -85,3 +88,13 @@ jobs:
 
       - name: Build bone
         run: go build -v ./cmd/bone
+
+  # Aggregator job providing a single stable status check to require on main.
+  verification:
+    if: always()
+    needs: [test, lint, build]
+    runs-on: ubuntu-latest
+    steps:
+      - if: needs.test.result != 'success' || needs.lint.result != 'success' || needs.build.result != 'success'
+        run: exit 1
+      - run: echo "All CI checks green"

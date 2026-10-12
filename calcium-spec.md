@@ -119,6 +119,59 @@ err |> IsConstraint?   // success(err) if it is a ConstraintErr, else failure(er
 Variants without parameters are values (`None`); variants with parameters are
 constructed by application (`Some(42)`).
 
+### Nominal Types (newtype idiom: units, IDs)
+
+A **nominal type** gives a distinct meaning to a value that has the same
+underlying representation as another (e.g. a `UserId` vs an `OrderId`, or
+`Meters` vs `Feet`), so they cannot be silently mixed up. Calcium has no
+dedicated brand/newtype keyword; the canonical idiom is a **single-variant ADT
+plus a constraint that checks its tag**. Enforcement is runtime, consistent
+with the `constraint` system and calcium's gradual typing.
+
+IDs:
+
+```calcium
+type UserId  = UId(Int);
+type OrderId = OId(Int);
+
+constraint UserId(v)  = match v UId(x)  => true _ => false;
+constraint OrderId(v) = match v OId(x) => true _ => false;
+
+func find_user(id: UserId) = id;
+
+find_user(UId(1)); // success(UId(1))
+find_user(OId(1)); // failure(OId(1))  -- wrong nominal type is rejected
+```
+
+Units:
+
+```calcium
+type Meters = M(Int);
+type Feet   = Ft(Int);
+
+constraint Meters(v) = match v M(x) => true _ => false;
+constraint Feet(v)   = match v Ft(x) => true _ => false;
+
+// Operators (+,-,...) only see numbers, so unit arithmetic is written as
+// functions that unwrap (via match), compute, and re-wrap in the same unit.
+func add_meters(a: Meters, b: Meters) = match a
+  M(x) => match b
+    M(y) => M(x + y);
+```
+
+Notes:
+
+- The ADT tag gives runtime identity (`UId(1) != OId(1)`) and the constraint
+  enforces it at function-argument boundaries.
+- `+` and other numeric operators do **not** recognize nominal types; do
+  unit-aware arithmetic inside functions over the wrapped value, returning the
+  same unit.
+- Use a `constraint` for **refinement** (brand a value, e.g. `Email`),
+  ADT + tag constraint for **nominal identity** (brand the type itself).
+- The DBI modules use exactly this pattern for typed error kinds
+  (`sqlite.ConstraintError` etc.); variants and constraints are exported from
+  modules and checked with `?`.
+
 ### About null
 
 Calcium has a `null` value (also reachable as `types.null`). It represents

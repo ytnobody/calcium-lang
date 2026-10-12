@@ -31,6 +31,7 @@ A functional programming language with pipelines, pattern matching, and effect h
 - **Error Propagation** (`|>?`) - Short-circuit pipeline on failure, unwrap on success
 - **Gradual Typing** - Optional type annotations with compile-time checking
 - **Linter** (`calcium lint`) - Static analysis of Calcium source (parse, type, and constraint checks)
+- **External process execution** (`core.os.proc_*`) - Launch and talk to long-lived external programs over stdin/stdout (enables driver backends)
 - **Tail Call Optimization** - Automatic TCO for tail-recursive functions
 - **Function Overloading** - Define multiple functions with the same name but different argument counts
 - **Async & Channels** - Event-driven async programming with task spawning and message passing

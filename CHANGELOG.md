@@ -28,6 +28,7 @@
 ### Features
 
 - Added a standalone **linter** command `calcium lint [--json] <file.ca> [...]`, backed by the new `pkg/linter` package. It performs static analysis of Calcium source without executing it, reporting parse errors, gradual-type mismatches, and static constraint violations (including constant propagation, function aliases, and return constraints). Exits `1` when findings are reported, making it suitable for CI. The CI lint job now also runs `calcium lint` over well-formed example sources.
+- Added generic **external process execution** to `core.os`: `os.proc_start`, `os.proc_write`, `os.proc_read_line`, `os.proc_close`, and `os.proc_wait` let Calcium launch and talk to long-lived external programs over a stdio text stream (used by driver backends such as `dbd-sqlite` speaking a line-delimited JSON protocol). Spawned children are tracked and terminated when the owning program/REPL exits or on `os.exit`, so they never outlive their parent. This is a general OS facility and brings no database-specific code or new dependencies into the core.
 
 ### CI / Releases
 

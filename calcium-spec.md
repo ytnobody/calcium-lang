@@ -85,30 +85,67 @@ Effect functions (`func!`) implicitly return result types:
 - On success: `success(result)`
 - On failure: `failure(error)`
 
-User-defined variant types (algebraic data types) do not exist.
+### User-defined Variant Types (Algebraic Data Types)
+
+Algorithms can define their own variant types (algebraic data types) with `type`.
+A variant constructs a tagged value; `match` destructures it.
+
+```calcium
+type Maybe = Some(value) | None;
+type Tree  = Leaf(value) | Node(left, right);
+
+x = Some(42);
+y = None;
+
+func describe(m) = match m
+  Some(v) => concat("Got: ", to_string(v))
+  None() => "Nothing";
+```
+
+Variant constructors are first-class values and are exported from modules
+(namespace-qualified). Because a variant is an ordinary value, it can be
+checked with constraints and the `?` operator:
+
+```calcium
+type Err = ConstraintErr(msg) | IoErr(msg);
+
+constraint IsConstraint(e) = match e
+  ConstraintErr(m) => true
+  IoErr(m) => false;
+
+err |> IsConstraint?   // success(err) if it is a ConstraintErr, else failure(err)
+```
+
+Variants without parameters are values (`None`); variants with parameters are
+constructed by application (`Some(42)`).
 
 ### About null
 
-Calcium has no `null`. Situations where "a value may not exist" are explicitly handled using the `get` function and `success/failure` pattern.
+Calcium has a `null` value (also reachable as `types.null`). It represents
+"no value" and is what `get` and missing-key access return.
 
 ```calcium
-data = ["name", "Tanaka"];
+h = {name: "Tanaka"};
 
-// Direct access (assuming key always exists)
-data.name;                   // "Tanaka"
-data.age;                    // Error (key doesn't exist)
+get(h, "name");      // "Tanaka"
+get(h, "age");       // null
+get(h, "age", 0);    // 0 (with default value)
 
-// Safe access
-data |> get("name");         // success("Tanaka")
-data |> get("age");          // failure("key not found")
-data |> get("age", 0);       // 0 (with default value)
+h.name;              // "Tanaka"
+h.age;               // null (missing key access)
 
-// JSON null is treated as failure
-json = parse_json('{"name": "Tanaka", "age": null}');
-json |> get("name");         // success("Tanaka")
-json |> get("age");          // failure("null")
-json |> get("age", 0);       // 0
+// JSON null maps to null
+use core.json;
+v = json.parse('{"name": "Tanaka", "age": null}') !? {
+    success(x) => x
+    failure(e) => e
+};
+get(v, "age");       // null
 ```
+
+`null` is distinct from arrays, hashes, strings, numbers and booleans, so it
+naturally represents an absent or empty result -- for example, a single-row
+query that matched no row returns `success(null)`.
 
 ### Variables
 

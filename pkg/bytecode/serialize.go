@@ -135,6 +135,9 @@ func Deserialize(data []byte) (*CompiledBytecode, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read instructions length: %w", err)
 	}
+	if insLen > maxBytecodeStringLen || insLen > uint32(buf.Len()) {
+		return nil, fmt.Errorf("invalid instructions length: %d exceeds remaining input", insLen)
+	}
 
 	// Read instructions
 	instructions := make([]byte, insLen)

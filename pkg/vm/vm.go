@@ -118,6 +118,7 @@ type VM struct {
 	secretCaps         []value.Value
 	secretWriteAllowed map[string]bool
 	secretCallAllowed  bool
+	secretTaintDepth   int
 
 	stack []value.Value
 	sp    int // Stack pointer: always points to next free slot
@@ -827,7 +828,9 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		if vm.isEffectValue(fn) {
 			return fmt.Errorf("Secret.map: callback must be a pure function")
 		}
+		vm.secretTaintDepth++
 		result, err := vm.callValueSync(fn, []value.Value{secret.AsSecret().Value})
+		vm.secretTaintDepth--
 		if err != nil {
 			return err
 		}
@@ -1646,23 +1649,35 @@ func (vm *VM) effectValueName(v value.Value) string {
 	}
 }
 
+// checkSecretCallBoundary enforces the runtime Secret effect boundary.
+func (vm *VM) checkSecretCallBoundary(callee value.Value, numArgs int) error {
+	// Runtime Secret backstop. While executing a Secret.map callback, the
+	// callback receives the raw payload and must remain pure.
+	if vm.secretTaintDepth > 0 && vm.isEffectValue(callee) {
+		return fmt.Errorf("Secret.map callback must be pure: effect %s called while Secret is tainted", vm.effectValueName(callee))
+	}
+	if vm.secretCallAllowed {
+		vm.secretCallAllowed = false
+		return nil
+	}
+	if vm.isEffectValue(callee) {
+		for i := 0; i < numArgs; i++ {
+			if containsSecret(vm.stack[vm.sp-numArgs+i]) {
+				return fmt.Errorf("Secret cannot be passed to effect %s without !!!> authorization", vm.effectValueName(callee))
+			}
+		}
+	}
+	return nil
+}
+
 func (vm *VM) executeCall(numArgs int) error {
 	// The function is on the stack below the arguments
 	// For pipe operator: stack is [arg, func]
 	// We need to handle both cases
 
 	callee := vm.stack[vm.sp-1-numArgs]
-
-	// Runtime Secret backstop. The immediately following call is authorized
-	// only when it was emitted by an authorized !!!> stage.
-	if vm.secretCallAllowed {
-		vm.secretCallAllowed = false
-	} else if vm.isEffectValue(callee) {
-		for i := 0; i < numArgs; i++ {
-			if containsSecret(vm.stack[vm.sp-numArgs+i]) {
-				return fmt.Errorf("Secret cannot be passed to effect %s without !!!> authorization", vm.effectValueName(callee))
-			}
-		}
+	if err := vm.checkSecretCallBoundary(callee, numArgs); err != nil {
+		return err
 	}
 
 	switch callee.Type {
@@ -1717,6 +1732,9 @@ func (vm *VM) resolveOverload(oc *value.OverloadedClosure, numArgs int) (*value.
 // instead of pushing a new one, preventing stack overflow in recursive calls.
 func (vm *VM) executeTailCall(numArgs int) error {
 	callee := vm.stack[vm.sp-1-numArgs]
+	if err := vm.checkSecretCallBoundary(callee, numArgs); err != nil {
+		return err
+	}
 
 	switch callee.Type {
 	case value.TYPE_CLOSURE:

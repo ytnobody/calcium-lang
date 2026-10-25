@@ -1999,6 +1999,7 @@ func TestSecretRuntimeBoundaryBackstop(t *testing.T) {
 	// so the compiler cannot reject the effect call; the VM must.
 	runVmErrorTests(t, []string{
 		`func! leak(x) = x; func hide(s) = s; hidden = hide(Secret.wrap("x")); leak(hidden);`,
+		`use core.io!; Secret.map(Secret.wrap("SECRET"), x => io.println(x));`,
 	})
 }
 

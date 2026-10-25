@@ -307,10 +307,7 @@ func (l *Lexer) readRegex() string {
 	l.readChar() // consume opening '/'
 
 	// Read pattern until unescaped '/'
-	for {
-		if l.ch == 0 {
-			break
-		}
+	for l.ch != 0 {
 		if l.ch == '\\' {
 			l.readChar() // skip escape
 			if l.ch != 0 {
@@ -448,10 +445,7 @@ func (l *Lexer) readHeredoc() string {
 	position := l.position
 
 	// Read until closing """
-	for {
-		if l.ch == 0 {
-			break
-		}
+	for l.ch != 0 {
 		if l.ch == '"' && l.peekChar() == '"' && l.peekCharN(2) == '"' {
 			break
 		}
@@ -599,10 +593,7 @@ func (l *Lexer) peekStringContent() (string, bool) {
 func (l *Lexer) readStringUntilInterpolation() string {
 	l.readChar() // skip opening quote
 	position := l.position
-	for {
-		if l.ch == 0 || l.ch == '"' {
-			break
-		}
+	for l.ch != 0 && l.ch != '"' {
 		if l.ch == '\\' {
 			l.readChar() // skip escape char
 			l.readChar() // skip escaped char
@@ -625,10 +616,7 @@ func (l *Lexer) readStringUntilInterpolation() string {
 // Returns the string content and whether there are more interpolations
 func (l *Lexer) readStringInterpolationPart() (string, bool) {
 	position := l.position
-	for {
-		if l.ch == 0 {
-			break
-		}
+	for l.ch != 0 {
 		if l.ch == '"' {
 			// End of string
 			result := l.input[position:l.position]
@@ -671,10 +659,7 @@ func (l *Lexer) skipWhitespaceAndComments() {
 				// Multi-line comment
 				l.readChar() // consume '/'
 				l.readChar() // consume '*'
-				for {
-					if l.ch == 0 {
-						break
-					}
+				for l.ch != 0 {
 					if l.ch == '*' && l.peekChar() == '/' {
 						l.readChar() // consume '*'
 						l.readChar() // consume '/'

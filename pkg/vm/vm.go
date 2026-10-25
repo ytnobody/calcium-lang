@@ -527,15 +527,15 @@ func (vm *VM) wrapError(err error) error {
 	// Get source position from current frame
 	pos := vm.currentSourcePosition()
 	if pos.IsValid() {
-		sb.WriteString(fmt.Sprintf("\n  at %s", pos.String()))
+		fmt.Fprintf(&sb, "\n  at %s", pos.String())
 
 		// Show the source line if available
 		if vm.sourceInput != "" && pos.Line > 0 {
 			line := vm.getSourceLine(pos.Line)
 			if line != "" {
-				sb.WriteString(fmt.Sprintf("\n  | %s", line))
+				fmt.Fprintf(&sb, "\n  | %s", line)
 				if pos.Column > 0 && pos.Column <= len(line) {
-					sb.WriteString(fmt.Sprintf("\n  | %s^", strings.Repeat(" ", pos.Column-1)))
+					fmt.Fprintf(&sb, "\n  | %s^", strings.Repeat(" ", pos.Column-1))
 				}
 			}
 		}
@@ -546,7 +546,7 @@ func (vm *VM) wrapError(err error) error {
 	if len(trace) > 0 {
 		sb.WriteString("\n\nstack trace:")
 		for _, entry := range trace {
-			sb.WriteString(fmt.Sprintf("\n  %s", entry))
+			fmt.Fprintf(&sb, "\n  %s", entry)
 		}
 	}
 
@@ -3798,7 +3798,7 @@ func (vm *VM) builtinAsyncLeave(args ...value.Value) value.Value {
 		return value.Failure(value.String("async.leave: not in a stay block"))
 	}
 
-	var leaveValue value.Value = value.MaybeNone()
+	leaveValue := value.MaybeNone()
 	if len(args) > 0 {
 		leaveValue = args[0]
 	}

@@ -170,7 +170,7 @@ func updateLockEntry(lock *LockFile, author, name, version, commit string) {
 	// Remove existing entry if present
 	newModules := make([]LockedModule, 0, len(lock.Modules)+1)
 	for _, m := range lock.Modules {
-		if !(m.Author == author && m.Name == name) {
+		if m.Author != author || m.Name != name {
 			newModules = append(newModules, m)
 		}
 	}

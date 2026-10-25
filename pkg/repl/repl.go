@@ -92,19 +92,19 @@ func formatREPLParseErrors(errors []string, useColor bool) string {
 			sb.WriteString("\n\n")
 		}
 		if useColor {
-			sb.WriteString(fmt.Sprintf("%s<repl>:%s error%s\n%s",
-				colorBold+colorCyan, colorRed, colorReset, e))
+			fmt.Fprintf(&sb, "%s<repl>:%s error%s\n%s",
+				colorBold+colorCyan, colorRed, colorReset, e)
 		} else {
-			sb.WriteString(fmt.Sprintf("<repl>: error\n%s", e))
+			fmt.Fprintf(&sb, "<repl>: error\n%s", e)
 		}
 	}
 	if len(errors) > 1 {
 		sb.WriteString("\n\n")
 		if useColor {
-			sb.WriteString(fmt.Sprintf("%serror: aborting due to %d previous errors%s",
-				colorBold+colorRed, len(errors), colorReset))
+			fmt.Fprintf(&sb, "%serror: aborting due to %d previous errors%s",
+				colorBold+colorRed, len(errors), colorReset)
 		} else {
-			sb.WriteString(fmt.Sprintf("error: aborting due to %d previous errors", len(errors)))
+			fmt.Fprintf(&sb, "error: aborting due to %d previous errors", len(errors))
 		}
 	}
 	return sb.String()

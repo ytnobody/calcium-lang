@@ -54,10 +54,10 @@ func formatParseErrors(filename string, errors []string, useColor bool) string {
 			sb.WriteString("\n\n")
 		}
 		if useColor {
-			sb.WriteString(fmt.Sprintf("%s%s%s:%s error%s\n%s",
-				colorBold, colorCyan, filename, colorRed, colorReset, e))
+			fmt.Fprintf(&sb, "%s%s%s:%s error%s\n%s",
+				colorBold, colorCyan, filename, colorRed, colorReset, e)
 		} else {
-			sb.WriteString(fmt.Sprintf("%s: error\n%s", filename, e))
+			fmt.Fprintf(&sb, "%s: error\n%s", filename, e)
 		}
 	}
 
@@ -65,10 +65,10 @@ func formatParseErrors(filename string, errors []string, useColor bool) string {
 	if len(errors) > 1 {
 		sb.WriteString("\n\n")
 		if useColor {
-			sb.WriteString(fmt.Sprintf("%s%serror: aborting due to %d previous errors%s",
-				colorBold, colorRed, len(errors), colorReset))
+			fmt.Fprintf(&sb, "%s%serror: aborting due to %d previous errors%s",
+				colorBold, colorRed, len(errors), colorReset)
 		} else {
-			sb.WriteString(fmt.Sprintf("error: aborting due to %d previous errors", len(errors)))
+			fmt.Fprintf(&sb, "error: aborting due to %d previous errors", len(errors))
 		}
 	}
 
@@ -87,10 +87,10 @@ func formatCompileErrors(filename string, err error, useColor bool) string {
 			sb.WriteString("\n\n")
 		}
 		if useColor {
-			sb.WriteString(fmt.Sprintf("%s%s%s:%s error%s\n%s",
-				colorBold, colorCyan, filename, colorRed, colorReset, part))
+			fmt.Fprintf(&sb, "%s%s%s:%s error%s\n%s",
+				colorBold, colorCyan, filename, colorRed, colorReset, part)
 		} else {
-			sb.WriteString(fmt.Sprintf("%s: error\n%s", filename, part))
+			fmt.Fprintf(&sb, "%s: error\n%s", filename, part)
 		}
 	}
 	return sb.String()

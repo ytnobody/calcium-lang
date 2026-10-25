@@ -130,6 +130,7 @@ const (
 	OpSecretWithBegin       // Pop capability and activate it
 	OpSecretWithEnd         // Deactivate the current capability
 	OpCheckSecretCapability // Check active capability for sink name (2-byte constant index)
+	OpAllowSecretCall       // Authorize the immediately following call to receive Secrets
 )
 
 // Definition describes an opcode
@@ -244,6 +245,7 @@ var definitions = map[OpCode]*Definition{
 	OpSecretWithBegin:       {"OpSecretWithBegin", []int{}},        // Pop capability and activate it
 	OpSecretWithEnd:         {"OpSecretWithEnd", []int{}},          // Deactivate the current capability
 	OpCheckSecretCapability: {"OpCheckSecretCapability", []int{2}}, // 2-byte sink name constant index
+	OpAllowSecretCall:       {"OpAllowSecretCall", []int{}},        // authorize the next call
 }
 
 // Lookup returns the definition for an opcode

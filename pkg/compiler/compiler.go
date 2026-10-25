@@ -1298,6 +1298,9 @@ func (c *Compiler) Compile(node ast.Node) error {
 					if len(node.Arguments) != 2 {
 						return c.newCompileError(node.Token, "Secret.map expects exactly 2 arguments")
 					}
+					if isEffect, known := c.isEffectExpression(node.Arguments[1]); known && isEffect {
+						return c.newCompileError(node.Token, "Secret.map callback must be a pure function")
+					}
 					if err := c.Compile(node.Arguments[0]); err != nil {
 						return err
 					}
@@ -1541,6 +1544,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		if node.AllowSecret {
 			sinkName := c.secretSinkName(node.Right)
 			c.emit(bytecode.OpCheckSecretCapability, c.addConstant(value.String(sinkName)))
+			c.emit(bytecode.OpAllowSecretCall)
 		}
 
 		// Just call normally - func! already wraps return in success

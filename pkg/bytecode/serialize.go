@@ -15,7 +15,7 @@ import (
 const (
 	MagicNumber   = "CALB" // CALcium Bytecode
 	VersionMajor  = 1
-	VersionMinor  = 0
+	VersionMinor  = 1
 	FileExtension = ".bone"
 )
 
@@ -115,7 +115,7 @@ func Deserialize(data []byte) (*CompiledBytecode, error) {
 	// Read constants
 	constants := make([]value.Value, numConstants)
 	for i := uint32(0); i < numConstants; i++ {
-		c, err := deserializeConstant(buf)
+		c, err := deserializeConstant(buf, vMinor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to deserialize constant %d: %w", i, err)
 		}
@@ -207,7 +207,7 @@ func serializeConstant(w *bytes.Buffer, v value.Value) error {
 	}
 }
 
-func deserializeConstant(r *bytes.Reader) (value.Value, error) {
+func deserializeConstant(r *bytes.Reader, versionMinor byte) (value.Value, error) {
 	tag, err := r.ReadByte()
 	if err != nil {
 		return value.Invalid(), err
@@ -247,7 +247,7 @@ func deserializeConstant(r *bytes.Reader) (value.Value, error) {
 		return value.String(s), nil
 
 	case TypeTagFunction:
-		fn, err := deserializeFunction(r)
+		fn, err := deserializeFunction(r, versionMinor)
 		if err != nil {
 			return value.Invalid(), err
 		}
@@ -275,7 +275,7 @@ func deserializeConstant(r *bytes.Reader) (value.Value, error) {
 		}
 		values := make([]value.Value, numValues)
 		for i := uint32(0); i < numValues; i++ {
-			v, err := deserializeConstant(r)
+			v, err := deserializeConstant(r, versionMinor)
 			if err != nil {
 				return value.Invalid(), err
 			}
@@ -291,6 +291,12 @@ func deserializeConstant(r *bytes.Reader) (value.Value, error) {
 func serializeFunction(w *bytes.Buffer, fn *value.Function) error {
 	// Name
 	if err := writeString(w, fn.Name); err != nil {
+		return err
+	}
+
+	// Module identity (used by the Secret runtime policy and future module
+	// provenance checks).
+	if err := writeString(w, fn.ModuleID); err != nil {
 		return err
 	}
 
@@ -331,7 +337,7 @@ func serializeFunction(w *bytes.Buffer, fn *value.Function) error {
 	return nil
 }
 
-func deserializeFunction(r *bytes.Reader) (*value.Function, error) {
+func deserializeFunction(r *bytes.Reader, versionMinor byte) (*value.Function, error) {
 	fn := &value.Function{}
 
 	// Name
@@ -340,6 +346,15 @@ func deserializeFunction(r *bytes.Reader) (*value.Function, error) {
 		return nil, err
 	}
 	fn.Name = name
+
+	// Module identity (bytecode format 1.1+)
+	if versionMinor >= 1 {
+		moduleID, err := readString(r)
+		if err != nil {
+			return nil, err
+		}
+		fn.ModuleID = moduleID
+	}
 
 	// Parameters
 	numParams, err := readUint32(r)

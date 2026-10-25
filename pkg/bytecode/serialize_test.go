@@ -143,6 +143,7 @@ func TestSerializeDeserializeADT(t *testing.T) {
 func TestSerializeDeserializeFunction(t *testing.T) {
 	fn := &value.Function{
 		Name:       "testFunc",
+		ModuleID:   "ytnobody/test@1.2.0",
 		Parameters: []string{"a", "b", "c"},
 		NumLocals:  5,
 		IsEffect:   true,
@@ -179,6 +180,9 @@ func TestSerializeDeserializeFunction(t *testing.T) {
 	fn2 := cb2.Constants[0].AsFunction()
 	if fn2.Name != "testFunc" {
 		t.Errorf("Expected name 'testFunc', got %q", fn2.Name)
+	}
+	if fn2.ModuleID != "ytnobody/test@1.2.0" {
+		t.Errorf("Expected ModuleID to round-trip, got %q", fn2.ModuleID)
 	}
 	if len(fn2.Parameters) != 3 {
 		t.Errorf("Expected 3 parameters, got %d", len(fn2.Parameters))

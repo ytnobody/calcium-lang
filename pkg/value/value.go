@@ -809,7 +809,8 @@ func (v Value) Equals(other Value) bool {
 		}
 		return true
 	case TYPE_SECRET:
-		return v.AsSecret().Value.Equals(other.AsSecret().Value)
+		// Do not compare payloads: equality probing would leak Secret contents.
+		return v.AsSecret() == other.AsSecret()
 	case TYPE_SECRET_CAPABILITY:
 		a1, a2 := v.AsSecretCapability(), other.AsSecretCapability()
 		return a1.Sink == a2.Sink && a1.Scope.Equals(a2.Scope)

@@ -2000,6 +2000,7 @@ func TestSecretRuntimeBoundaryBackstop(t *testing.T) {
 	runVmErrorTests(t, []string{
 		`func! leak(x) = x; func hide(s) = s; hidden = hide(Secret.wrap("x")); leak(hidden);`,
 		`use core.io!; Secret.map(Secret.wrap("SECRET"), x => io.println(x));`,
+		`use core.io!; Secret.map(Secret.wrap("TOP-SECRET"), x => map([x], io.println));`,
 	})
 }
 

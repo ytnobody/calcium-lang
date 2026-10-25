@@ -349,10 +349,14 @@ func parseRunArgs(args []string) runArgs {
 		case arg == "--cached-only":
 			result.cachedOnly = true
 		case strings.HasPrefix(arg, "--allow-secret-write="):
-			result.allowSecretWrite = append(result.allowSecretWrite, strings.TrimPrefix(arg, "--allow-secret-write="))
+			if value := strings.TrimPrefix(arg, "--allow-secret-write="); value != "" {
+				result.allowSecretWrite = append(result.allowSecretWrite, value)
+			}
 		case arg == "--allow-secret-write" && i+1 < len(args):
 			i++
-			result.allowSecretWrite = append(result.allowSecretWrite, args[i])
+			if args[i] != "" {
+				result.allowSecretWrite = append(result.allowSecretWrite, args[i])
+			}
 		case strings.HasPrefix(arg, "--import-map="):
 			result.importMap = strings.TrimPrefix(arg, "--import-map=")
 		case arg == "--import-map" && i+1 < len(args):

@@ -865,12 +865,10 @@ func primitiveHttpPostSecret(args ...value.Value) value.Value {
 	body := payload.AsString()
 	contentType := args[3].AsString()
 	headers := hashToStringMap(args[4].AsHash())
-	if headers == nil {
-		headers = make(map[string]string)
-	}
-	headers["Content-Type"] = contentType
+	setHeaderCaseInsensitive(headers, "Content-Type", contentType)
 
-	return doHttpRequestWithBody("POST", url, headers, body)
+	resp := doHttpRequestWithBody("POST", url, headers, body)
+	return redactSecretHTTPResponse(resp)
 }
 
 // __http_post performs a POST request
@@ -1082,6 +1080,30 @@ func buildHttpResponse(resp *http.Response) value.Value {
 }
 
 // hashToStringMap converts a Calcium hash to a Go string map
+func setHeaderCaseInsensitive(headers map[string]string, name, value string) {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			delete(headers, key)
+		}
+	}
+	headers[name] = value
+}
+
+// redactSecretHTTPResponse drops response fields that could echo the Secret
+// body back into Calcium code.
+func redactSecretHTTPResponse(resp value.Value) value.Value {
+	if resp.Type != value.TYPE_HASH {
+		return resp
+	}
+	result := value.NewHash()
+	for _, key := range []string{"status", "status_text", "ok"} {
+		if v, ok := resp.AsHash().Get(value.String(key)); ok {
+			result.Set(value.String(key), v)
+		}
+	}
+	return value.HashVal(result)
+}
+
 func hashToStringMap(h *value.Hash) map[string]string {
 	result := make(map[string]string)
 	for _, pair := range h.Pairs {

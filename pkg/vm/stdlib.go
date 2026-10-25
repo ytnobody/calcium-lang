@@ -94,6 +94,8 @@ func (vm *VM) LoadStdlibModule(moduleName string) (*value.Module, error) {
 
 	// Create a new VM to execute the module
 	moduleVM := New(comp.Constants())
+	moduleVM.SetMainModuleID(moduleName)
+	moduleVM.secretWriteAllowed = vm.secretWriteAllowed
 
 	// Register primitives as builtins in the VM (in same sorted order)
 	primitiveBuiltins := make([]*value.Builtin, 0, len(primitives))
@@ -281,6 +283,8 @@ func (vm *VM) LoadExternalModule(moduleName string) (*value.Module, error) {
 
 	// Create a new VM to execute the module
 	moduleVM := New(comp.Constants())
+	moduleVM.SetMainModuleID(foundPath)
+	moduleVM.secretWriteAllowed = vm.secretWriteAllowed
 	moduleVM.sourcePath = filepath.Dir(foundPath) // Set source path for nested module loading
 
 	// Register primitives as builtins in the VM (in same sorted order)
@@ -497,6 +501,8 @@ func (vm *VM) compileAndCacheRemoteModule(cacheKey string, content []byte, cache
 
 	// Create a new VM to execute the module
 	moduleVM := New(comp.Constants())
+	moduleVM.SetMainModuleID(cacheKey)
+	moduleVM.secretWriteAllowed = vm.secretWriteAllowed
 	moduleVM.sourcePath = cacheDir // Set source path for nested module loading
 
 	// Register primitives as builtins in the VM (in same sorted order)

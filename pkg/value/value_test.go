@@ -500,6 +500,17 @@ func TestEquals(t *testing.T) {
 }
 
 // Test Value.String()
+func TestSecretEqualityDoesNotProbePayload(t *testing.T) {
+	a := SecretVal(String("token"))
+	b := SecretVal(String("token"))
+	if a.Equals(b) {
+		t.Error("distinct Secret wrappers must not compare equal by payload")
+	}
+	if !a.Equals(a) {
+		t.Error("the same Secret wrapper should compare equal to itself")
+	}
+}
+
 func TestValueString(t *testing.T) {
 	tests := []struct {
 		val  Value

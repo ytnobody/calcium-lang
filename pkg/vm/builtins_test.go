@@ -2296,9 +2296,8 @@ func TestHttpPostSecretTrustedSink(t *testing.T) {
 		t.Fatalf("expected response hash, got %s: %s", result.Type, result.String())
 	}
 	resp := result.AsHash()
-	body, ok := resp.Get(value.String("body"))
-	if !ok || body.AsString() != "SECRET-BODY" {
-		t.Errorf("expected echoed secret body, got %v", body)
+	if _, ok := resp.Get(value.String("body")); ok {
+		t.Error("secret response body must not be returned to Calcium code")
 	}
 }
 

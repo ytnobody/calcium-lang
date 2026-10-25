@@ -42,9 +42,10 @@ type StayLoop struct {
 
 // Frame represents a call frame
 type Frame struct {
-	cl          *value.Closure // The closure being executed (contains fn + free vars)
-	ip          int            // instruction pointer
-	basePointer int            // base pointer for local variables
+	cl            *value.Closure // The closure being executed (contains fn + free vars)
+	ip            int            // instruction pointer
+	basePointer   int            // base pointer for local variables
+	secretCapBase int            // Secret capability depth at frame entry
 }
 
 // NewFrame creates a new call frame
@@ -58,6 +59,25 @@ func (vm *VM) SetSecretWritePolicy(modules []string) {
 			vm.secretWriteAllowed[m] = true
 		}
 	}
+}
+
+// isModuleAllowed matches canonical module IDs and project-relative allowlist
+// entries such as "./lib/auth.ca".
+func (vm *VM) isModuleAllowed(moduleID string) bool {
+	if vm.secretWriteAllowed[moduleID] {
+		return true
+	}
+	cleanID := strings.TrimPrefix(moduleID, "./")
+	for allowed := range vm.secretWriteAllowed {
+		cleanAllowed := strings.TrimPrefix(allowed, "./")
+		if cleanAllowed == "" {
+			continue
+		}
+		if cleanID == cleanAllowed || strings.HasSuffix(cleanID, "/"+cleanAllowed) {
+			return true
+		}
+	}
+	return false
 }
 
 func (vm *VM) initSecretPolicy() {
@@ -119,6 +139,7 @@ type VM struct {
 	secretWriteAllowed map[string]bool
 	secretCallAllowed  bool
 	secretTaintDepth   int
+	mainModuleID       string
 
 	stack []value.Value
 	sp    int // Stack pointer: always points to next free slot
@@ -200,6 +221,13 @@ func (vm *VM) GetRunOptions() *RunOptions {
 }
 
 // New creates a new VM
+// SetMainModuleID sets the module identity used for top-level code executed by
+// Run. Module loaders use this so file-scope code is attributed to the module,
+// not to the entry program.
+func (vm *VM) SetMainModuleID(moduleID string) {
+	vm.mainModuleID = moduleID
+}
+
 func New(constants []value.Value) *VM {
 	mainFn := &value.Function{
 		Name:      "<main>",
@@ -214,13 +242,14 @@ func New(constants []value.Value) *VM {
 	frames[0] = mainFrame
 
 	vm := &VM{
-		constants:   constants,
-		globals:     make([]value.Value, GlobalsSize),
-		stack:       make([]value.Value, StackSize),
-		sp:          0,
-		frames:      frames,
-		framesIndex: 1,
-		modules:     make(map[string]*value.Module),
+		constants:    constants,
+		globals:      make([]value.Value, GlobalsSize),
+		stack:        make([]value.Value, StackSize),
+		sp:           0,
+		frames:       frames,
+		framesIndex:  1,
+		modules:      make(map[string]*value.Module),
+		mainModuleID: "entry",
 	}
 
 	vm.initBuiltins()
@@ -265,6 +294,8 @@ func (vm *VM) CloneForSpawn() *VM {
 		sourcePath:         vm.sourcePath,
 		runOptions:         vm.runOptions,
 		secretWriteAllowed: vm.secretWriteAllowed,
+		secretCaps:         append([]value.Value(nil), vm.secretCaps...),
+		mainModuleID:       vm.mainModuleID,
 	}
 
 	return clone
@@ -285,13 +316,14 @@ func NewForREPL(constants []value.Value, globals []value.Value) *VM {
 	frames[0] = mainFrame
 
 	vm := &VM{
-		constants:   constants,
-		globals:     globals,
-		stack:       make([]value.Value, StackSize),
-		sp:          0,
-		frames:      frames,
-		framesIndex: 1,
-		modules:     make(map[string]*value.Module),
+		constants:    constants,
+		globals:      globals,
+		stack:        make([]value.Value, StackSize),
+		sp:           0,
+		frames:       frames,
+		framesIndex:  1,
+		modules:      make(map[string]*value.Module),
+		mainModuleID: "entry",
 	}
 
 	vm.initBuiltins()
@@ -429,13 +461,18 @@ func (vm *VM) currentFrame() *Frame {
 }
 
 func (vm *VM) pushFrame(f *Frame) {
+	f.secretCapBase = len(vm.secretCaps)
 	vm.frames[vm.framesIndex] = f
 	vm.framesIndex++
 }
 
 func (vm *VM) popFrame() *Frame {
 	vm.framesIndex--
-	return vm.frames[vm.framesIndex]
+	f := vm.frames[vm.framesIndex]
+	if len(vm.secretCaps) > f.secretCapBase {
+		vm.secretCaps = vm.secretCaps[:f.secretCapBase]
+	}
+	return f
 }
 
 // Run executes the bytecode
@@ -443,12 +480,14 @@ func (vm *VM) Run(instructions bytecode.Instructions) error {
 	// Set up main frame with these instructions
 	mainFn := &value.Function{
 		Name:      "<main>",
+		ModuleID:  vm.mainModuleID,
 		Body:      instructions,
 		NumLocals: 0,
 		SourceMap: vm.sourceMap,
 	}
 	mainClosure := &value.Closure{Fn: mainFn}
 	vm.frames[0] = NewFrame(mainClosure, 0)
+	vm.frames[0].secretCapBase = 0
 
 	for vm.currentFrame().ip < len(vm.currentFrame().Instructions())-1 {
 		vm.currentFrame().ip++
@@ -841,7 +880,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 	case bytecode.OpSecretCapability:
 		moduleID := vm.currentFrame().cl.Fn.ModuleID
 		if moduleID == "" {
-			moduleID = "entry"
+			moduleID = "<unknown>"
 		}
 		if moduleID != "entry" {
 			return fmt.Errorf("Secret.capability: only the entry module may create capabilities, got %q", moduleID)
@@ -884,9 +923,9 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		}
 		moduleID := vm.currentFrame().cl.Fn.ModuleID
 		if moduleID == "" {
-			moduleID = "entry"
+			moduleID = "<unknown>"
 		}
-		if !vm.secretWriteAllowed[moduleID] {
+		if !vm.isModuleAllowed(moduleID) {
 			return fmt.Errorf("module %q is not allowed to write secrets", moduleID)
 		}
 
@@ -1607,6 +1646,19 @@ func (vm *VM) executeComparison(op bytecode.OpCode) error {
 	return vm.push(value.Bool(result))
 }
 
+type secretBoundaryError struct{ msg string }
+
+func (e *secretBoundaryError) Error() string { return e.msg }
+
+func newSecretBoundaryError(format string, args ...interface{}) error {
+	return &secretBoundaryError{msg: fmt.Sprintf(format, args...)}
+}
+
+func isSecretBoundaryError(err error) bool {
+	_, ok := err.(*secretBoundaryError)
+	return ok
+}
+
 var effectBuiltinNames = map[string]bool{
 	"print": true, "println": true, "say": true,
 	"read_file": true, "write_file": true, "list_dir": true, "mkdir": true,
@@ -1654,7 +1706,7 @@ func (vm *VM) checkSecretCallBoundary(callee value.Value, numArgs int) error {
 	// Runtime Secret backstop. While executing a Secret.map callback, the
 	// callback receives the raw payload and must remain pure.
 	if vm.secretTaintDepth > 0 && vm.isEffectValue(callee) {
-		return fmt.Errorf("Secret.map callback must be pure: effect %s called while Secret is tainted", vm.effectValueName(callee))
+		return newSecretBoundaryError("Secret.map callback must be pure: effect %s called while Secret is tainted", vm.effectValueName(callee))
 	}
 	if vm.secretCallAllowed {
 		vm.secretCallAllowed = false
@@ -1663,7 +1715,7 @@ func (vm *VM) checkSecretCallBoundary(callee value.Value, numArgs int) error {
 	if vm.isEffectValue(callee) {
 		for i := 0; i < numArgs; i++ {
 			if containsSecret(vm.stack[vm.sp-numArgs+i]) {
-				return fmt.Errorf("Secret cannot be passed to effect %s without !!!> authorization", vm.effectValueName(callee))
+				return newSecretBoundaryError("Secret cannot be passed to effect %s without !!!> authorization", vm.effectValueName(callee))
 			}
 		}
 	}
@@ -1956,6 +2008,9 @@ func (vm *VM) executeMap(args []value.Value) error {
 		result, err := vm.callValueSync(fn, []value.Value{elem})
 		if err != nil {
 			vm.sp = vm.sp - len(args) - 1
+			if isSecretBoundaryError(err) {
+				return err
+			}
 			return vm.push(value.Failure(value.String(fmt.Sprintf("map: %v", err))))
 		}
 		results[i] = result
@@ -1991,6 +2046,9 @@ func (vm *VM) executeFilter(args []value.Value) error {
 		result, err := vm.callValueSync(fn, []value.Value{elem})
 		if err != nil {
 			vm.sp = vm.sp - len(args) - 1
+			if isSecretBoundaryError(err) {
+				return err
+			}
 			return vm.push(value.Failure(value.String(fmt.Sprintf("filter: %v", err))))
 		}
 		if result.IsTruthy() {
@@ -2041,6 +2099,16 @@ func (vm *VM) executeReduce(args []value.Value) error {
 
 // callValueSync calls a function or builtin synchronously and returns the result
 func (vm *VM) callValueSync(callee value.Value, args []value.Value) (value.Value, error) {
+	if vm.secretTaintDepth > 0 && vm.isEffectValue(callee) {
+		return value.Invalid(), newSecretBoundaryError("Secret.map callback must be pure: effect %s called while Secret is tainted", vm.effectValueName(callee))
+	}
+	if vm.isEffectValue(callee) {
+		for _, arg := range args {
+			if containsSecret(arg) {
+				return value.Invalid(), newSecretBoundaryError("Secret cannot be passed to effect %s without !!!> authorization", vm.effectValueName(callee))
+			}
+		}
+	}
 	switch callee.Type {
 	case value.TYPE_CLOSURE:
 		return vm.callClosureSync(callee.AsClosure(), args)
@@ -2080,6 +2148,9 @@ func (vm *VM) callPartialBuiltinSync(name string, args []value.Value) (value.Val
 		for i, elem := range elements {
 			result, err := vm.callValueSync(fn, []value.Value{elem})
 			if err != nil {
+				if isSecretBoundaryError(err) {
+					return value.Invalid(), err
+				}
 				return value.Failure(value.String(fmt.Sprintf("map: %v", err))), nil
 			}
 			results[i] = result
@@ -2099,6 +2170,9 @@ func (vm *VM) callPartialBuiltinSync(name string, args []value.Value) (value.Val
 		for _, elem := range elements {
 			result, err := vm.callValueSync(fn, []value.Value{elem})
 			if err != nil {
+				if isSecretBoundaryError(err) {
+					return value.Invalid(), err
+				}
 				return value.Failure(value.String(fmt.Sprintf("filter: %v", err))), nil
 			}
 			if result.IsTruthy() {

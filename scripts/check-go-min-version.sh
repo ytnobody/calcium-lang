@@ -3,7 +3,7 @@
 # requires.
 #
 # Usage: check-go-min-version.sh <running-go-version>
-# Example: check-go-min-version.sh 1.22
+# Example: check-go-min-version.sh 1.26
 
 set -e
 
@@ -27,7 +27,7 @@ if [[ -z "$REQ" ]]; then
   exit 0
 fi
 
-# Compare major.minor only (1.22.0 == 1.22) using the setup-go short form.
+# Compare major.minor only (1.26.0 == 1.26) using the setup-go short form.
 majmin() { echo "$1" | cut -d. -f1-2; }
 REQ_MM=$(majmin "$REQ")
 CUR_MM=$(majmin "$CUR")

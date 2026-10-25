@@ -1064,6 +1064,40 @@ func primitiveTomlParse(args ...value.Value) value.Value {
 	return value.Success(goValueToCalcium(data))
 }
 
+// containsSecret reports whether a value contains a Secret anywhere in its
+// structure. It is used by serializers that must reject secrets by default.
+func containsSecret(v value.Value) bool {
+	switch v.Type {
+	case value.TYPE_SECRET, value.TYPE_SECRET_CAPABILITY:
+		return true
+	case value.TYPE_ARRAY:
+		for _, elem := range v.AsArray() {
+			if containsSecret(elem) {
+				return true
+			}
+		}
+	case value.TYPE_TUPLE:
+		for _, elem := range v.AsTuple() {
+			if containsSecret(elem) {
+				return true
+			}
+		}
+	case value.TYPE_HASH:
+		for _, pair := range v.AsHash().Pairs {
+			if containsSecret(pair.Key) || containsSecret(pair.Value) {
+				return true
+			}
+		}
+	case value.TYPE_ADT:
+		for _, elem := range v.AsADT().Values {
+			if containsSecret(elem) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // __toml_stringify converts a hash to TOML string
 func primitiveTomlStringify(args ...value.Value) value.Value {
 	if len(args) != 1 {
@@ -1071,6 +1105,9 @@ func primitiveTomlStringify(args ...value.Value) value.Value {
 	}
 	if args[0].Type != value.TYPE_HASH {
 		return value.Failure(value.String("__toml_stringify: argument must be hash"))
+	}
+	if containsSecret(args[0]) {
+		return value.Failure(value.String("__toml_stringify: cannot serialize Secret"))
 	}
 
 	goVal := calciumValueToGo(args[0])

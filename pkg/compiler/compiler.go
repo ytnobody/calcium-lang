@@ -1526,6 +1526,45 @@ func (c *Compiler) Compile(node ast.Node) error {
 				"'!!!>' requires an active Secret.with(cap) scope")
 		}
 
+		// Pipe input becomes the first argument, including for calls:
+		// x !> f(y) -> f(x, y)
+		if call, ok := node.Right.(*ast.CallExpression); ok {
+			if !node.AllowSecret && !c.allowSecretArgs {
+				for _, arg := range call.Arguments {
+					if c.isSecretExpr(arg) {
+						return c.newCompileError(node.Token,
+							"Secret cannot be passed to '!>'; use the secret-authorized '!!!>' pipeline")
+					}
+				}
+			}
+
+			prevAllow := c.allowSecretArgs
+			c.allowSecretArgs = c.allowSecretArgs || node.AllowSecret
+			err := c.Compile(call.Function)
+			if err == nil {
+				err = c.Compile(node.Left)
+			}
+			if err == nil {
+				for _, arg := range call.Arguments {
+					if err = c.Compile(arg); err != nil {
+						break
+					}
+				}
+			}
+			c.allowSecretArgs = prevAllow
+			if err != nil {
+				return err
+			}
+
+			if node.AllowSecret {
+				sinkName := c.secretSinkName(call.Function)
+				c.emit(bytecode.OpCheckSecretCapability, c.addConstant(value.String(sinkName)))
+				c.emit(bytecode.OpAllowSecretCall)
+			}
+			c.emit(bytecode.OpCall, 1+len(call.Arguments))
+			return nil
+		}
+
 		// Compile the right side (effect function) first
 		prevAllow := c.allowSecretArgs
 		c.allowSecretArgs = c.allowSecretArgs || node.AllowSecret

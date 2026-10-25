@@ -873,6 +873,37 @@ func TestCompileEffectPipeWithPureFunction(t *testing.T) {
 	}
 }
 
+func TestCompileSecretEffectBoundary(t *testing.T) {
+	// Secret cannot be passed to a normal effect pipeline.
+	input := `func! sink(x) = x; s = Secret.wrap("x"); s !> sink;`
+	_, err := compileSource(input)
+	if err == nil {
+		t.Fatal("expected compile error for Secret in !>")
+	}
+	if !strings.Contains(err.Error(), "Secret cannot be passed") {
+		t.Errorf("unexpected error: %s", err)
+	}
+}
+
+func TestCompileSecretPipelineAllowed(t *testing.T) {
+	// !!!> explicitly authorizes the secret boundary.
+	input := `func! sink(x) = x; s = Secret.wrap("x"); s !!!> sink;`
+	if _, err := compileSource(input); err != nil {
+		t.Fatalf("expected !!!> to compile, got: %s", err)
+	}
+}
+
+func TestCompileSecretDirectEffectCallRejected(t *testing.T) {
+	input := `func! sink(x) = x; sink(Secret.wrap("x"));`
+	_, err := compileSource(input)
+	if err == nil {
+		t.Fatal("expected compile error for Secret argument to effect")
+	}
+	if !strings.Contains(err.Error(), "Secret cannot be passed") {
+		t.Errorf("unexpected error: %s", err)
+	}
+}
+
 func TestCompilePipeWithEffectFunction(t *testing.T) {
 	// Using |> with an effect function should produce error
 	input := `func! effect(x) = x; 5 |> effect;`

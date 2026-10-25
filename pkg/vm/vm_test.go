@@ -1976,6 +1976,17 @@ func runVmExpr(t *testing.T, input string) value.Value {
 	return machine.LastPoppedStackElem()
 }
 
+func TestSecretValues(t *testing.T) {
+	tests := []vmTestCase{
+		{input: `to_string(Secret.wrap("token"));`, expected: "<secret>"},
+		{input: `to_string([Secret.wrap("token"), "public"]);`, expected: "[<secret>, public]"},
+		{input: `to_string({auth: Secret.wrap("token")});`, expected: "{auth: <secret>}"},
+		{input: `to_string(Secret.map(Secret.wrap("token"), s => concat("x-", s)));`, expected: "<secret>"},
+		{input: `func! id(x) = x; to_string(Secret.wrap("token") !!!> id);`, expected: "success(<secret>)"},
+	}
+	runVmTests(t, tests)
+}
+
 func TestBuiltinMaybe(t *testing.T) {
 	tests := []vmTestCase{
 		{input: `match Maybe.Some(42) Maybe.Some(v) => v Maybe.None => 0;`, expected: int64(42)},

@@ -250,7 +250,11 @@ func (f *Formatter) formatExpression(expr ast.Expression) string {
 	case *ast.PipeExpression:
 		return f.formatExpression(e.Left) + " |> " + f.formatExpression(e.Right)
 	case *ast.EffectPipeExpression:
-		return f.formatExpression(e.Left) + " !> " + f.formatExpression(e.Right)
+		op := " !> "
+		if e.AllowSecret {
+			op = " !!!> "
+		}
+		return f.formatExpression(e.Left) + op + f.formatExpression(e.Right)
 	case *ast.ErrorPropPipeExpression:
 		return f.formatExpression(e.Left) + " |>? " + f.formatExpression(e.Right)
 	case *ast.SpreadExpression:

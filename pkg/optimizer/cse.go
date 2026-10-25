@@ -216,9 +216,10 @@ func (o *CSEOptimizer) optimizeSubExprs(expr ast.Expression) ast.Expression {
 
 	case *ast.EffectPipeExpression:
 		return &ast.EffectPipeExpression{
-			Token: e.Token,
-			Left:  o.optimizeExpr(e.Left),
-			Right: o.optimizeExpr(e.Right),
+			Token:       e.Token,
+			Left:        o.optimizeExpr(e.Left),
+			Right:       o.optimizeExpr(e.Right),
+			AllowSecret: e.AllowSecret,
 		}
 
 	case *ast.MatchExpression:

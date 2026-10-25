@@ -102,7 +102,12 @@ func (l *Lexer) NextToken() token.Token {
 	case '%':
 		tok = newToken(token.PERCENT, l.ch, tok.Line, tok.Column)
 	case '!':
-		if l.peekChar() == '=' {
+		if l.peekChar() == '!' && l.peekCharN(2) == '!' && l.peekCharN(3) == '>' {
+			l.readChar()
+			l.readChar()
+			l.readChar()
+			tok = token.Token{Type: token.SECRET_PIPE, Literal: "!!!>", Line: tok.Line, Column: tok.Column}
+		} else if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
 			tok = token.Token{Type: token.NOT_EQ, Literal: string(ch) + string(l.ch), Line: tok.Line, Column: tok.Column}

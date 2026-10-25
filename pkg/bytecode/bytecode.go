@@ -122,6 +122,10 @@ const (
 
 	// Regex match
 	OpRegexMatch // left ~ right: match string against regex
+
+	// Secret operations
+	OpSecretWrap // Pop value, push Secret(value)
+	OpSecretMap  // Pop fn and Secret, call fn(secret value), push Secret(result)
 )
 
 // Definition describes an opcode
@@ -228,6 +232,10 @@ var definitions = map[OpCode]*Definition{
 
 	// Regex match
 	OpRegexMatch: {"OpRegexMatch", []int{}}, // No operands: pops regex (TOS) and string (TOS-1), pushes bool
+
+	// Secret operations
+	OpSecretWrap: {"OpSecretWrap", []int{}}, // Pop value, push Secret(value)
+	OpSecretMap:  {"OpSecretMap", []int{}},  // Pop fn and Secret, push Secret(fn(value))
 }
 
 // Lookup returns the definition for an opcode

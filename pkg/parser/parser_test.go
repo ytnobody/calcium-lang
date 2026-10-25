@@ -1513,6 +1513,23 @@ func TestEffectPipeExpression(t *testing.T) {
 	}
 }
 
+func TestSecretPipeExpression(t *testing.T) {
+	input := `x !!!> save;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	pipe, ok := stmt.Expression.(*ast.EffectPipeExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.EffectPipeExpression. got=%T", stmt.Expression)
+	}
+	if !pipe.AllowSecret {
+		t.Error("expected AllowSecret=true for !!!>")
+	}
+}
+
 func TestConstraintCheckExpression(t *testing.T) {
 	input := `x?;`
 	l := lexer.New(input)

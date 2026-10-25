@@ -31,6 +31,7 @@ const (
 	TYPE_HANDLER            // Return value of async.expects
 	TYPE_EVENT_SOURCE       // Event source (stdin, timeout, interval, task.done)
 	TYPE_ADT                // Algebraic data type variant value
+	TYPE_SECRET             // Opaque secret value
 	TYPE_CHANNEL            // User-level message passing channel
 	TYPE_OVERLOADED_CLOSURE // Multiple function overloads with different signatures
 )
@@ -77,6 +78,8 @@ func (t Type) String() string {
 		return "event_source"
 	case TYPE_ADT:
 		return "adt"
+	case TYPE_SECRET:
+		return "secret"
 	case TYPE_CHANNEL:
 		return "channel"
 	case TYPE_OVERLOADED_CLOSURE:
@@ -247,6 +250,12 @@ type ADT struct {
 	TypeName string  // e.g., "Maybe", "Tree"
 	Tag      string  // e.g., "Some", "None"
 	Values   []Value // contained values
+}
+
+// Secret is an opaque value wrapper. Its payload must not be rendered,
+// serialized, or passed to ordinary effects.
+type Secret struct {
+	Value Value
 }
 
 // Channel represents a user-level message passing channel (created by async.channel)
@@ -484,6 +493,11 @@ func ADTVal(adt *ADT) Value {
 	return Value{Type: TYPE_ADT, Data: adt}
 }
 
+// SecretVal creates an opaque secret value.
+func SecretVal(v Value) Value {
+	return Value{Type: TYPE_SECRET, Data: &Secret{Value: v}}
+}
+
 // ChannelVal creates a channel value
 func ChannelVal(c *Channel) Value {
 	return Value{Type: TYPE_CHANNEL, Data: c}
@@ -635,6 +649,10 @@ func (v Value) AsRegex() *Regex {
 }
 
 // AsADT returns the ADT variant value
+func (v Value) AsSecret() *Secret {
+	return v.Data.(*Secret)
+}
+
 func (v Value) AsADT() *ADT {
 	return v.Data.(*ADT)
 }
@@ -770,6 +788,8 @@ func (v Value) Equals(other Value) bool {
 			}
 		}
 		return true
+	case TYPE_SECRET:
+		return v.AsSecret().Value.Equals(other.AsSecret().Value)
 	default:
 		return false
 	}
@@ -863,6 +883,8 @@ func (v Value) String() string {
 			statusStr = "cancelled"
 		}
 		return fmt.Sprintf("<handler %d:%s>", h.ID, statusStr)
+	case TYPE_SECRET:
+		return "<secret>"
 	case TYPE_ADT:
 		adt := v.AsADT()
 		if len(adt.Values) == 0 {

@@ -261,9 +261,10 @@ func foldPipeExpression(pe *ast.PipeExpression) *ast.PipeExpression {
 
 func foldEffectPipeExpression(ep *ast.EffectPipeExpression) *ast.EffectPipeExpression {
 	return &ast.EffectPipeExpression{
-		Token: ep.Token,
-		Left:  foldNode(ep.Left).(ast.Expression),
-		Right: foldNode(ep.Right).(ast.Expression),
+		Token:       ep.Token,
+		Left:        foldNode(ep.Left).(ast.Expression),
+		Right:       foldNode(ep.Right).(ast.Expression),
+		AllowSecret: ep.AllowSecret,
 	}
 }
 

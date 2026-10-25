@@ -371,9 +371,10 @@ func (pe *PipeExpression) TokenLiteral() string { return pe.Token.Literal }
 
 // EffectPipeExpression represents expr !> func!
 type EffectPipeExpression struct {
-	Token token.Token // the '!>' token
-	Left  Expression
-	Right Expression
+	Token       token.Token // the '!>' or '!!!>' token
+	Left        Expression
+	Right       Expression
+	AllowSecret bool // true for the secret-authorized '!!!>' pipeline
 }
 
 func (ep *EffectPipeExpression) expressionNode()      {}

@@ -148,8 +148,8 @@ The runtime must redact Secrets everywhere a value can be rendered:
 - String interpolation renders `"<secret>"`, never the underlying value.
 - Arrays/hashes containing Secrets render recursively redacted.
 - REPL output and runtime error messages never include the underlying value.
-- `json.stringify`, `toml.stringify`, and `dbi.quote` reject Secrets or emit a
-  redacted placeholder only when an explicit redacted mode is requested.
+- `json.stringify` and `toml.stringify` reject Secrets unconditionally; there is
+  no redacted-serialization mode yet.
 
 The following operations are rejected:
 
@@ -174,9 +174,8 @@ io.println(token);             // compile error: Secret passed to an effect
 {authorization: token} |> to_string;
 // {authorization: <secret>} (recursive redaction)
 
-json.stringify(token);         // rejected: Secret passed to an effect
-toml.stringify(token);         // rejected: Secret passed to an effect
-dbi.quote(token);              // rejected: Secret passed to an effect
+json.stringify(token);         // failure: cannot serialize Secret
+toml.stringify({token: token}); // failure: cannot serialize Secret
 
 token[0];                      // runtime error: indexing a Secret is rejected
 len(token);                    // failure: len is not supported for Secret
@@ -527,7 +526,7 @@ Secret.with(api_cap) {
 nested = [Secret.wrap(token), {password: Secret.wrap(pw)}];
 
 to_string(nested);        // "[<secret>, {password: <secret>}]"
-json.stringify(nested);   // rejected: contains a Secret
+json.stringify(nested);   // failure: cannot serialize Secret
 ```
 
 ## Error handling
@@ -618,13 +617,14 @@ Compile-time:
 - `secret !> io.println;` fails.
 - `secret !!!> io.println;` outside `Secret.with` fails.
 - `Secret` pattern matching fails.
-- `Secret` serialization (JSON/TOML) fails.
 - `!!!x` still parses as logical-not tokens.
 
 Runtime:
 
 - Redaction in `to_string`, interpolation, arrays, hashes, and errors; direct effect printing is rejected.
 - A capability that does not cover the sink is rejected.
+- `json.stringify` and `toml.stringify` return a catchable failure
+  (`cannot serialize Secret`).
 
 Representative cases:
 
@@ -644,7 +644,7 @@ Secret.with(api_cap) {
 
 // Redaction
 to_string(token);        // "<secret>"
-json.stringify(token);   // rejected
+json.stringify(token);   // failure: cannot serialize Secret
 ```
 
 - Authorized `Secret.with(cap) { secret !!!> sink; }` succeeds when module is

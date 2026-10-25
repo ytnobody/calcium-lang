@@ -6,10 +6,6 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore"
-    ignore:
-      - dependency-name: "github.com/peterh/liner"
-        versions:
-          - ">= 1.2.3"
 
   - package-ecosystem: "github-actions"
     directory: "/"

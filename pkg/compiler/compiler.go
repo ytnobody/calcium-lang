@@ -1271,6 +1271,10 @@ func (c *Compiler) Compile(node ast.Node) error {
 			if ident, ok := member.Object.(*ast.Identifier); ok && ident.Value == "Secret" {
 				switch member.Property.Value {
 				case "capability":
+					if c.moduleID != "" && c.moduleID != "entry" {
+						return c.newCompileError(node.Token,
+							"Secret.capability may only be called by the entry module")
+					}
 					if len(node.Arguments) != 2 {
 						return c.newCompileError(node.Token, "Secret.capability expects exactly 2 arguments (sink, scope)")
 					}

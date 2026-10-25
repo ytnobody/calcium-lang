@@ -893,6 +893,19 @@ func TestCompileSecretPipelineAllowed(t *testing.T) {
 	}
 }
 
+func TestCompileSecretCapabilityEntryOnly(t *testing.T) {
+	program := parse(`func! sink(x) = x; cap = Secret.capability(sink, {});`)
+	comp := New()
+	comp.SetModuleID("./lib/auth.ca")
+	err := comp.Compile(program)
+	if err == nil {
+		t.Fatal("expected compile error for capability creation in imported module")
+	}
+	if !strings.Contains(err.Error(), "entry module") {
+		t.Errorf("unexpected error: %s", err)
+	}
+}
+
 func TestCompileSecretPipelineRequiresScope(t *testing.T) {
 	input := `func! sink(x) = x; s = Secret.wrap("x"); s !!!> sink;`
 	_, err := compileSource(input)

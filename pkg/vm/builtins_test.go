@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/value"
@@ -2252,6 +2253,18 @@ func TestPrimitiveTypeOf(t *testing.T) {
 	result := primitiveTypeOf()
 	if result.Type != value.TYPE_FAILURE {
 		t.Error("expected failure for no args")
+	}
+}
+
+func TestTomlStringifyRejectsSecret(t *testing.T) {
+	h := value.NewHash()
+	h.Set(value.String("token"), value.SecretVal(value.String("token")))
+	result := primitiveTomlStringify(value.HashVal(h))
+	if result.Type != value.TYPE_FAILURE {
+		t.Fatalf("expected failure, got %s: %s", result.Type, result.String())
+	}
+	if !strings.Contains(result.AsFailure().AsString(), "Secret") {
+		t.Errorf("unexpected error: %s", result.AsFailure().AsString())
 	}
 }
 

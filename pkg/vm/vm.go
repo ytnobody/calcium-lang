@@ -832,6 +832,13 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		}
 
 	case bytecode.OpSecretCapability:
+		moduleID := vm.currentFrame().cl.Fn.ModuleID
+		if moduleID == "" {
+			moduleID = "entry"
+		}
+		if moduleID != "entry" {
+			return fmt.Errorf("Secret.capability: only the entry module may create capabilities, got %q", moduleID)
+		}
 		scope := vm.pop()
 		sinkVal := vm.pop()
 		if sinkVal.Type != value.TYPE_STRING {

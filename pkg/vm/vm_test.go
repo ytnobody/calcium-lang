@@ -32,6 +32,7 @@ func runVmTests(t *testing.T, tests []vmTestCase) {
 		}
 
 		vm := New(comp.Constants())
+		vm.SetSecretWritePolicy([]string{"entry"})
 		err = vm.Run(comp.Bytecode().Instructions)
 		if err != nil {
 			t.Fatalf("vm error for %q: %s", tt.input, err)
@@ -1991,6 +1992,19 @@ func TestSecretCapabilityMismatch(t *testing.T) {
 	runVmErrorTests(t, []string{
 		`func! send(x) = x; func! other(x) = x; cap = Secret.capability(other, {}); s = Secret.wrap("token"); Secret.with(cap) { s !!!> send };`,
 	})
+}
+
+func TestSecretRuntimePolicyDefaultDeny(t *testing.T) {
+	input := `func! send(x) = x; cap = Secret.capability(send, {}); Secret.with(cap) { Secret.wrap("token") !!!> send };`
+	program := parse(input)
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compile error: %s", err)
+	}
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err == nil {
+		t.Fatal("expected runtime error under default-deny secret policy")
+	}
 }
 
 func TestBuiltinMaybe(t *testing.T) {

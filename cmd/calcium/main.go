@@ -322,11 +322,12 @@ Examples:
 
 // runArgs holds parsed arguments for the run command
 type runArgs struct {
-	file       string
-	optLevel   optimizer.Level
-	importMap  string
-	lockFile   string
-	cachedOnly bool
+	file             string
+	optLevel         optimizer.Level
+	importMap        string
+	lockFile         string
+	cachedOnly       bool
+	allowSecretWrite []string
 }
 
 // parseRunArgs parses all run command arguments
@@ -347,6 +348,11 @@ func parseRunArgs(args []string) runArgs {
 			result.optLevel = optimizer.O2
 		case arg == "--cached-only":
 			result.cachedOnly = true
+		case strings.HasPrefix(arg, "--allow-secret-write="):
+			result.allowSecretWrite = append(result.allowSecretWrite, strings.TrimPrefix(arg, "--allow-secret-write="))
+		case arg == "--allow-secret-write" && i+1 < len(args):
+			i++
+			result.allowSecretWrite = append(result.allowSecretWrite, args[i])
 		case strings.HasPrefix(arg, "--import-map="):
 			result.importMap = strings.TrimPrefix(arg, "--import-map=")
 		case arg == "--import-map" && i+1 < len(args):
@@ -382,6 +388,7 @@ func runFileWithOptions(opts runArgs) {
 		// Build run options
 		runOpts := vm.DefaultRunOptions()
 		runOpts.CachedOnly = opts.cachedOnly
+		runOpts.SecretWriteAllowed = opts.allowSecretWrite
 
 		if opts.importMap != "" {
 			runOpts.ImportMap, err = vm.LoadImportMap(opts.importMap)

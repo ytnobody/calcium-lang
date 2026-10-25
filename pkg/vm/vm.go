@@ -48,6 +48,26 @@ type Frame struct {
 }
 
 // NewFrame creates a new call frame
+// SetSecretWritePolicy sets the modules allowed to write Secrets to effects.
+// The policy is deny-by-default; an empty list denies every module.
+func (vm *VM) SetSecretWritePolicy(modules []string) {
+	vm.secretWriteAllowed = make(map[string]bool, len(modules))
+	for _, m := range modules {
+		m = strings.TrimSpace(m)
+		if m != "" {
+			vm.secretWriteAllowed[m] = true
+		}
+	}
+}
+
+func (vm *VM) initSecretPolicy() {
+	var modules []string
+	if raw := os.Getenv("CALCIUM_SECRET_WRITE_ALLOW"); raw != "" {
+		modules = strings.Split(raw, ",")
+	}
+	vm.SetSecretWritePolicy(modules)
+}
+
 func NewFrame(cl *value.Closure, basePointer int) *Frame {
 	return &Frame{
 		cl:          cl,
@@ -93,9 +113,10 @@ func (f *Frame) HasOwnBuiltins() bool {
 
 // VM is the virtual machine
 type VM struct {
-	constants  []value.Value
-	globals    []value.Value
-	secretCaps []value.Value
+	constants          []value.Value
+	globals            []value.Value
+	secretCaps         []value.Value
+	secretWriteAllowed map[string]bool
 
 	stack []value.Value
 	sp    int // Stack pointer: always points to next free slot
@@ -166,6 +187,9 @@ func (vm *VM) getOutput() io.Writer {
 // SetRunOptions sets the run options for the VM
 func (vm *VM) SetRunOptions(opts *RunOptions) {
 	vm.runOptions = opts
+	if opts != nil && opts.SecretWriteAllowed != nil {
+		vm.SetSecretWritePolicy(opts.SecretWriteAllowed)
+	}
 }
 
 // GetRunOptions returns the run options for the VM
@@ -177,6 +201,7 @@ func (vm *VM) GetRunOptions() *RunOptions {
 func New(constants []value.Value) *VM {
 	mainFn := &value.Function{
 		Name:      "<main>",
+		ModuleID:  "entry",
 		Body:      bytecode.Instructions{},
 		NumLocals: 0,
 	}
@@ -198,6 +223,7 @@ func New(constants []value.Value) *VM {
 
 	vm.initBuiltins()
 	vm.initModules()
+	vm.initSecretPolicy()
 
 	return vm
 }
@@ -215,6 +241,7 @@ func NewWithGlobals(constants []value.Value, globals []value.Value) *VM {
 func (vm *VM) CloneForSpawn() *VM {
 	mainFn := &value.Function{
 		Name:      "<spawn>",
+		ModuleID:  "entry",
 		Body:      bytecode.Instructions{},
 		NumLocals: 0,
 	}
@@ -225,16 +252,17 @@ func (vm *VM) CloneForSpawn() *VM {
 	frames[0] = mainFrame
 
 	clone := &VM{
-		constants:   vm.constants,                   // Share constants (read-only)
-		globals:     vm.globals,                     // Share globals (spawned tasks may access)
-		stack:       make([]value.Value, StackSize), // Own stack
-		sp:          0,
-		frames:      frames, // Own frames
-		framesIndex: 1,
-		builtins:    vm.builtins, // Share builtins (read-only)
-		modules:     vm.modules,  // Share modules (read-only)
-		sourcePath:  vm.sourcePath,
-		runOptions:  vm.runOptions,
+		constants:          vm.constants,                   // Share constants (read-only)
+		globals:            vm.globals,                     // Share globals (spawned tasks may access)
+		stack:              make([]value.Value, StackSize), // Own stack
+		sp:                 0,
+		frames:             frames, // Own frames
+		framesIndex:        1,
+		builtins:           vm.builtins, // Share builtins (read-only)
+		modules:            vm.modules,  // Share modules (read-only)
+		sourcePath:         vm.sourcePath,
+		runOptions:         vm.runOptions,
+		secretWriteAllowed: vm.secretWriteAllowed,
 	}
 
 	return clone
@@ -244,6 +272,7 @@ func (vm *VM) CloneForSpawn() *VM {
 func NewForREPL(constants []value.Value, globals []value.Value) *VM {
 	mainFn := &value.Function{
 		Name:      "<main>",
+		ModuleID:  "entry",
 		Body:      bytecode.Instructions{},
 		NumLocals: 0,
 	}
@@ -265,6 +294,7 @@ func NewForREPL(constants []value.Value, globals []value.Value) *VM {
 
 	vm.initBuiltins()
 	vm.initModulesNoStdin() // Don't capture stdin in REPL mode
+	vm.initSecretPolicy()
 	return vm
 }
 
@@ -837,6 +867,13 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		}
 		if !allowed {
 			return fmt.Errorf("Secret capability does not authorize sink %q", sink)
+		}
+		moduleID := vm.currentFrame().cl.Fn.ModuleID
+		if moduleID == "" {
+			moduleID = "entry"
+		}
+		if !vm.secretWriteAllowed[moduleID] {
+			return fmt.Errorf("module %q is not allowed to write secrets", moduleID)
 		}
 
 	case bytecode.OpCallEffect:

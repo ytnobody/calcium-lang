@@ -90,6 +90,9 @@ type Compiler struct {
 
 	// secretWithDepth is greater than zero while compiling a Secret.with block.
 	secretWithDepth int
+
+	// moduleID is the canonical identity attached to functions compiled here.
+	moduleID string
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -448,6 +451,7 @@ func (c *Compiler) builtinMaybeSome() value.Value {
 	body := append(bytecode.Make(bytecode.OpConstructMaybeSome), bytecode.Make(bytecode.OpReturn)...)
 	return value.Func(&value.Function{
 		Name:       "Some",
+		ModuleID:   c.moduleID,
 		Parameters: []string{"value"},
 		Body:       body,
 		NumLocals:  1,
@@ -920,6 +924,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		// Create function object
 		fn := &value.Function{
 			Name:           node.Name.Value,
+			ModuleID:       c.moduleID,
 			Parameters:     make([]string, len(node.Parameters)),
 			ParamTypeNames: make([]string, len(node.Parameters)),
 			Body:           instructions,
@@ -992,6 +997,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		fn := &value.Function{
 			Name:       node.Name.Value,
+			ModuleID:   c.moduleID,
 			Parameters: make([]string, len(node.Parameters)),
 			Body:       instructions,
 			NumLocals:  numLocals,
@@ -1049,6 +1055,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 				fn := &value.Function{
 					Name:       variant.Name,
+					ModuleID:   c.moduleID,
 					Parameters: make([]string, len(variant.Fields)),
 					Body:       instructions,
 					NumLocals:  numLocals,
@@ -1353,6 +1360,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		fn := &value.Function{
 			Name:       "<lambda>",
+			ModuleID:   c.moduleID,
 			Parameters: make([]string, len(node.Parameters)),
 			Body:       instructions,
 			NumLocals:  numLocals,
@@ -2149,6 +2157,11 @@ func (c *Compiler) setPos(line, column int) {
 func (c *Compiler) setPosFromToken(tok token.Token) {
 	c.currentLine = tok.Line
 	c.currentColumn = tok.Column
+}
+
+// SetModuleID sets the canonical module identity attached to compiled functions.
+func (c *Compiler) SetModuleID(moduleID string) {
+	c.moduleID = moduleID
 }
 
 // SetFileName sets the source file name for error messages and source maps

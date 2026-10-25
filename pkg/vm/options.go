@@ -21,6 +21,10 @@ type RunOptions struct {
 
 	// CachedOnly disables network access, only uses cached modules
 	CachedOnly bool
+
+	// SecretWriteAllowed lists canonical module IDs that may write Secrets to
+	// effects. Empty means deny all modules.
+	SecretWriteAllowed []string
 }
 
 // ImportMapFile represents the structure of calcium.imports.toml

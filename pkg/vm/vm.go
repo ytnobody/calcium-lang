@@ -93,8 +93,9 @@ func (f *Frame) HasOwnBuiltins() bool {
 
 // VM is the virtual machine
 type VM struct {
-	constants []value.Value
-	globals   []value.Value
+	constants  []value.Value
+	globals    []value.Value
+	secretCaps []value.Value
 
 	stack []value.Value
 	sp    int // Stack pointer: always points to next free slot
@@ -798,6 +799,44 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		}
 		if err := vm.push(value.SecretVal(result)); err != nil {
 			return err
+		}
+
+	case bytecode.OpSecretCapability:
+		scope := vm.pop()
+		sinkVal := vm.pop()
+		if sinkVal.Type != value.TYPE_STRING {
+			return fmt.Errorf("Secret.capability: sink must be a string")
+		}
+		if err := vm.push(value.SecretCapabilityVal(sinkVal.AsString(), scope)); err != nil {
+			return err
+		}
+
+	case bytecode.OpSecretWithBegin:
+		cap := vm.pop()
+		if cap.Type != value.TYPE_SECRET_CAPABILITY {
+			return fmt.Errorf("Secret.with: expected a SecretCapability, got %s", cap.Type)
+		}
+		vm.secretCaps = append(vm.secretCaps, cap)
+
+	case bytecode.OpSecretWithEnd:
+		if len(vm.secretCaps) == 0 {
+			return fmt.Errorf("Secret.with: no active capability to close")
+		}
+		vm.secretCaps = vm.secretCaps[:len(vm.secretCaps)-1]
+
+	case bytecode.OpCheckSecretCapability:
+		sinkIdx := binary.BigEndian.Uint16(ins[ip+1:])
+		vm.currentFrame().ip += 2
+		sink := vm.getConstant(sinkIdx).AsString()
+		allowed := false
+		for i := len(vm.secretCaps) - 1; i >= 0; i-- {
+			if vm.secretCaps[i].AsSecretCapability().Sink == sink {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return fmt.Errorf("Secret capability does not authorize sink %q", sink)
 		}
 
 	case bytecode.OpCallEffect:

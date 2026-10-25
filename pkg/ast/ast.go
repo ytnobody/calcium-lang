@@ -490,6 +490,18 @@ type DoExpression struct {
 func (de *DoExpression) expressionNode()      {}
 func (de *DoExpression) TokenLiteral() string { return de.Token.Literal }
 
+// SecretWithExpression represents Secret.with(capability) { ... }.
+// The block is evaluated with the capability active.
+type SecretWithExpression struct {
+	Token           token.Token // the 'with' token
+	Capability      Expression  // capability value
+	Statements      []Statement // intermediate statements
+	FinalExpression Expression  // final expression (block result)
+}
+
+func (se *SecretWithExpression) expressionNode()      {}
+func (se *SecretWithExpression) TokenLiteral() string { return se.Token.Literal }
+
 // ConstructorPattern represents a pattern like Some(x) or Leaf(v) in match
 type ConstructorPattern struct {
 	Token    token.Token   // the constructor name token

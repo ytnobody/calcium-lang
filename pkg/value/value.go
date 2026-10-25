@@ -32,6 +32,7 @@ const (
 	TYPE_EVENT_SOURCE       // Event source (stdin, timeout, interval, task.done)
 	TYPE_ADT                // Algebraic data type variant value
 	TYPE_SECRET             // Opaque secret value
+	TYPE_SECRET_CAPABILITY  // Capability authorizing Secret effect writes
 	TYPE_CHANNEL            // User-level message passing channel
 	TYPE_OVERLOADED_CLOSURE // Multiple function overloads with different signatures
 )
@@ -80,6 +81,8 @@ func (t Type) String() string {
 		return "adt"
 	case TYPE_SECRET:
 		return "secret"
+	case TYPE_SECRET_CAPABILITY:
+		return "secret_capability"
 	case TYPE_CHANNEL:
 		return "channel"
 	case TYPE_OVERLOADED_CLOSURE:
@@ -256,6 +259,13 @@ type ADT struct {
 // serialized, or passed to ordinary effects.
 type Secret struct {
 	Value Value
+}
+
+// SecretCapability authorizes Secret values to cross a specific effect
+// boundary. Scope is an opaque value interpreted by the runtime policy.
+type SecretCapability struct {
+	Sink  string
+	Scope Value
 }
 
 // Channel represents a user-level message passing channel (created by async.channel)
@@ -498,6 +508,11 @@ func SecretVal(v Value) Value {
 	return Value{Type: TYPE_SECRET, Data: &Secret{Value: v}}
 }
 
+// SecretCapabilityVal creates an opaque capability value.
+func SecretCapabilityVal(sink string, scope Value) Value {
+	return Value{Type: TYPE_SECRET_CAPABILITY, Data: &SecretCapability{Sink: sink, Scope: scope}}
+}
+
 // ChannelVal creates a channel value
 func ChannelVal(c *Channel) Value {
 	return Value{Type: TYPE_CHANNEL, Data: c}
@@ -653,6 +668,10 @@ func (v Value) AsSecret() *Secret {
 	return v.Data.(*Secret)
 }
 
+func (v Value) AsSecretCapability() *SecretCapability {
+	return v.Data.(*SecretCapability)
+}
+
 func (v Value) AsADT() *ADT {
 	return v.Data.(*ADT)
 }
@@ -790,6 +809,9 @@ func (v Value) Equals(other Value) bool {
 		return true
 	case TYPE_SECRET:
 		return v.AsSecret().Value.Equals(other.AsSecret().Value)
+	case TYPE_SECRET_CAPABILITY:
+		a1, a2 := v.AsSecretCapability(), other.AsSecretCapability()
+		return a1.Sink == a2.Sink && a1.Scope.Equals(a2.Scope)
 	default:
 		return false
 	}
@@ -885,6 +907,8 @@ func (v Value) String() string {
 		return fmt.Sprintf("<handler %d:%s>", h.ID, statusStr)
 	case TYPE_SECRET:
 		return "<secret>"
+	case TYPE_SECRET_CAPABILITY:
+		return "<secret capability>"
 	case TYPE_ADT:
 		adt := v.AsADT()
 		if len(adt.Values) == 0 {

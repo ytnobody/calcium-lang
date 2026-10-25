@@ -87,6 +87,9 @@ type Compiler struct {
 
 	// allowSecretArgs is true while compiling an authorized !!!> stage.
 	allowSecretArgs bool
+
+	// secretWithDepth is greater than zero while compiling a Secret.with block.
+	secretWithDepth int
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -449,6 +452,23 @@ func (c *Compiler) builtinMaybeSome() value.Value {
 		Body:       body,
 		NumLocals:  1,
 	})
+}
+
+// secretSinkName derives a stable sink name from the AST used in
+// Secret.capability(...) and the right-hand side of !!!>.
+func (c *Compiler) secretSinkName(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.CallExpression:
+		return c.secretSinkName(e.Function)
+	case *ast.Identifier:
+		return e.Value
+	case *ast.MemberExpression:
+		return c.secretSinkName(e.Object) + "." + e.Property.Value
+	case *ast.StringLiteral:
+		return e.Value
+	default:
+		return "<unknown>"
+	}
 }
 
 // isSecretExpr reports whether an expression is statically known to produce a
@@ -1243,6 +1263,17 @@ func (c *Compiler) Compile(node ast.Node) error {
 		if member, ok := node.Function.(*ast.MemberExpression); ok {
 			if ident, ok := member.Object.(*ast.Identifier); ok && ident.Value == "Secret" {
 				switch member.Property.Value {
+				case "capability":
+					if len(node.Arguments) != 2 {
+						return c.newCompileError(node.Token, "Secret.capability expects exactly 2 arguments (sink, scope)")
+					}
+					sinkName := c.secretSinkName(node.Arguments[0])
+					c.emit(bytecode.OpConstant, c.addConstant(value.String(sinkName)))
+					if err := c.Compile(node.Arguments[1]); err != nil {
+						return err
+					}
+					c.emit(bytecode.OpSecretCapability)
+					return nil
 				case "wrap":
 					if len(node.Arguments) != 1 {
 						return c.newCompileError(node.Token, "Secret.wrap expects exactly 1 argument")
@@ -1475,6 +1506,11 @@ func (c *Compiler) Compile(node ast.Node) error {
 			return c.newCompileError(node.Token,
 				"Secret cannot be passed to '!>'; use the secret-authorized '!!!>' pipeline")
 		}
+		if node.AllowSecret && c.secretWithDepth == 0 {
+			return c.newCompileError(node.Token,
+				"'!!!>' requires an active Secret.with(cap) scope")
+		}
+
 		// Compile the right side (effect function) first
 		prevAllow := c.allowSecretArgs
 		c.allowSecretArgs = c.allowSecretArgs || node.AllowSecret
@@ -1488,6 +1524,11 @@ func (c *Compiler) Compile(node ast.Node) error {
 		err = c.Compile(node.Left)
 		if err != nil {
 			return err
+		}
+
+		if node.AllowSecret {
+			sinkName := c.secretSinkName(node.Right)
+			c.emit(bytecode.OpCheckSecretCapability, c.addConstant(value.String(sinkName)))
 		}
 
 		// Just call normally - func! already wraps return in success
@@ -1674,6 +1715,27 @@ func (c *Compiler) Compile(node ast.Node) error {
 		if err != nil {
 			return err
 		}
+
+	case *ast.SecretWithExpression:
+		// Secret.with(capability) { ... }: activate the capability while the
+		// block is evaluated and require !!!> for Secret effect writes.
+		if err := c.Compile(node.Capability); err != nil {
+			return err
+		}
+		c.emit(bytecode.OpSecretWithBegin)
+		c.secretWithDepth++
+		for _, stmt := range node.Statements {
+			if err := c.Compile(stmt); err != nil {
+				c.secretWithDepth--
+				return err
+			}
+		}
+		if err := c.Compile(node.FinalExpression); err != nil {
+			c.secretWithDepth--
+			return err
+		}
+		c.secretWithDepth--
+		c.emit(bytecode.OpSecretWithEnd)
 
 	case *ast.DoExpression:
 		// Compile do...end block: execute all intermediate statements (each pops its value),

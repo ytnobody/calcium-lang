@@ -1982,9 +1982,15 @@ func TestSecretValues(t *testing.T) {
 		{input: `to_string([Secret.wrap("token"), "public"]);`, expected: "[<secret>, public]"},
 		{input: `to_string({auth: Secret.wrap("token")});`, expected: "{auth: <secret>}"},
 		{input: `to_string(Secret.map(Secret.wrap("token"), s => concat("x-", s)));`, expected: "<secret>"},
-		{input: `func! id(x) = x; to_string(Secret.wrap("token") !!!> id);`, expected: "success(<secret>)"},
+		{input: `func! id(x) = x; cap = Secret.capability(id, {}); to_string(Secret.with(cap) { Secret.wrap("token") !!!> id });`, expected: "success(<secret>)"},
 	}
 	runVmTests(t, tests)
+}
+
+func TestSecretCapabilityMismatch(t *testing.T) {
+	runVmErrorTests(t, []string{
+		`func! send(x) = x; func! other(x) = x; cap = Secret.capability(other, {}); s = Secret.wrap("token"); Secret.with(cap) { s !!!> send };`,
+	})
 }
 
 func TestBuiltinMaybe(t *testing.T) {

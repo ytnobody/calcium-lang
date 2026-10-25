@@ -121,7 +121,7 @@ func (c *Checker) checkFunctionDeclaration(fd *ast.FunctionDeclaration) {
 	}
 
 	for i, param := range fd.Parameters {
-		var paramType types.TypeExpr = types.Any
+		paramType := types.Any
 		if i < len(fd.ParamTypes) && fd.ParamTypes[i] != nil {
 			paramType = typeFromAnnotation(fd.ParamTypes[i])
 		}
@@ -129,7 +129,7 @@ func (c *Checker) checkFunctionDeclaration(fd *ast.FunctionDeclaration) {
 	}
 
 	// Register return type before checking body (allows recursive calls).
-	var retType types.TypeExpr = types.Any
+	retType := types.Any
 	if fd.ReturnType != nil {
 		retType = typeFromAnnotation(fd.ReturnType)
 	}

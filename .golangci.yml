@@ -1,43 +1,44 @@
-# golangci-lint configuration for Calcium
-# https://golangci-lint.run/usage/configuration/
-
+version: "2"
 run:
-  timeout: 5m
-  go: "1.21"
-
+  go: "1.26"
 linters:
-  enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
   disable:
-    # unused is disabled until core.math module is connected (see Issue tracking unused builtin functions)
     - unused
-
-linters-settings:
-  errcheck:
-    # Ignore specific functions
-    exclude-functions:
-      - os.Chdir
-      - os.WriteFile
-      - os.Remove
-      - os.RemoveAll
-      - (io.Closer).Close
-      # Internal VM operations where errors are handled differently
-      # TODO: Review these for proper error handling in a future PR
-      - (*github.com/ytnobody/calcium-lang/pkg/vm.VM).push
-      - github.com/ytnobody/calcium-lang/pkg/vm.saveToCacheDir
-
+  settings:
+    errcheck:
+      exclude-functions:
+        - os.Chdir
+        - os.WriteFile
+        - os.Remove
+        - os.RemoveAll
+        - (io.Closer).Close
+        - (*github.com/ytnobody/calcium-lang/pkg/vm.VM).push
+        - github.com/ytnobody/calcium-lang/pkg/vm.saveToCacheDir
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+        path: _test\.go
+      - linters:
+          - staticcheck
+        text: "ST1005:"
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  # Maximum issues count per linter
   max-issues-per-linter: 50
-  # Maximum count of issues with same text
   max-same-issues: 10
-
-  exclude-rules:
-    # Ignore errcheck in test files for common setup/teardown operations
-    - path: _test\.go
-      linters:
-        - errcheck
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

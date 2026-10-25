@@ -2003,6 +2003,27 @@ func TestSecretRuntimeBoundaryBackstop(t *testing.T) {
 	})
 }
 
+func TestSecretPolicyFromEnv(t *testing.T) {
+	t.Setenv("CALCIUM_SECRET_WRITE_ALLOW", "entry, ./lib/auth.ca")
+	vm := New(nil)
+	if !vm.secretWriteAllowed["entry"] {
+		t.Error("expected entry to be allowed from environment")
+	}
+	if !vm.secretWriteAllowed["./lib/auth.ca"] {
+		t.Error("expected ./lib/auth.ca to be allowed from environment")
+	}
+}
+
+func TestSecretPolicyFromRunOptions(t *testing.T) {
+	vm := New(nil)
+	opts := DefaultRunOptions()
+	opts.SecretWriteAllowed = []string{"entry"}
+	vm.SetRunOptions(opts)
+	if !vm.secretWriteAllowed["entry"] {
+		t.Error("expected entry to be allowed from RunOptions")
+	}
+}
+
 func TestSecretRuntimePolicyDefaultDeny(t *testing.T) {
 	input := `func! send(x) = x; cap = Secret.capability(send, {}); Secret.with(cap) { Secret.wrap("token") !!!> send };`
 	program := parse(input)

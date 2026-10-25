@@ -822,6 +822,57 @@ func primitiveHttpGet(args ...value.Value) value.Value {
 	return doHttpRequest("GET", url, headers, "")
 }
 
+// __http_post_secret sends a Secret string as an HTTP POST body. It is the
+// only built-in HTTP path that is allowed to unwrap a Secret.
+func primitiveHttpPostSecret(args ...value.Value) value.Value {
+	if len(args) != 5 {
+		return value.Failure(value.String("__http_post_secret: expected 5 arguments (url, secret, capability, content_type, headers)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__http_post_secret: url must be string"))
+	}
+	if args[1].Type != value.TYPE_SECRET {
+		return value.Failure(value.String("__http_post_secret: secret must be a Secret"))
+	}
+	if args[2].Type != value.TYPE_SECRET_CAPABILITY {
+		return value.Failure(value.String("__http_post_secret: capability must be a SecretCapability"))
+	}
+	if args[3].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__http_post_secret: content_type must be string"))
+	}
+	if args[4].Type != value.TYPE_HASH {
+		return value.Failure(value.String("__http_post_secret: headers must be hash"))
+	}
+
+	url := args[0].AsString()
+	cap := args[2].AsSecretCapability()
+	if cap.Sink != "http.post_secret" {
+		return value.Failure(value.String(fmt.Sprintf("__http_post_secret: capability authorizes %q, not http.post_secret", cap.Sink)))
+	}
+	if cap.Scope.Type != value.TYPE_HASH {
+		return value.Failure(value.String("__http_post_secret: capability scope must include a url"))
+	}
+	scopeURL, ok := cap.Scope.AsHash().Get(value.String("url"))
+	if !ok || scopeURL.Type != value.TYPE_STRING || scopeURL.AsString() != url {
+		return value.Failure(value.String("__http_post_secret: capability does not authorize this URL"))
+	}
+
+	payload := args[1].AsSecret().Value
+	if payload.Type != value.TYPE_STRING {
+		return value.Failure(value.String("__http_post_secret: Secret payload must be a string"))
+	}
+
+	body := payload.AsString()
+	contentType := args[3].AsString()
+	headers := hashToStringMap(args[4].AsHash())
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+	headers["Content-Type"] = contentType
+
+	return doHttpRequestWithBody("POST", url, headers, body)
+}
+
 // __http_post performs a POST request
 func primitiveHttpPost(args ...value.Value) value.Value {
 	if len(args) < 2 || len(args) > 4 {
@@ -1579,11 +1630,12 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__json_stringify": {Name: "__json_stringify", Fn: primitiveJSONStringify},
 
 		// HTTP
-		"__http_get":     {Name: "__http_get", Fn: primitiveHttpGet},
-		"__http_post":    {Name: "__http_post", Fn: primitiveHttpPost},
-		"__http_put":     {Name: "__http_put", Fn: primitiveHttpPut},
-		"__http_delete":  {Name: "__http_delete", Fn: primitiveHttpDelete},
-		"__http_request": {Name: "__http_request", Fn: primitiveHttpRequest},
+		"__http_get":         {Name: "__http_get", Fn: primitiveHttpGet},
+		"__http_post":        {Name: "__http_post", Fn: primitiveHttpPost},
+		"__http_post_secret": {Name: "__http_post_secret", Fn: primitiveHttpPostSecret},
+		"__http_put":         {Name: "__http_put", Fn: primitiveHttpPut},
+		"__http_delete":      {Name: "__http_delete", Fn: primitiveHttpDelete},
+		"__http_request":     {Name: "__http_request", Fn: primitiveHttpRequest},
 
 		// Time/DateTime
 		"__time_now":             {Name: "__time_now", Fn: primitiveTimeNow},

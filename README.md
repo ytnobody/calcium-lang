@@ -720,7 +720,7 @@ Module resolution order:
 | `array.unique(arr)` | Remove duplicates |
 | `array.zip(arr1, arr2)` | Combine two arrays into pairs |
 | `array.index_of(arr, elem)` | Find element position |
-| `array.find(arr, pred)` | Find first matching element |
+| `array.find(arr, pred)` | First match as `Maybe.Some(v)` / `Maybe.None` |
 | `array.any(arr, pred)` | Check if any element matches |
 | `array.all(arr, pred)` | Check if all elements match |
 | `array.count(arr, pred)` | Count matching elements |

@@ -88,10 +88,10 @@ func all(arr, pred) = reduce(arr, (acc, x) => acc && pred(x), true);
 
 // Helper for find
 func _find_result(filtered) = match len(filtered) == 0
-    true => failure("not found")
-    false => success(filtered[0]);
+    true => Maybe.None
+    false => Maybe.Some(filtered[0]);
 
-// find returns the first element satisfying the predicate
+// find returns the first element satisfying the predicate, as Maybe
 func find(arr, pred) =
     filter(arr, pred)
     |> _find_result;

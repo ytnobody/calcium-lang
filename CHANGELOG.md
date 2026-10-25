@@ -7,6 +7,7 @@
 - **Lookup absence now uses the built-in `Maybe` type.** `get(collection, key)`, `head(array)`, and `string.char_at(s, index)` return `Maybe.Some(value)` or `Maybe.None`; use `get(collection, key, default)` when a raw default is desired. Missing hash keys and out-of-range array/tuple/ADT indices now raise runtime errors instead of returning `null`.
 - **Removed the user-visible `Null` type and null APIs.** `types.null`, `Null` type annotations, `Null?`, `types.is_null`, `assert.is_null`, and `assert.not_null` are gone. Use `Maybe`, `Maybe.None`, `assert.is_none`, and `assert.is_some` instead.
 - **External nulls map to `Maybe.None`.** JSON `null`, database `NULL`, and TOML absence now become `Maybe.None`; `json.stringify(Maybe.None)` emits `null`, and `json.stringify(Maybe.Some(v))` serializes `v`. `dbi.query_row` returns `success(Maybe.None)` when no row matches, and `dbi.quote(Maybe.None)` returns `NULL`.
+- **`array.find` now returns `Maybe`.** It returns `Maybe.Some(element)` for the first match and `Maybe.None` when nothing matches, instead of `success`/`failure`.
 - **Effect functions with no useful value return `success(Maybe.None)`** instead of `success(null)` (print, file/directory mutations, channel send/close, async control, etc.).
 - **`len` / `char_at` / `substring` on strings now use rune (Unicode code point) semantics instead of raw byte semantics.**
   - `len("aアb😀")` now returns `4`, not the byte length `1+3+1+4=9`.

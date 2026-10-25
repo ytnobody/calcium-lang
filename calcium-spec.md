@@ -326,6 +326,8 @@ array.last(numbers);             // success(50)
 array.reverse(numbers);          // [50, 40, 30, 20, 10]
 array.contains(numbers, 30);     // true
 array.index_of(numbers, 30);     // success(2)
+array.find(numbers, n => n > 25);// Maybe.Some(30)
+array.find(numbers, n => n > 99);// Maybe.None
 array.unique([1, 2, 2, 3]);      // [1, 2, 3]
 ```
 

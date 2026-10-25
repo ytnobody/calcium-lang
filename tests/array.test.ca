@@ -1,5 +1,6 @@
 // Array Operations Test
 use core.io!;
+use core.array;
 use test;
 
 io.println("# Array Tests");
@@ -14,13 +15,15 @@ evens = filter([1, 2, 3, 4, 5], x => x % 2 == 0);
 sum = reduce([1, 2, 3, 4, 5], (acc, x) => acc + x, 0);
 product = reduce([1, 2, 3, 4], (acc, x) => acc * x, 1);
 r = range(1, 5);
+found = array.find(arr, x => x > 2);
+not_found = array.find(arr, x => x > 99);
 combo_result = range(1, 11)
     |> filter(x => x % 2 == 0)
     |> map(x => x * x)
     |> reduce((acc, x) => acc + x, 0);
 
 test.new()
-    |> test.plan(25)
+    |> test.plan(27)
     // Basic Operations
     |> test.is("array length", len(arr), 5)
     |> test.is("head", head(arr), Maybe.Some(1))
@@ -54,6 +57,9 @@ test.new()
     |> test.is("range length", len(r), 4)
     |> test.is("range first", r[0], 1)
     |> test.is("range last", r[3], 4)
+    // find
+    |> test.is("find first match", found, Maybe.Some(3))
+    |> test.is("find no match", not_found, Maybe.None)
     // Combination
     |> test.is("sum of squared evens", combo_result, 220)
     |> test.done();

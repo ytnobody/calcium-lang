@@ -143,7 +143,8 @@ No `reveal` operation is included in the initial design.
 The runtime must redact Secrets everywhere a value can be rendered:
 
 - `to_string(secret)` returns `"<secret>"`.
-- `io.print` / `io.println` print `"<secret>"`.
+- Direct `io.print` / `io.println` of a Secret is rejected as an ordinary
+  effect. Use `io.println(to_string(secret))` for redacted logging.
 - String interpolation renders `"<secret>"`, never the underlying value.
 - Arrays/hashes containing Secrets render recursively redacted.
 - REPL output and runtime error messages never include the underlying value.
@@ -162,7 +163,8 @@ The following operations are rejected:
 token = Secret.wrap("token-123");
 
 to_string(token);              // "<secret>"
-io.println(token);             // <secret>
+io.println(to_string(token));  // <secret>
+io.println(token);             // compile error: Secret passed to an effect
 "token is ${token}";           // "token is <secret>"
 
 [token, "public"] |> to_string;
@@ -578,7 +580,7 @@ Compile-time:
 
 Runtime:
 
-- Redaction in `to_string`, print, interpolation, arrays, hashes, errors.
+- Redaction in `to_string`, interpolation, arrays, hashes, and errors; direct effect printing is rejected.
 
 Representative cases:
 

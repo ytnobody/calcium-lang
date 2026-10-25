@@ -273,6 +273,8 @@ func (f *Formatter) formatExpression(expr ast.Expression) string {
 		return f.formatExpression(e.Constraint) + "?"
 	case *ast.DoExpression:
 		return f.formatDoExpression(e)
+	case *ast.SecretWithExpression:
+		return f.formatSecretWithExpression(e)
 	case *ast.ConstructorPattern:
 		return f.formatConstructorPattern(e)
 	case *ast.ModulePath:
@@ -498,6 +500,23 @@ func (f *Formatter) formatConstructorPattern(e *ast.ConstructorPattern) string {
 		fields[i] = field.Value
 	}
 	return name + "(" + strings.Join(fields, ", ") + ")"
+}
+
+func (f *Formatter) formatSecretWithExpression(e *ast.SecretWithExpression) string {
+	var sb strings.Builder
+	sb.WriteString("Secret.with(")
+	sb.WriteString(f.formatExpression(e.Capability))
+	sb.WriteString(") {\n")
+
+	f.depth++
+	for _, stmt := range e.Statements {
+		sb.WriteString(f.formatStatement(stmt))
+	}
+	sb.WriteString(f.indent() + f.formatExpression(e.FinalExpression) + "\n")
+	f.depth--
+
+	sb.WriteString(f.indent() + "}")
+	return sb.String()
 }
 
 func (f *Formatter) formatStayExpression(e *ast.StayExpression) string {

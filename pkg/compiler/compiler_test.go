@@ -886,10 +886,21 @@ func TestCompileSecretEffectBoundary(t *testing.T) {
 }
 
 func TestCompileSecretPipelineAllowed(t *testing.T) {
-	// !!!> explicitly authorizes the secret boundary.
-	input := `func! sink(x) = x; s = Secret.wrap("x"); s !!!> sink;`
+	// !!!> is valid inside a Secret.with capability scope.
+	input := `func! sink(x) = x; s = Secret.wrap("x"); cap = Secret.capability(sink, {}); Secret.with(cap) { s !!!> sink };`
 	if _, err := compileSource(input); err != nil {
 		t.Fatalf("expected !!!> to compile, got: %s", err)
+	}
+}
+
+func TestCompileSecretPipelineRequiresScope(t *testing.T) {
+	input := `func! sink(x) = x; s = Secret.wrap("x"); s !!!> sink;`
+	_, err := compileSource(input)
+	if err == nil {
+		t.Fatal("expected compile error for !!!> outside Secret.with")
+	}
+	if !strings.Contains(err.Error(), "Secret.with") {
+		t.Errorf("unexpected error: %s", err)
 	}
 }
 

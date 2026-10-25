@@ -1530,6 +1530,23 @@ func TestSecretPipeExpression(t *testing.T) {
 	}
 }
 
+func TestSecretWithExpression(t *testing.T) {
+	input := `Secret.with(cap) { token !!!> sink };`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	sw, ok := stmt.Expression.(*ast.SecretWithExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.SecretWithExpression. got=%T", stmt.Expression)
+	}
+	if sw.Capability == nil || sw.FinalExpression == nil {
+		t.Fatal("expected capability and final expression")
+	}
+}
+
 func TestConstraintCheckExpression(t *testing.T) {
 	input := `x?;`
 	l := lexer.New(input)

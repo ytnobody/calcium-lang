@@ -1532,12 +1532,73 @@ func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
 			if ident.Value == "async" && me.Property.Value == "stay" {
 				return p.parseStayExpression(me.Token)
 			}
+			if ident.Value == "Secret" && me.Property.Value == "with" {
+				return p.parseSecretWithExpression(me.Token)
+			}
 		}
 	}
 
 	exp := &ast.CallExpression{Token: p.curToken, Function: function}
 	exp.Arguments = p.parseExpressionList(token.RPAREN)
 	return exp
+}
+
+// parseSecretWithExpression parses Secret.with(capability) { body }.
+func (p *Parser) parseSecretWithExpression(tok token.Token) ast.Expression {
+	expr := &ast.SecretWithExpression{Token: tok}
+
+	// Current token is '('. Parse exactly one capability expression.
+	if p.peekTokenIs(token.RPAREN) {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"Secret.with expects a capability argument"))
+		return nil
+	}
+	p.nextToken()
+	expr.Capability = p.parseExpression(LOWEST)
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	expr.Statements = []ast.Statement{}
+	p.nextToken()
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			expr.Statements = append(expr.Statements, stmt)
+		}
+		p.nextToken()
+	}
+
+	if p.curTokenIs(token.EOF) {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"unexpected end of file inside Secret.with block, expected '}'"))
+		return nil
+	}
+	if len(expr.Statements) == 0 {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"Secret.with block must contain a final expression"))
+		return nil
+	}
+
+	last := expr.Statements[len(expr.Statements)-1]
+	exprStmt, ok := last.(*ast.ExpressionStatement)
+	if !ok {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			"last item in Secret.with block must be an expression"))
+		return nil
+	}
+	expr.Statements = expr.Statements[:len(expr.Statements)-1]
+	expr.FinalExpression = exprStmt.Expression
+
+	return expr
 }
 
 // parseStayExpression parses async.stay(state) { body }

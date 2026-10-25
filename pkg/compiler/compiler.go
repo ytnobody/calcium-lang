@@ -1475,11 +1475,6 @@ func (c *Compiler) Compile(node ast.Node) error {
 			return c.newCompileError(node.Token,
 				"Secret cannot be passed to '!>'; use the secret-authorized '!!!>' pipeline")
 		}
-		if node.AllowSecret && c.isSecretExpr(node.Left) {
-			// Authorized by the explicit !!!> operator in this implementation
-			// phase. Capability/runtime policy checks are added separately.
-		}
-
 		// Compile the right side (effect function) first
 		prevAllow := c.allowSecretArgs
 		c.allowSecretArgs = c.allowSecretArgs || node.AllowSecret

@@ -75,3 +75,55 @@ func TestKillAllUnregisters(t *testing.T) {
 		t.Fatalf("__proc_close after KillAll failed: %v", r)
 	}
 }
+
+func TestProcWriteSecretTrustedSink(t *testing.T) {
+	if _, err := exec.LookPath("cat"); err != nil {
+		t.Skip("cat not available on this platform")
+	}
+
+	start := primitiveProcStart(value.String("cat"), value.Array([]value.Value{}))
+	if !start.IsSuccess() {
+		t.Fatalf("__proc_start failed: %v", start)
+	}
+	handle := start.AsSuccess()
+	defer primitiveProcClose(handle) //nolint:errcheck
+
+	scope := value.NewHash()
+	scope.Set(value.String("handle"), handle)
+	cap := value.SecretCapabilityVal("os.proc_write_secret", value.HashVal(scope))
+
+	write := primitiveProcWriteSecret(handle, value.SecretVal(value.String("SECRET-LINE\n")), cap)
+	if !write.IsSuccess() {
+		t.Fatalf("__proc_write_secret failed: %v", write)
+	}
+
+	line := primitiveProcReadLine(handle)
+	if !line.IsSuccess() {
+		t.Fatalf("__proc_read_line failed: %v", line)
+	}
+	if got := line.AsSuccess().AsString(); got != "SECRET-LINE" {
+		t.Fatalf("expected SECRET-LINE, got %q", got)
+	}
+}
+
+func TestProcWriteSecretRejectsWrongHandleScope(t *testing.T) {
+	if _, err := exec.LookPath("cat"); err != nil {
+		t.Skip("cat not available on this platform")
+	}
+
+	start := primitiveProcStart(value.String("cat"), value.Array([]value.Value{}))
+	if !start.IsSuccess() {
+		t.Fatalf("__proc_start failed: %v", start)
+	}
+	handle := start.AsSuccess()
+	defer primitiveProcClose(handle) //nolint:errcheck
+
+	scope := value.NewHash()
+	scope.Set(value.String("handle"), value.Int(99999))
+	cap := value.SecretCapabilityVal("os.proc_write_secret", value.HashVal(scope))
+
+	write := primitiveProcWriteSecret(handle, value.SecretVal(value.String("SECRET")), cap)
+	if write.IsSuccess() {
+		t.Fatal("expected failure for mismatched handle scope")
+	}
+}

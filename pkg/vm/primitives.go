@@ -1651,14 +1651,15 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__env_get": {Name: "__env_get", Fn: primitiveEnvGet},
 
 		// External process (streaming subprocess for DBI backends and tools)
-		"__proc_start":     {Name: "__proc_start", Fn: primitiveProcStart},
-		"__proc_write":     {Name: "__proc_write", Fn: primitiveProcWrite},
-		"__proc_read_line": {Name: "__proc_read_line", Fn: primitiveProcReadLine},
-		"__proc_close":     {Name: "__proc_close", Fn: primitiveProcClose},
-		"__proc_wait":      {Name: "__proc_wait", Fn: primitiveProcWait},
-		"__env_set":        {Name: "__env_set", Fn: primitiveEnvSet},
-		"__env_unset":      {Name: "__env_unset", Fn: primitiveEnvUnset},
-		"__env_list":       {Name: "__env_list", Fn: primitiveEnvList},
+		"__proc_start":        {Name: "__proc_start", Fn: primitiveProcStart},
+		"__proc_write":        {Name: "__proc_write", Fn: primitiveProcWrite},
+		"__proc_write_secret": {Name: "__proc_write_secret", Fn: primitiveProcWriteSecret},
+		"__proc_read_line":    {Name: "__proc_read_line", Fn: primitiveProcReadLine},
+		"__proc_close":        {Name: "__proc_close", Fn: primitiveProcClose},
+		"__proc_wait":         {Name: "__proc_wait", Fn: primitiveProcWait},
+		"__env_set":           {Name: "__env_set", Fn: primitiveEnvSet},
+		"__env_unset":         {Name: "__env_unset", Fn: primitiveEnvUnset},
+		"__env_list":          {Name: "__env_list", Fn: primitiveEnvList},
 
 		// OS / Process
 		"__os_args": {Name: "__os_args", Fn: primitiveOsArgs},

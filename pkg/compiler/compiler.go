@@ -466,11 +466,25 @@ func (c *Compiler) secretSinkName(expr ast.Expression) string {
 	case *ast.CallExpression:
 		return c.secretSinkName(e.Function)
 	case *ast.Identifier:
+		if sym, ok := c.symbolTable.Resolve(e.Value); ok {
+			return fmt.Sprintf("%s@%s:%d", e.Value, sym.Scope, sym.Index)
+		}
 		return e.Value
 	case *ast.MemberExpression:
-		return c.secretSinkName(e.Object) + "." + e.Property.Value
+		return c.secretSinkObjectName(e.Object) + "." + e.Property.Value
 	case *ast.StringLiteral:
 		return e.Value
+	default:
+		return "<unknown>"
+	}
+}
+
+func (c *Compiler) secretSinkObjectName(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.Identifier:
+		return e.Value
+	case *ast.MemberExpression:
+		return c.secretSinkObjectName(e.Object) + "." + e.Property.Value
 	default:
 		return "<unknown>"
 	}
@@ -517,9 +531,9 @@ func (c *Compiler) isSecretExpr(expr ast.Expression) bool {
 			}
 		}
 	case *ast.PipeExpression:
-		return c.isSecretExpr(e.Left)
+		return c.isSecretExpr(e.Left) || c.isSecretExpr(e.Right)
 	case *ast.EffectPipeExpression:
-		return c.isSecretExpr(e.Left)
+		return c.isSecretExpr(e.Left) || c.isSecretExpr(e.Right)
 	}
 	return false
 }
@@ -582,6 +596,11 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 func (c *Compiler) Compile(node ast.Node) error {
 	switch node := node.(type) {
 	case *ast.Program:
+		// A Compiler instance may be reused by the REPL. Reset lexical Secret
+		// provenance so a failed compilation cannot pollute later inputs.
+		c.secretVars = make(map[string]bool)
+		c.secretVarsStack = nil
+
 		// Expand composite parameter annotations (`A & B` / `A | B`) into
 		// synthetic constraint declarations before registration/lowering.
 		// Prepend so a synthetic constraint is compiled before the function

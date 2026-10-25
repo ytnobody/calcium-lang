@@ -307,6 +307,9 @@ func parseJSONObject(s string, pos int) (value.Value, int, error) {
 // --- JSON Stringify ---
 
 func stringifyJSON(v value.Value) (string, error) {
+	if containsSecret(v) {
+		return "", fmt.Errorf("json: cannot serialize Secret")
+	}
 	var buf strings.Builder
 	if err := writeJSON(&buf, v); err != nil {
 		return "", err
@@ -315,9 +318,6 @@ func stringifyJSON(v value.Value) (string, error) {
 }
 
 func writeJSON(buf *strings.Builder, v value.Value) error {
-	if containsSecret(v) {
-		return fmt.Errorf("json: cannot serialize Secret")
-	}
 	switch v.Type {
 	case value.TYPE_INVALID:
 		buf.WriteString("null")

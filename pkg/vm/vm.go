@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,18 +63,23 @@ func (vm *VM) SetSecretWritePolicy(modules []string) {
 }
 
 // isModuleAllowed matches canonical module IDs and project-relative allowlist
-// entries such as "./lib/auth.ca".
+// entries such as "./lib/auth.ca". Relative entries are anchored to the entry
+// file's directory rather than matched as arbitrary path suffixes.
 func (vm *VM) isModuleAllowed(moduleID string) bool {
 	if vm.secretWriteAllowed[moduleID] {
 		return true
 	}
-	cleanID := strings.TrimPrefix(moduleID, "./")
+	if vm.sourcePath == "" {
+		return false
+	}
+	root := filepath.Dir(vm.sourcePath)
+	cleanID := filepath.Clean(moduleID)
 	for allowed := range vm.secretWriteAllowed {
-		cleanAllowed := strings.TrimPrefix(allowed, "./")
-		if cleanAllowed == "" {
+		if !strings.HasPrefix(allowed, "./") && !strings.HasPrefix(allowed, "../") {
 			continue
 		}
-		if cleanID == cleanAllowed || strings.HasSuffix(cleanID, "/"+cleanAllowed) {
+		candidate := filepath.Clean(filepath.Join(root, allowed))
+		if candidate == cleanID {
 			return true
 		}
 	}
@@ -1934,6 +1940,9 @@ func (vm *VM) callPartialBuiltin(partial *value.PartialBuiltin, numArgs int) err
 			r, e := vm.callValueSync(fn, []value.Value{accumulator, elem})
 			if e != nil {
 				vm.sp = vm.sp - numArgs - 1
+				if isSecretBoundaryError(e) {
+					return e
+				}
 				return vm.push(value.Failure(value.String(fmt.Sprintf("reduce: %v", e))))
 			}
 			accumulator = r
@@ -2088,6 +2097,9 @@ func (vm *VM) executeReduce(args []value.Value) error {
 		result, err := vm.callValueSync(fn, []value.Value{accumulator, elem})
 		if err != nil {
 			vm.sp = vm.sp - len(args) - 1
+			if isSecretBoundaryError(err) {
+				return err
+			}
 			return vm.push(value.Failure(value.String(fmt.Sprintf("reduce: %v", err))))
 		}
 		accumulator = result

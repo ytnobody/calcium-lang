@@ -117,6 +117,8 @@ type VM struct {
 	globals            []value.Value
 	secretCaps         []value.Value
 	secretWriteAllowed map[string]bool
+	secretCallAllowed  bool
+	secretTaintDepth   int
 
 	stack []value.Value
 	sp    int // Stack pointer: always points to next free slot
@@ -823,7 +825,12 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		if secret.Type != value.TYPE_SECRET {
 			return fmt.Errorf("Secret.map: first argument must be a Secret, got %s", secret.Type)
 		}
+		if vm.isEffectValue(fn) {
+			return fmt.Errorf("Secret.map: callback must be a pure function")
+		}
+		vm.secretTaintDepth++
 		result, err := vm.callValueSync(fn, []value.Value{secret.AsSecret().Value})
+		vm.secretTaintDepth--
 		if err != nil {
 			return err
 		}
@@ -882,6 +889,9 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		if !vm.secretWriteAllowed[moduleID] {
 			return fmt.Errorf("module %q is not allowed to write secrets", moduleID)
 		}
+
+	case bytecode.OpAllowSecretCall:
+		vm.secretCallAllowed = true
 
 	case bytecode.OpCallEffect:
 		numArgs := int(ins[ip+1])
@@ -1597,12 +1607,78 @@ func (vm *VM) executeComparison(op bytecode.OpCode) error {
 	return vm.push(value.Bool(result))
 }
 
+var effectBuiltinNames = map[string]bool{
+	"print": true, "println": true, "say": true,
+	"read_file": true, "write_file": true, "list_dir": true, "mkdir": true,
+	"delete_file": true, "file_info": true, "exists": true,
+	"spawn": true, "expects": true, "continue": true, "leave": true,
+	"cancel": true, "all": true, "channel": true, "timeout": true,
+	"interval": true, "send": true, "close": true,
+}
+
+func (vm *VM) isEffectValue(v value.Value) bool {
+	switch v.Type {
+	case value.TYPE_CLOSURE:
+		return v.AsClosure().Fn.IsEffect
+	case value.TYPE_FUNCTION:
+		return v.AsFunction().IsEffect
+	case value.TYPE_BUILTIN:
+		return effectBuiltinNames[v.AsBuiltin().Name]
+	case value.TYPE_OVERLOADED_CLOSURE:
+		for _, variant := range v.AsOverloadedClosure().Variants {
+			if variant.Fn.IsEffect {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (vm *VM) effectValueName(v value.Value) string {
+	switch v.Type {
+	case value.TYPE_CLOSURE:
+		return v.AsClosure().Fn.Name
+	case value.TYPE_FUNCTION:
+		return v.AsFunction().Name
+	case value.TYPE_BUILTIN:
+		return v.AsBuiltin().Name
+	case value.TYPE_OVERLOADED_CLOSURE:
+		return v.AsOverloadedClosure().Name
+	default:
+		return v.String()
+	}
+}
+
+// checkSecretCallBoundary enforces the runtime Secret effect boundary.
+func (vm *VM) checkSecretCallBoundary(callee value.Value, numArgs int) error {
+	// Runtime Secret backstop. While executing a Secret.map callback, the
+	// callback receives the raw payload and must remain pure.
+	if vm.secretTaintDepth > 0 && vm.isEffectValue(callee) {
+		return fmt.Errorf("Secret.map callback must be pure: effect %s called while Secret is tainted", vm.effectValueName(callee))
+	}
+	if vm.secretCallAllowed {
+		vm.secretCallAllowed = false
+		return nil
+	}
+	if vm.isEffectValue(callee) {
+		for i := 0; i < numArgs; i++ {
+			if containsSecret(vm.stack[vm.sp-numArgs+i]) {
+				return fmt.Errorf("Secret cannot be passed to effect %s without !!!> authorization", vm.effectValueName(callee))
+			}
+		}
+	}
+	return nil
+}
+
 func (vm *VM) executeCall(numArgs int) error {
 	// The function is on the stack below the arguments
 	// For pipe operator: stack is [arg, func]
 	// We need to handle both cases
 
 	callee := vm.stack[vm.sp-1-numArgs]
+	if err := vm.checkSecretCallBoundary(callee, numArgs); err != nil {
+		return err
+	}
 
 	switch callee.Type {
 	case value.TYPE_CLOSURE:
@@ -1656,6 +1732,9 @@ func (vm *VM) resolveOverload(oc *value.OverloadedClosure, numArgs int) (*value.
 // instead of pushing a new one, preventing stack overflow in recursive calls.
 func (vm *VM) executeTailCall(numArgs int) error {
 	callee := vm.stack[vm.sp-1-numArgs]
+	if err := vm.checkSecretCallBoundary(callee, numArgs); err != nil {
+		return err
+	}
 
 	switch callee.Type {
 	case value.TYPE_CLOSURE:

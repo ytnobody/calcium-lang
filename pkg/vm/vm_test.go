@@ -1994,6 +1994,15 @@ func TestSecretCapabilityMismatch(t *testing.T) {
 	})
 }
 
+func TestSecretRuntimeBoundaryBackstop(t *testing.T) {
+	// hide() is pure and its return type is not statically tracked as Secret,
+	// so the compiler cannot reject the effect call; the VM must.
+	runVmErrorTests(t, []string{
+		`func! leak(x) = x; func hide(s) = s; hidden = hide(Secret.wrap("x")); leak(hidden);`,
+		`use core.io!; Secret.map(Secret.wrap("SECRET"), x => io.println(x));`,
+	})
+}
+
 func TestSecretRuntimePolicyDefaultDeny(t *testing.T) {
 	input := `func! send(x) = x; cap = Secret.capability(send, {}); Secret.with(cap) { Secret.wrap("token") !!!> send };`
 	program := parse(input)

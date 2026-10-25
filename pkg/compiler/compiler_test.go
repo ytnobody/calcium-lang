@@ -893,6 +893,17 @@ func TestCompileSecretPipelineAllowed(t *testing.T) {
 	}
 }
 
+func TestCompileSecretMapRejectsEffectCallback(t *testing.T) {
+	input := `func! sink(x) = x; Secret.map(Secret.wrap("x"), sink);`
+	_, err := compileSource(input)
+	if err == nil {
+		t.Fatal("expected compile error for effect callback in Secret.map")
+	}
+	if !strings.Contains(err.Error(), "pure function") {
+		t.Errorf("unexpected error: %s", err)
+	}
+}
+
 func TestCompileSecretCapabilityEntryOnly(t *testing.T) {
 	program := parse(`func! sink(x) = x; cap = Secret.capability(sink, {});`)
 	comp := New()

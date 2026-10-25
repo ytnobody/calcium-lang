@@ -19,6 +19,11 @@ const (
 	FileExtension = ".bone"
 )
 
+const (
+	maxBytecodeStringLen = 64 << 20 // 64 MiB
+	maxBytecodeElements  = 1 << 20  // 1,048,576 constants/parameters/values
+)
+
 // Constant type tags for serialization
 const (
 	TypeTagLegacyNone byte = 0 // legacy bytecode files may contain this tag
@@ -112,7 +117,7 @@ func Deserialize(data []byte) (*CompiledBytecode, error) {
 		return nil, fmt.Errorf("failed to read constant count: %w", err)
 	}
 
-	if numConstants > uint32(buf.Len()) {
+	if numConstants > maxBytecodeElements || numConstants > uint32(buf.Len()) {
 		return nil, fmt.Errorf("invalid constant count: %d exceeds remaining input", numConstants)
 	}
 	// Read constants
@@ -276,7 +281,7 @@ func deserializeConstant(r *bytes.Reader, versionMinor byte) (value.Value, error
 		if err != nil {
 			return value.Invalid(), err
 		}
-		if numValues > uint32(r.Len()) {
+		if numValues > maxBytecodeElements || numValues > uint32(r.Len()) {
 			return value.Invalid(), fmt.Errorf("invalid ADT value count: %d exceeds remaining input", numValues)
 		}
 		values := make([]value.Value, numValues)
@@ -367,7 +372,7 @@ func deserializeFunction(r *bytes.Reader, versionMinor byte) (*value.Function, e
 	if err != nil {
 		return nil, err
 	}
-	if numParams > uint32(r.Len()) {
+	if numParams > maxBytecodeElements || numParams > uint32(r.Len()) {
 		return nil, fmt.Errorf("invalid parameter count: %d exceeds remaining input", numParams)
 	}
 	fn.Parameters = make([]string, numParams)
@@ -398,7 +403,7 @@ func deserializeFunction(r *bytes.Reader, versionMinor byte) (*value.Function, e
 	if err != nil {
 		return nil, err
 	}
-	if bodyLen > uint32(r.Len()) {
+	if bodyLen > maxBytecodeStringLen || bodyLen > uint32(r.Len()) {
 		return nil, fmt.Errorf("invalid function body length: %d exceeds remaining input", bodyLen)
 	}
 	fn.Body = make([]byte, bodyLen)
@@ -527,7 +532,7 @@ func readString(r *bytes.Reader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if length > uint32(r.Len()) {
+	if length > maxBytecodeStringLen || length > uint32(r.Len()) {
 		return "", fmt.Errorf("invalid string length: %d exceeds remaining input", length)
 	}
 	buf := make([]byte, length)

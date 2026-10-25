@@ -93,6 +93,8 @@ type Compiler struct {
 
 	// secretVarsStack saves the Secret provenance map at scope boundaries.
 	secretVarsStack []map[string]bool
+
+	nextFunctionID int
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -101,6 +103,7 @@ type CompilationScope struct {
 	lastInstruction     EmittedInstruction
 	previousInstruction EmittedInstruction
 	funcName            string // function name for this scope ("" for global)
+	functionID          int    // unique id for local/free sink identity
 }
 
 // EmittedInstruction tracks emitted instructions
@@ -467,6 +470,13 @@ func (c *Compiler) secretSinkName(expr ast.Expression) string {
 		return c.secretSinkName(e.Function)
 	case *ast.Identifier:
 		if sym, ok := c.symbolTable.Resolve(e.Value); ok {
+			if sym.Scope == LocalScope || sym.Scope == FreeScope {
+				fnID := 0
+				if c.scopeIndex >= 0 && c.scopeIndex < len(c.scopes) {
+					fnID = c.scopes[c.scopeIndex].functionID
+				}
+				return fmt.Sprintf("%s@%s:%d#fn%d", e.Value, sym.Scope, sym.Index, fnID)
+			}
 			return fmt.Sprintf("%s@%s:%d", e.Value, sym.Scope, sym.Index)
 		}
 		return e.Value
@@ -502,6 +512,10 @@ func (c *Compiler) isSecretExpr(expr ast.Expression) bool {
 		}
 	case *ast.Identifier:
 		return c.secretVars[e.Value]
+	case *ast.MemberExpression:
+		if ident, ok := e.Object.(*ast.Identifier); ok && ident.Value == "Secret" {
+			return e.Property.Value == "wrap" || e.Property.Value == "map"
+		}
 	case *ast.ArrayLiteral:
 		for _, elem := range e.Elements {
 			if c.isSecretExpr(elem) {
@@ -2344,11 +2358,13 @@ func (c *Compiler) enterScope() {
 }
 
 func (c *Compiler) enterScopeWithName(funcName string) {
+	c.nextFunctionID++
 	scope := CompilationScope{
 		instructions:        bytecode.Instructions{},
 		lastInstruction:     EmittedInstruction{},
 		previousInstruction: EmittedInstruction{},
 		funcName:            funcName,
+		functionID:          c.nextFunctionID,
 	}
 	c.scopes = append(c.scopes, scope)
 	c.scopeIndex++

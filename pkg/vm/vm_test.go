@@ -2026,6 +2026,16 @@ func TestSecretModuleAllowlistRelativePath(t *testing.T) {
 	if vm.isModuleAllowed("/other/lib/auth.ca") {
 		t.Error("suffix path outside the project root must not be allowed")
 	}
+
+	// Module VMs store a directory in sourcePath; projectRoot must remain the
+	// entry directory rather than being dirname'd a second time.
+	moduleVM := New(nil)
+	moduleVM.sourcePath = "/project/lib"
+	moduleVM.projectRoot = "/project"
+	moduleVM.SetSecretWritePolicy([]string{"./lib/auth.ca"})
+	if !moduleVM.isModuleAllowed("/project/lib/auth.ca") {
+		t.Error("expected module VM relative allowlist to use projectRoot")
+	}
 }
 
 func TestSecretPolicyFromRunOptions(t *testing.T) {

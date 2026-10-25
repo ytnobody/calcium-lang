@@ -69,10 +69,15 @@ func (vm *VM) isModuleAllowed(moduleID string) bool {
 	if vm.secretWriteAllowed[moduleID] {
 		return true
 	}
-	if vm.sourcePath == "" {
+	root := vm.projectRoot
+	if root == "" && vm.sourcePath != "" {
+		// The entry VM stores a file path; module VMs set projectRoot
+		// explicitly because their sourcePath is a directory.
+		root = filepath.Dir(vm.sourcePath)
+	}
+	if root == "" {
 		return false
 	}
-	root := filepath.Dir(vm.sourcePath)
 	cleanID := filepath.Clean(moduleID)
 	for allowed := range vm.secretWriteAllowed {
 		if !strings.HasPrefix(allowed, "./") && !strings.HasPrefix(allowed, "../") {
@@ -146,6 +151,7 @@ type VM struct {
 	secretCallAllowed  bool
 	secretTaintDepth   int
 	mainModuleID       string
+	projectRoot        string
 
 	stack []value.Value
 	sp    int // Stack pointer: always points to next free slot
@@ -187,6 +193,7 @@ type VM struct {
 // SetSourcePath sets the source file path for external module resolution
 func (vm *VM) SetSourcePath(path string) {
 	vm.sourcePath = path
+	vm.projectRoot = filepath.Dir(path)
 }
 
 // SetSourceMap sets the source map for the main program
@@ -302,6 +309,7 @@ func (vm *VM) CloneForSpawn() *VM {
 		secretWriteAllowed: vm.secretWriteAllowed,
 		secretCaps:         append([]value.Value(nil), vm.secretCaps...),
 		mainModuleID:       vm.mainModuleID,
+		projectRoot:        vm.projectRoot,
 	}
 
 	return clone

@@ -450,6 +450,20 @@ func TestRegexLiteral(t *testing.T) {
 	}
 }
 
+func TestSecretPipeToken(t *testing.T) {
+	l := New(`secret !!!> send`)
+	expected := []token.TokenType{token.IDENT, token.SECRET_PIPE, token.IDENT}
+	for i, want := range expected {
+		tok := l.NextToken()
+		if tok.Type != want {
+			t.Fatalf("token %d: expected %s, got %s (%q)", i, want, tok.Type, tok.Literal)
+		}
+		if i == 1 && tok.Literal != "!!!>" {
+			t.Errorf("expected literal !!!>, got %q", tok.Literal)
+		}
+	}
+}
+
 func TestPropPipeToken(t *testing.T) {
 	tests := []struct {
 		input    string

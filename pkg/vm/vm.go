@@ -780,6 +780,26 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			return err
 		}
 
+	case bytecode.OpSecretWrap:
+		val := vm.pop()
+		if err := vm.push(value.SecretVal(val)); err != nil {
+			return err
+		}
+
+	case bytecode.OpSecretMap:
+		fn := vm.pop()
+		secret := vm.pop()
+		if secret.Type != value.TYPE_SECRET {
+			return fmt.Errorf("Secret.map: first argument must be a Secret, got %s", secret.Type)
+		}
+		result, err := vm.callValueSync(fn, []value.Value{secret.AsSecret().Value})
+		if err != nil {
+			return err
+		}
+		if err := vm.push(value.SecretVal(result)); err != nil {
+			return err
+		}
+
 	case bytecode.OpCallEffect:
 		numArgs := int(ins[ip+1])
 		vm.currentFrame().ip += 1

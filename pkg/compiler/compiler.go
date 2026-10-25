@@ -80,6 +80,13 @@ type Compiler struct {
 
 	// staticChecker performs compile-time constraint validation
 	staticChecker *staticConstraintChecker
+
+	// secretVars tracks names bound to Secret values for best-effort
+	// compile-time detection of Secret-to-effect leaks.
+	secretVars map[string]bool
+
+	// allowSecretArgs is true while compiling an authorized !!!> stage.
+	allowSecretArgs bool
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -257,6 +264,7 @@ func New() *Compiler {
 		sourceMapIndex:        0,
 		compiledFunctionNames: make(map[string]bool),
 		staticChecker:         newStaticConstraintChecker(),
+		secretVars:            make(map[string]bool),
 	}
 
 	// Define built-in functions
@@ -443,6 +451,40 @@ func (c *Compiler) builtinMaybeSome() value.Value {
 	})
 }
 
+// isSecretExpr reports whether an expression is statically known to produce a
+// Secret value. This is best-effort; the runtime remains the backstop.
+func (c *Compiler) isSecretExpr(expr ast.Expression) bool {
+	switch e := expr.(type) {
+	case *ast.CallExpression:
+		if member, ok := e.Function.(*ast.MemberExpression); ok {
+			if ident, ok := member.Object.(*ast.Identifier); ok && ident.Value == "Secret" {
+				return member.Property.Value == "wrap" || member.Property.Value == "map"
+			}
+		}
+	case *ast.Identifier:
+		return c.secretVars[e.Value]
+	case *ast.ArrayLiteral:
+		for _, elem := range e.Elements {
+			if c.isSecretExpr(elem) {
+				return true
+			}
+		}
+	case *ast.TupleLiteral:
+		for _, elem := range e.Elements {
+			if c.isSecretExpr(elem) {
+				return true
+			}
+		}
+	case *ast.HashLiteral:
+		for _, pair := range e.Pairs {
+			if c.isSecretExpr(pair.Key) || c.isSecretExpr(pair.Value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // isEffectExpression checks if an expression refers to an effect function
 // Returns: (isEffect bool, canDetermine bool)
 // canDetermine is false if we can't statically determine the effect status
@@ -492,6 +534,7 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 		sourceMapIndex:        0,
 		compiledFunctionNames: make(map[string]bool),
 		staticChecker:         newStaticConstraintChecker(),
+		secretVars:            make(map[string]bool),
 	}
 }
 
@@ -567,6 +610,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 		symbol := c.symbolTable.Define(node.Name.Value)
 		// Track simple constants for static constraint checking (x = 5; f(x)).
 		c.staticChecker.trackConst(node.Name.Value, node.Value)
+		// Track Secret provenance for compile-time effect-boundary checks.
+		c.secretVars[node.Name.Value] = c.isSecretExpr(node.Value)
 		err := c.Compile(node.Value)
 		if err != nil {
 			return err
@@ -1194,11 +1239,51 @@ func (c *Compiler) Compile(node ast.Node) error {
 	case *ast.CallExpression:
 		c.setPosFromToken(node.Token)
 
+		// Built-in Secret constructors/transforms.
+		if member, ok := node.Function.(*ast.MemberExpression); ok {
+			if ident, ok := member.Object.(*ast.Identifier); ok && ident.Value == "Secret" {
+				switch member.Property.Value {
+				case "wrap":
+					if len(node.Arguments) != 1 {
+						return c.newCompileError(node.Token, "Secret.wrap expects exactly 1 argument")
+					}
+					if err := c.Compile(node.Arguments[0]); err != nil {
+						return err
+					}
+					c.emit(bytecode.OpSecretWrap)
+					return nil
+				case "map":
+					if len(node.Arguments) != 2 {
+						return c.newCompileError(node.Token, "Secret.map expects exactly 2 arguments")
+					}
+					if err := c.Compile(node.Arguments[0]); err != nil {
+						return err
+					}
+					if err := c.Compile(node.Arguments[1]); err != nil {
+						return err
+					}
+					c.emit(bytecode.OpSecretMap)
+					return nil
+				}
+			}
+		}
+
 		// Static constraint check: validate literal arguments at compile time
 		if ident, ok := node.Function.(*ast.Identifier); ok {
 			errs := c.staticChecker.checkCallExpression(ident.Value, node.Arguments, node.Token)
 			for _, errMsg := range errs {
 				return c.newCompileError(node.Token, errMsg)
+			}
+		}
+
+		// Best-effort compile-time Secret leak check: an effect call must not
+		// receive a Secret unless it is inside an authorized !!!> stage.
+		if isEffect, known := c.isEffectExpression(node.Function); known && isEffect && !c.allowSecretArgs {
+			for _, arg := range node.Arguments {
+				if c.isSecretExpr(arg) {
+					return c.newCompileError(node.Token,
+						"Secret cannot be passed to an effect; use the secret-authorized '!!!>' pipeline")
+				}
 			}
 		}
 
@@ -1369,7 +1454,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 	case *ast.EffectPipeExpression:
 		// expr !> func! is equivalent to func!(expr), returns success/failure
-		// Effect functions automatically wrap their return in success
+		// !!!> additionally authorizes Secret values to cross the effect boundary.
 		// Stack order for call: [func, arg1, arg2, ...]
 
 		// Check if right side is NOT an effect function - should use |> instead
@@ -1378,12 +1463,28 @@ func (c *Compiler) Compile(node ast.Node) error {
 			funcExpr = call.Function
 		}
 		if isEffect, canDetermine := c.isEffectExpression(funcExpr); canDetermine && !isEffect {
+			if node.AllowSecret {
+				return c.newCompileError(node.Token,
+					"cannot use '!!!>' with pure function; use '|>' or '!>' instead")
+			}
 			return c.newCompileError(node.Token,
 				"cannot use '!>' with pure function; use '|>' instead")
 		}
 
+		if !node.AllowSecret && !c.allowSecretArgs && c.isSecretExpr(node.Left) {
+			return c.newCompileError(node.Token,
+				"Secret cannot be passed to '!>'; use the secret-authorized '!!!>' pipeline")
+		}
+		if node.AllowSecret && c.isSecretExpr(node.Left) {
+			// Authorized by the explicit !!!> operator in this implementation
+			// phase. Capability/runtime policy checks are added separately.
+		}
+
 		// Compile the right side (effect function) first
+		prevAllow := c.allowSecretArgs
+		c.allowSecretArgs = c.allowSecretArgs || node.AllowSecret
 		err := c.Compile(node.Right)
+		c.allowSecretArgs = prevAllow
 		if err != nil {
 			return err
 		}

@@ -35,6 +35,7 @@ var precedences = map[token.TokenType]int{
 	token.PIPE:        PIPE,
 	token.PROP_PIPE:   PIPE, // |>? for error propagation
 	token.EFFECT_PIPE: PIPE,
+	token.SECRET_PIPE: PIPE,
 	token.EFFECT_END:  PIPE, // !? for result handling
 	token.OR:          OR,
 	token.AND:         AND,
@@ -138,6 +139,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.PIPE, p.parsePipeExpression)
 	p.registerInfix(token.PROP_PIPE, p.parseErrorPropPipeExpression)
 	p.registerInfix(token.EFFECT_PIPE, p.parseEffectPipeExpression)
+	p.registerInfix(token.SECRET_PIPE, p.parseEffectPipeExpression)
 	p.registerInfix(token.SPREAD, p.parseSpreadExpression)
 	p.registerInfix(token.QUESTION, p.parseConstraintCheckExpression)
 	p.registerInfix(token.EFFECT_END, p.parseEffectHandleExpression)
@@ -602,7 +604,7 @@ func (p *Parser) parseTypedAssignmentStatement() *ast.AssignmentStatement {
 		// We can't easily "unread" tokens so we report an error.
 		p.errors = append(p.errors, p.formatErrorWithContext(
 			typeTok.Line, typeTok.Column,
-			fmt.Sprintf("unknown type name %q in type annotation; expected a built-in type (Int, Float, String, Bool, Maybe, Array, Hash, Tuple, Func, Regex, Any, Success, Failure)", typeName),
+			fmt.Sprintf("unknown type name %q in type annotation; expected a built-in type (Int, Float, String, Bool, Maybe, Secret, Array, Hash, Tuple, Func, Regex, Any, Success, Failure)", typeName),
 		))
 		return nil
 	}
@@ -1664,7 +1666,11 @@ func (p *Parser) parsePipeExpression(left ast.Expression) ast.Expression {
 }
 
 func (p *Parser) parseEffectPipeExpression(left ast.Expression) ast.Expression {
-	exp := &ast.EffectPipeExpression{Token: p.curToken, Left: left}
+	exp := &ast.EffectPipeExpression{
+		Token:       p.curToken,
+		Left:        left,
+		AllowSecret: p.curToken.Type == token.SECRET_PIPE,
+	}
 
 	precedence := p.curPrecedence()
 	p.nextToken()

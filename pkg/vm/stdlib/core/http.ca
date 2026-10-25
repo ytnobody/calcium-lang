@@ -9,8 +9,8 @@ func! get(url, headers) = __http_get(url, headers);
 
 // post_secret sends a Secret string as the POST body. This is a trusted
 // Secret sink: it unwraps the Secret internally and verifies the capability.
-// post_secret(url, secret, capability, content_type, headers)
-func! post_secret(url, secret, capability, content_type, headers) =
+// post_secret(secret, url, capability, content_type, headers)
+func! post_secret(secret, url, capability, content_type, headers) =
     __http_post_secret(url, secret, capability, content_type, headers);
 
 // post performs a POST request

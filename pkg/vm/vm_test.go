@@ -2000,6 +2000,8 @@ func TestSecretRuntimeBoundaryBackstop(t *testing.T) {
 	runVmErrorTests(t, []string{
 		`func! leak(x) = x; func hide(s) = s; hidden = hide(Secret.wrap("x")); leak(hidden);`,
 		`use core.io!; Secret.map(Secret.wrap("SECRET"), x => io.println(x));`,
+		`use core.io!; Secret.map(Secret.wrap("TOP-SECRET"), x => map([x], io.println));`,
+		`use core.io!; Secret.map(Secret.wrap("TOP-SECRET"), x => reduce([1], (a, b) => io.println(x), 0));`,
 	})
 }
 
@@ -2011,6 +2013,28 @@ func TestSecretPolicyFromEnv(t *testing.T) {
 	}
 	if !vm.secretWriteAllowed["./lib/auth.ca"] {
 		t.Error("expected ./lib/auth.ca to be allowed from environment")
+	}
+}
+
+func TestSecretModuleAllowlistRelativePath(t *testing.T) {
+	vm := New(nil)
+	vm.sourcePath = "/project/main.ca"
+	vm.SetSecretWritePolicy([]string{"./lib/auth.ca"})
+	if !vm.isModuleAllowed("/project/lib/auth.ca") {
+		t.Error("expected project-relative module to be allowed")
+	}
+	if vm.isModuleAllowed("/other/lib/auth.ca") {
+		t.Error("suffix path outside the project root must not be allowed")
+	}
+
+	// Module VMs store a directory in sourcePath; projectRoot must remain the
+	// entry directory rather than being dirname'd a second time.
+	moduleVM := New(nil)
+	moduleVM.sourcePath = "/project/lib"
+	moduleVM.projectRoot = "/project"
+	moduleVM.SetSecretWritePolicy([]string{"./lib/auth.ca"})
+	if !moduleVM.isModuleAllowed("/project/lib/auth.ca") {
+		t.Error("expected module VM relative allowlist to use projectRoot")
 	}
 }
 

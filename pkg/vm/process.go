@@ -204,19 +204,8 @@ func primitiveProcWriteSecret(args ...value.Value) value.Value {
 	if args[1].Type != value.TYPE_SECRET {
 		return value.Failure(value.String("__proc_write_secret: secret must be a Secret"))
 	}
-	if args[2].Type != value.TYPE_SECRET_CAPABILITY {
-		return value.Failure(value.String("__proc_write_secret: capability must be a SecretCapability"))
-	}
-	cap := args[2].AsSecretCapability()
-	if cap.Sink != "os.proc_write_secret" {
-		return value.Failure(value.String(fmt.Sprintf("__proc_write_secret: capability authorizes %q, not os.proc_write_secret", cap.Sink)))
-	}
-	if cap.Scope.Type != value.TYPE_HASH {
-		return value.Failure(value.String("__proc_write_secret: capability scope must include a handle"))
-	}
-	scopeHandle, found := cap.Scope.AsHash().Get(value.String("handle"))
-	if !found || !scopeHandle.Equals(args[0]) {
-		return value.Failure(value.String("__proc_write_secret: capability does not authorize this process handle"))
+	if err := verifySecretCapability(args[2], "os.proc_write_secret", "handle", args[0]); err != nil {
+		return value.Failure(value.String("__proc_write_secret: " + err.Error()))
 	}
 	payload := args[1].AsSecret().Value
 	if payload.Type != value.TYPE_STRING {

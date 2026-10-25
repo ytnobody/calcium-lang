@@ -904,6 +904,25 @@ func TestCompileSecretMapRejectsEffectCallback(t *testing.T) {
 	}
 }
 
+func TestCompileSecretProvenanceAcrossScopes(t *testing.T) {
+	input := `func! sink(x) = x; token = Secret.wrap("t"); f = () => do token = "public"; token end; f(); token !> sink;`
+	_, err := compileSource(input)
+	if err == nil {
+		t.Fatal("expected outer Secret provenance to survive nested scope")
+	}
+	if !strings.Contains(err.Error(), "Secret cannot be passed") {
+		t.Errorf("unexpected error: %s", err)
+	}
+}
+
+func TestCompileSecretMatchProvenance(t *testing.T) {
+	input := `func! sink(x) = x; s = match true true => Secret.wrap("t") false => "x"; s !> sink;`
+	_, err := compileSource(input)
+	if err == nil {
+		t.Fatal("expected match result Secret provenance to be tracked")
+	}
+}
+
 func TestCompileSecretCapabilityEntryOnly(t *testing.T) {
 	program := parse(`func! sink(x) = x; cap = Secret.capability(sink, {});`)
 	comp := New()

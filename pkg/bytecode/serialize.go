@@ -19,6 +19,11 @@ const (
 	FileExtension = ".bone"
 )
 
+const (
+	maxBytecodeStringLen = 64 << 20 // 64 MiB
+	maxBytecodeElements  = 1 << 20  // 1,048,576 constants/parameters/values
+)
+
 // Constant type tags for serialization
 const (
 	TypeTagLegacyNone byte = 0 // legacy bytecode files may contain this tag
@@ -112,6 +117,9 @@ func Deserialize(data []byte) (*CompiledBytecode, error) {
 		return nil, fmt.Errorf("failed to read constant count: %w", err)
 	}
 
+	if numConstants > maxBytecodeElements || numConstants > uint32(buf.Len()) {
+		return nil, fmt.Errorf("invalid constant count: %d exceeds remaining input", numConstants)
+	}
 	// Read constants
 	constants := make([]value.Value, numConstants)
 	for i := uint32(0); i < numConstants; i++ {
@@ -126,6 +134,9 @@ func Deserialize(data []byte) (*CompiledBytecode, error) {
 	insLen, err := readUint32(buf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read instructions length: %w", err)
+	}
+	if insLen > maxBytecodeStringLen || insLen > uint32(buf.Len()) {
+		return nil, fmt.Errorf("invalid instructions length: %d exceeds remaining input", insLen)
 	}
 
 	// Read instructions
@@ -273,6 +284,9 @@ func deserializeConstant(r *bytes.Reader, versionMinor byte) (value.Value, error
 		if err != nil {
 			return value.Invalid(), err
 		}
+		if numValues > maxBytecodeElements || numValues > uint32(r.Len()) {
+			return value.Invalid(), fmt.Errorf("invalid ADT value count: %d exceeds remaining input", numValues)
+		}
 		values := make([]value.Value, numValues)
 		for i := uint32(0); i < numValues; i++ {
 			v, err := deserializeConstant(r, versionMinor)
@@ -361,6 +375,9 @@ func deserializeFunction(r *bytes.Reader, versionMinor byte) (*value.Function, e
 	if err != nil {
 		return nil, err
 	}
+	if numParams > maxBytecodeElements || numParams > uint32(r.Len()) {
+		return nil, fmt.Errorf("invalid parameter count: %d exceeds remaining input", numParams)
+	}
 	fn.Parameters = make([]string, numParams)
 	for i := uint32(0); i < numParams; i++ {
 		p, err := readString(r)
@@ -388,6 +405,9 @@ func deserializeFunction(r *bytes.Reader, versionMinor byte) (*value.Function, e
 	bodyLen, err := readUint32(r)
 	if err != nil {
 		return nil, err
+	}
+	if bodyLen > maxBytecodeStringLen || bodyLen > uint32(r.Len()) {
+		return nil, fmt.Errorf("invalid function body length: %d exceeds remaining input", bodyLen)
 	}
 	fn.Body = make([]byte, bodyLen)
 	if _, err := io.ReadFull(r, fn.Body); err != nil {
@@ -514,6 +534,9 @@ func readString(r *bytes.Reader) (string, error) {
 	length, err := readUint32(r)
 	if err != nil {
 		return "", err
+	}
+	if length > maxBytecodeStringLen || length > uint32(r.Len()) {
+		return "", fmt.Errorf("invalid string length: %d exceeds remaining input", length)
 	}
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(r, buf); err != nil {

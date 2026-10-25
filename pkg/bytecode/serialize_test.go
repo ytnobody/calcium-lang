@@ -234,6 +234,18 @@ func TestDeserializeInvalidVersion(t *testing.T) {
 	}
 }
 
+func TestDeserializeRejectsHugeInstructionsLength(t *testing.T) {
+	data := []byte(MagicNumber)
+	data = append(data, VersionMajor, VersionMinor)
+	data = append(data, 0, 0, 0, 0)          // 0 constants
+	data = append(data, 0xFF, 0xFF, 0xFF, 0) // instructions length ~4 GiB, far beyond remaining input
+
+	_, err := Deserialize(data)
+	if err == nil {
+		t.Fatal("expected error for instructions length exceeding remaining input")
+	}
+}
+
 func TestSerializeInstructions(t *testing.T) {
 	// Create bytecode with multiple instructions
 	instructions := Instructions{}

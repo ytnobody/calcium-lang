@@ -822,6 +822,26 @@ func primitiveHttpGet(args ...value.Value) value.Value {
 	return doHttpRequest("GET", url, headers, "")
 }
 
+// verifySecretCapability checks that a capability grants the expected sink and
+// scope value. Scope keys are sink-specific (for example "url" or "handle").
+func verifySecretCapability(capVal value.Value, sink, scopeKey string, expected value.Value) error {
+	if capVal.Type != value.TYPE_SECRET_CAPABILITY {
+		return fmt.Errorf("capability must be a SecretCapability")
+	}
+	cap := capVal.AsSecretCapability()
+	if cap.Sink != sink {
+		return fmt.Errorf("capability authorizes %q, not %s", cap.Sink, sink)
+	}
+	if cap.Scope.Type != value.TYPE_HASH {
+		return fmt.Errorf("capability scope must include %q", scopeKey)
+	}
+	scopeValue, ok := cap.Scope.AsHash().Get(value.String(scopeKey))
+	if !ok || !scopeValue.Equals(expected) {
+		return fmt.Errorf("capability does not authorize this %s", scopeKey)
+	}
+	return nil
+}
+
 // __http_post_secret sends a Secret string as an HTTP POST body. It is the
 // only built-in HTTP path that is allowed to unwrap a Secret.
 func primitiveHttpPostSecret(args ...value.Value) value.Value {
@@ -834,9 +854,6 @@ func primitiveHttpPostSecret(args ...value.Value) value.Value {
 	if args[1].Type != value.TYPE_SECRET {
 		return value.Failure(value.String("__http_post_secret: secret must be a Secret"))
 	}
-	if args[2].Type != value.TYPE_SECRET_CAPABILITY {
-		return value.Failure(value.String("__http_post_secret: capability must be a SecretCapability"))
-	}
 	if args[3].Type != value.TYPE_STRING {
 		return value.Failure(value.String("__http_post_secret: content_type must be string"))
 	}
@@ -845,16 +862,8 @@ func primitiveHttpPostSecret(args ...value.Value) value.Value {
 	}
 
 	url := args[0].AsString()
-	cap := args[2].AsSecretCapability()
-	if cap.Sink != "http.post_secret" {
-		return value.Failure(value.String(fmt.Sprintf("__http_post_secret: capability authorizes %q, not http.post_secret", cap.Sink)))
-	}
-	if cap.Scope.Type != value.TYPE_HASH {
-		return value.Failure(value.String("__http_post_secret: capability scope must include a url"))
-	}
-	scopeURL, ok := cap.Scope.AsHash().Get(value.String("url"))
-	if !ok || scopeURL.Type != value.TYPE_STRING || scopeURL.AsString() != url {
-		return value.Failure(value.String("__http_post_secret: capability does not authorize this URL"))
+	if err := verifySecretCapability(args[2], "http.post_secret", "url", value.String(url)); err != nil {
+		return value.Failure(value.String("__http_post_secret: " + err.Error()))
 	}
 
 	payload := args[1].AsSecret().Value
@@ -865,12 +874,10 @@ func primitiveHttpPostSecret(args ...value.Value) value.Value {
 	body := payload.AsString()
 	contentType := args[3].AsString()
 	headers := hashToStringMap(args[4].AsHash())
-	if headers == nil {
-		headers = make(map[string]string)
-	}
-	headers["Content-Type"] = contentType
+	setHeaderCaseInsensitive(headers, "Content-Type", contentType)
 
-	return doHttpRequestWithBody("POST", url, headers, body)
+	resp := doHttpRequestWithBody("POST", url, headers, body)
+	return redactSecretHTTPResponse(resp)
 }
 
 // __http_post performs a POST request
@@ -900,7 +907,7 @@ func primitiveHttpPost(args ...value.Value) value.Value {
 	if headers == nil {
 		headers = make(map[string]string)
 	}
-	headers["Content-Type"] = contentType
+	setHeaderCaseInsensitive(headers, "Content-Type", contentType)
 
 	return doHttpRequestWithBody("POST", url, headers, body)
 }
@@ -932,7 +939,7 @@ func primitiveHttpPut(args ...value.Value) value.Value {
 	if headers == nil {
 		headers = make(map[string]string)
 	}
-	headers["Content-Type"] = contentType
+	setHeaderCaseInsensitive(headers, "Content-Type", contentType)
 
 	return doHttpRequestWithBody("PUT", url, headers, body)
 }
@@ -1082,6 +1089,30 @@ func buildHttpResponse(resp *http.Response) value.Value {
 }
 
 // hashToStringMap converts a Calcium hash to a Go string map
+func setHeaderCaseInsensitive(headers map[string]string, name, value string) {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			delete(headers, key)
+		}
+	}
+	headers[name] = value
+}
+
+// redactSecretHTTPResponse drops response fields that could echo the Secret
+// body back into Calcium code.
+func redactSecretHTTPResponse(resp value.Value) value.Value {
+	if resp.Type != value.TYPE_HASH {
+		return resp
+	}
+	result := value.NewHash()
+	for _, key := range []string{"status", "status_text", "ok"} {
+		if v, ok := resp.AsHash().Get(value.String(key)); ok {
+			result.Set(value.String(key), v)
+		}
+	}
+	return value.HashVal(result)
+}
+
 func hashToStringMap(h *value.Hash) map[string]string {
 	result := make(map[string]string)
 	for _, pair := range h.Pairs {

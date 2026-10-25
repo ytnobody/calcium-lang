@@ -35,6 +35,12 @@ func proc_start(cmd, args) = __proc_start(cmd, args);
 // Returns success(true) or failure(message).
 func proc_write(handle, data) = __proc_write(handle, data);
 
+// proc_write_secret(secret, handle, capability) - Trusted sink that writes a
+// Secret string to a process's stdin after verifying the capability.
+// Returns success(true) or failure(message).
+func! proc_write_secret(secret, handle, capability) =
+    __proc_write_secret(handle, secret, capability);
+
 // proc_read_line(handle) - Read one line ('\n'-terminated) from a process's
 // stdout. Blocks until data is available or the process closes its stdout.
 // Returns success(line) or failure(message).

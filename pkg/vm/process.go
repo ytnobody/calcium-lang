@@ -190,6 +190,37 @@ func primitiveProcWrite(args ...value.Value) value.Value {
 	return value.Success(value.Bool(true))
 }
 
+// __proc_write_secret(handle, secret, capability) -> success(true) | failure(msg)
+// Trusted sink: verifies the capability and writes the Secret payload to the
+// child process stdin without exposing the raw value to Calcium code.
+func primitiveProcWriteSecret(args ...value.Value) value.Value {
+	if len(args) != 3 {
+		return value.Failure(value.String("__proc_write_secret: expected 3 arguments (handle, secret, capability)"))
+	}
+	handle, ok := procHandleArg(args[0])
+	if !ok {
+		return value.Failure(value.String("__proc_write_secret: invalid handle"))
+	}
+	if args[1].Type != value.TYPE_SECRET {
+		return value.Failure(value.String("__proc_write_secret: secret must be a Secret"))
+	}
+	if err := verifySecretCapability(args[2], "os.proc_write_secret", "handle", args[0]); err != nil {
+		return value.Failure(value.String("__proc_write_secret: " + err.Error()))
+	}
+	payload := args[1].AsSecret().Value
+	if payload.Type != value.TYPE_STRING {
+		return value.Failure(value.String("__proc_write_secret: Secret payload must be a string"))
+	}
+	p := procLookup(handle)
+	if p == nil {
+		return value.Failure(value.String("__proc_write_secret: no such process handle"))
+	}
+	if _, err := io.WriteString(p.stdin, payload.AsString()); err != nil {
+		return value.Failure(value.String(fmt.Sprintf("__proc_write_secret: %v", err)))
+	}
+	return value.Success(value.Bool(true))
+}
+
 // __proc_read_line(handle) -> success(string) | failure(msg)
 // Reads one line (terminated by '\n') from the process stdout. Blocks until
 // data is available or the process closes its stdout.

@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/value"
@@ -166,6 +167,25 @@ func TestJSONStringify(t *testing.T) {
 				t.Errorf("expected %s, got %s", tt.expected, v.AsString())
 			}
 		})
+	}
+}
+
+func TestJSONStringifyRejectsSecret(t *testing.T) {
+	result := primitiveJSONStringify(value.SecretVal(value.String("token")))
+	if result.Type != value.TYPE_FAILURE {
+		t.Fatalf("expected failure, got %s: %s", result.Type, result.String())
+	}
+	if !strings.Contains(result.AsFailure().AsString(), "Secret") {
+		t.Errorf("unexpected error: %s", result.AsFailure().AsString())
+	}
+}
+
+func TestJSONStringifyRejectsNestedSecret(t *testing.T) {
+	h := value.NewHash()
+	h.Set(value.String("token"), value.SecretVal(value.String("token")))
+	result := primitiveJSONStringify(value.HashVal(h))
+	if result.Type != value.TYPE_FAILURE {
+		t.Fatalf("expected failure, got %s: %s", result.Type, result.String())
 	}
 }
 

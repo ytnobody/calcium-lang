@@ -822,6 +822,64 @@ func primitiveHttpGet(args ...value.Value) value.Value {
 	return doHttpRequest("GET", url, headers, "")
 }
 
+// verifySecretCapability checks that a capability grants the expected sink and
+// scope value. Scope keys are sink-specific (for example "url" or "handle").
+func verifySecretCapability(capVal value.Value, sink, scopeKey string, expected value.Value) error {
+	if capVal.Type != value.TYPE_SECRET_CAPABILITY {
+		return fmt.Errorf("capability must be a SecretCapability")
+	}
+	cap := capVal.AsSecretCapability()
+	if cap.Sink != sink {
+		return fmt.Errorf("capability authorizes %q, not %s", cap.Sink, sink)
+	}
+	if cap.Scope.Type != value.TYPE_HASH {
+		return fmt.Errorf("capability scope must include %q", scopeKey)
+	}
+	scopeValue, ok := cap.Scope.AsHash().Get(value.String(scopeKey))
+	if !ok || !scopeValue.Equals(expected) {
+		return fmt.Errorf("capability does not authorize this %s", scopeKey)
+	}
+	return nil
+}
+
+// __http_post_secret sends a Secret string as an HTTP POST body. It is the
+// only built-in HTTP path that is allowed to unwrap a Secret.
+func primitiveHttpPostSecret(args ...value.Value) value.Value {
+	if len(args) != 5 {
+		return value.Failure(value.String("__http_post_secret: expected 5 arguments (url, secret, capability, content_type, headers)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__http_post_secret: url must be string"))
+	}
+	if args[1].Type != value.TYPE_SECRET {
+		return value.Failure(value.String("__http_post_secret: secret must be a Secret"))
+	}
+	if args[3].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__http_post_secret: content_type must be string"))
+	}
+	if args[4].Type != value.TYPE_HASH {
+		return value.Failure(value.String("__http_post_secret: headers must be hash"))
+	}
+
+	url := args[0].AsString()
+	if err := verifySecretCapability(args[2], "http.post_secret", "url", value.String(url)); err != nil {
+		return value.Failure(value.String("__http_post_secret: " + err.Error()))
+	}
+
+	payload := args[1].AsSecret().Value
+	if payload.Type != value.TYPE_STRING {
+		return value.Failure(value.String("__http_post_secret: Secret payload must be a string"))
+	}
+
+	body := payload.AsString()
+	contentType := args[3].AsString()
+	headers := hashToStringMap(args[4].AsHash())
+	setHeaderCaseInsensitive(headers, "Content-Type", contentType)
+
+	resp := doHttpRequestWithBody("POST", url, headers, body)
+	return redactSecretHTTPResponse(resp)
+}
+
 // __http_post performs a POST request
 func primitiveHttpPost(args ...value.Value) value.Value {
 	if len(args) < 2 || len(args) > 4 {
@@ -849,7 +907,7 @@ func primitiveHttpPost(args ...value.Value) value.Value {
 	if headers == nil {
 		headers = make(map[string]string)
 	}
-	headers["Content-Type"] = contentType
+	setHeaderCaseInsensitive(headers, "Content-Type", contentType)
 
 	return doHttpRequestWithBody("POST", url, headers, body)
 }
@@ -881,7 +939,7 @@ func primitiveHttpPut(args ...value.Value) value.Value {
 	if headers == nil {
 		headers = make(map[string]string)
 	}
-	headers["Content-Type"] = contentType
+	setHeaderCaseInsensitive(headers, "Content-Type", contentType)
 
 	return doHttpRequestWithBody("PUT", url, headers, body)
 }
@@ -1031,6 +1089,30 @@ func buildHttpResponse(resp *http.Response) value.Value {
 }
 
 // hashToStringMap converts a Calcium hash to a Go string map
+func setHeaderCaseInsensitive(headers map[string]string, name, value string) {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			delete(headers, key)
+		}
+	}
+	headers[name] = value
+}
+
+// redactSecretHTTPResponse drops response fields that could echo the Secret
+// body back into Calcium code.
+func redactSecretHTTPResponse(resp value.Value) value.Value {
+	if resp.Type != value.TYPE_HASH {
+		return resp
+	}
+	result := value.NewHash()
+	for _, key := range []string{"status", "status_text", "ok"} {
+		if v, ok := resp.AsHash().Get(value.String(key)); ok {
+			result.Set(value.String(key), v)
+		}
+	}
+	return value.HashVal(result)
+}
+
 func hashToStringMap(h *value.Hash) map[string]string {
 	result := make(map[string]string)
 	for _, pair := range h.Pairs {
@@ -1064,6 +1146,40 @@ func primitiveTomlParse(args ...value.Value) value.Value {
 	return value.Success(goValueToCalcium(data))
 }
 
+// containsSecret reports whether a value contains a Secret anywhere in its
+// structure. It is used by serializers that must reject secrets by default.
+func containsSecret(v value.Value) bool {
+	switch v.Type {
+	case value.TYPE_SECRET, value.TYPE_SECRET_CAPABILITY:
+		return true
+	case value.TYPE_ARRAY:
+		for _, elem := range v.AsArray() {
+			if containsSecret(elem) {
+				return true
+			}
+		}
+	case value.TYPE_TUPLE:
+		for _, elem := range v.AsTuple() {
+			if containsSecret(elem) {
+				return true
+			}
+		}
+	case value.TYPE_HASH:
+		for _, pair := range v.AsHash().Pairs {
+			if containsSecret(pair.Key) || containsSecret(pair.Value) {
+				return true
+			}
+		}
+	case value.TYPE_ADT:
+		for _, elem := range v.AsADT().Values {
+			if containsSecret(elem) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // __toml_stringify converts a hash to TOML string
 func primitiveTomlStringify(args ...value.Value) value.Value {
 	if len(args) != 1 {
@@ -1071,6 +1187,9 @@ func primitiveTomlStringify(args ...value.Value) value.Value {
 	}
 	if args[0].Type != value.TYPE_HASH {
 		return value.Failure(value.String("__toml_stringify: argument must be hash"))
+	}
+	if containsSecret(args[0]) {
+		return value.Failure(value.String("__toml_stringify: cannot serialize Secret"))
 	}
 
 	goVal := calciumValueToGo(args[0])
@@ -1542,11 +1661,12 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__json_stringify": {Name: "__json_stringify", Fn: primitiveJSONStringify},
 
 		// HTTP
-		"__http_get":     {Name: "__http_get", Fn: primitiveHttpGet},
-		"__http_post":    {Name: "__http_post", Fn: primitiveHttpPost},
-		"__http_put":     {Name: "__http_put", Fn: primitiveHttpPut},
-		"__http_delete":  {Name: "__http_delete", Fn: primitiveHttpDelete},
-		"__http_request": {Name: "__http_request", Fn: primitiveHttpRequest},
+		"__http_get":         {Name: "__http_get", Fn: primitiveHttpGet},
+		"__http_post":        {Name: "__http_post", Fn: primitiveHttpPost},
+		"__http_post_secret": {Name: "__http_post_secret", Fn: primitiveHttpPostSecret},
+		"__http_put":         {Name: "__http_put", Fn: primitiveHttpPut},
+		"__http_delete":      {Name: "__http_delete", Fn: primitiveHttpDelete},
+		"__http_request":     {Name: "__http_request", Fn: primitiveHttpRequest},
 
 		// Time/DateTime
 		"__time_now":             {Name: "__time_now", Fn: primitiveTimeNow},
@@ -1562,14 +1682,15 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__env_get": {Name: "__env_get", Fn: primitiveEnvGet},
 
 		// External process (streaming subprocess for DBI backends and tools)
-		"__proc_start":     {Name: "__proc_start", Fn: primitiveProcStart},
-		"__proc_write":     {Name: "__proc_write", Fn: primitiveProcWrite},
-		"__proc_read_line": {Name: "__proc_read_line", Fn: primitiveProcReadLine},
-		"__proc_close":     {Name: "__proc_close", Fn: primitiveProcClose},
-		"__proc_wait":      {Name: "__proc_wait", Fn: primitiveProcWait},
-		"__env_set":        {Name: "__env_set", Fn: primitiveEnvSet},
-		"__env_unset":      {Name: "__env_unset", Fn: primitiveEnvUnset},
-		"__env_list":       {Name: "__env_list", Fn: primitiveEnvList},
+		"__proc_start":        {Name: "__proc_start", Fn: primitiveProcStart},
+		"__proc_write":        {Name: "__proc_write", Fn: primitiveProcWrite},
+		"__proc_write_secret": {Name: "__proc_write_secret", Fn: primitiveProcWriteSecret},
+		"__proc_read_line":    {Name: "__proc_read_line", Fn: primitiveProcReadLine},
+		"__proc_close":        {Name: "__proc_close", Fn: primitiveProcClose},
+		"__proc_wait":         {Name: "__proc_wait", Fn: primitiveProcWait},
+		"__env_set":           {Name: "__env_set", Fn: primitiveEnvSet},
+		"__env_unset":         {Name: "__env_unset", Fn: primitiveEnvUnset},
+		"__env_list":          {Name: "__env_list", Fn: primitiveEnvList},
 
 		// OS / Process
 		"__os_args": {Name: "__os_args", Fn: primitiveOsArgs},

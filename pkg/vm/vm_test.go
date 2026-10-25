@@ -32,6 +32,7 @@ func runVmTests(t *testing.T, tests []vmTestCase) {
 		}
 
 		vm := New(comp.Constants())
+		vm.SetSecretWritePolicy([]string{"entry"})
 		err = vm.Run(comp.Bytecode().Instructions)
 		if err != nil {
 			t.Fatalf("vm error for %q: %s", tt.input, err)
@@ -1974,6 +1975,90 @@ func runVmExpr(t *testing.T, input string) value.Value {
 		t.Fatalf("vm error: %s", err)
 	}
 	return machine.LastPoppedStackElem()
+}
+
+func TestSecretValues(t *testing.T) {
+	tests := []vmTestCase{
+		{input: `to_string(Secret.wrap("token"));`, expected: "<secret>"},
+		{input: `to_string([Secret.wrap("token"), "public"]);`, expected: "[<secret>, public]"},
+		{input: `to_string({auth: Secret.wrap("token")});`, expected: "{auth: <secret>}"},
+		{input: `to_string(Secret.map(Secret.wrap("token"), s => concat("x-", s)));`, expected: "<secret>"},
+		{input: `func! id(x) = x; cap = Secret.capability(id, {}); to_string(Secret.with(cap) { Secret.wrap("token") !!!> id });`, expected: "success(<secret>)"},
+	}
+	runVmTests(t, tests)
+}
+
+func TestSecretCapabilityMismatch(t *testing.T) {
+	runVmErrorTests(t, []string{
+		`func! send(x) = x; func! other(x) = x; cap = Secret.capability(other, {}); s = Secret.wrap("token"); Secret.with(cap) { s !!!> send };`,
+	})
+}
+
+func TestSecretRuntimeBoundaryBackstop(t *testing.T) {
+	// hide() is pure and its return type is not statically tracked as Secret,
+	// so the compiler cannot reject the effect call; the VM must.
+	runVmErrorTests(t, []string{
+		`func! leak(x) = x; func hide(s) = s; hidden = hide(Secret.wrap("x")); leak(hidden);`,
+		`use core.io!; Secret.map(Secret.wrap("SECRET"), x => io.println(x));`,
+		`use core.io!; Secret.map(Secret.wrap("TOP-SECRET"), x => map([x], io.println));`,
+		`use core.io!; Secret.map(Secret.wrap("TOP-SECRET"), x => reduce([1], (a, b) => io.println(x), 0));`,
+	})
+}
+
+func TestSecretPolicyFromEnv(t *testing.T) {
+	t.Setenv("CALCIUM_SECRET_WRITE_ALLOW", "entry, ./lib/auth.ca")
+	vm := New(nil)
+	if !vm.secretWriteAllowed["entry"] {
+		t.Error("expected entry to be allowed from environment")
+	}
+	if !vm.secretWriteAllowed["./lib/auth.ca"] {
+		t.Error("expected ./lib/auth.ca to be allowed from environment")
+	}
+}
+
+func TestSecretModuleAllowlistRelativePath(t *testing.T) {
+	vm := New(nil)
+	vm.sourcePath = "/project/main.ca"
+	vm.SetSecretWritePolicy([]string{"./lib/auth.ca"})
+	if !vm.isModuleAllowed("/project/lib/auth.ca") {
+		t.Error("expected project-relative module to be allowed")
+	}
+	if vm.isModuleAllowed("/other/lib/auth.ca") {
+		t.Error("suffix path outside the project root must not be allowed")
+	}
+
+	// Module VMs store a directory in sourcePath; projectRoot must remain the
+	// entry directory rather than being dirname'd a second time.
+	moduleVM := New(nil)
+	moduleVM.sourcePath = "/project/lib"
+	moduleVM.projectRoot = "/project"
+	moduleVM.SetSecretWritePolicy([]string{"./lib/auth.ca"})
+	if !moduleVM.isModuleAllowed("/project/lib/auth.ca") {
+		t.Error("expected module VM relative allowlist to use projectRoot")
+	}
+}
+
+func TestSecretPolicyFromRunOptions(t *testing.T) {
+	vm := New(nil)
+	opts := DefaultRunOptions()
+	opts.SecretWriteAllowed = []string{"entry"}
+	vm.SetRunOptions(opts)
+	if !vm.secretWriteAllowed["entry"] {
+		t.Error("expected entry to be allowed from RunOptions")
+	}
+}
+
+func TestSecretRuntimePolicyDefaultDeny(t *testing.T) {
+	input := `func! send(x) = x; cap = Secret.capability(send, {}); Secret.with(cap) { Secret.wrap("token") !!!> send };`
+	program := parse(input)
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compile error: %s", err)
+	}
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err == nil {
+		t.Fatal("expected runtime error under default-deny secret policy")
+	}
 }
 
 func TestBuiltinMaybe(t *testing.T) {

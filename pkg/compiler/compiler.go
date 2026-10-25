@@ -80,6 +80,21 @@ type Compiler struct {
 
 	// staticChecker performs compile-time constraint validation
 	staticChecker *staticConstraintChecker
+
+	// secretVars tracks names bound to Secret values for best-effort
+	// compile-time detection of Secret-to-effect leaks.
+	secretVars map[string]bool
+
+	// secretWithDepth is greater than zero while compiling a Secret.with block.
+	secretWithDepth int
+
+	// moduleID is the canonical identity attached to functions compiled here.
+	moduleID string
+
+	// secretVarsStack saves the Secret provenance map at scope boundaries.
+	secretVarsStack []map[string]bool
+
+	nextFunctionID int
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -88,6 +103,7 @@ type CompilationScope struct {
 	lastInstruction     EmittedInstruction
 	previousInstruction EmittedInstruction
 	funcName            string // function name for this scope ("" for global)
+	functionID          int    // unique id for local/free sink identity
 }
 
 // EmittedInstruction tracks emitted instructions
@@ -257,6 +273,8 @@ func New() *Compiler {
 		sourceMapIndex:        0,
 		compiledFunctionNames: make(map[string]bool),
 		staticChecker:         newStaticConstraintChecker(),
+		secretVars:            make(map[string]bool),
+		moduleID:              "entry",
 	}
 
 	// Define built-in functions
@@ -437,10 +455,101 @@ func (c *Compiler) builtinMaybeSome() value.Value {
 	body := append(bytecode.Make(bytecode.OpConstructMaybeSome), bytecode.Make(bytecode.OpReturn)...)
 	return value.Func(&value.Function{
 		Name:       "Some",
+		ModuleID:   c.moduleID,
 		Parameters: []string{"value"},
 		Body:       body,
 		NumLocals:  1,
 	})
+}
+
+// secretSinkName derives a stable sink name from the AST used in
+// Secret.capability(...) and the right-hand side of !!!>.
+func (c *Compiler) secretSinkName(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.CallExpression:
+		return c.secretSinkName(e.Function)
+	case *ast.Identifier:
+		if sym, ok := c.symbolTable.Resolve(e.Value); ok {
+			if sym.Scope == LocalScope || sym.Scope == FreeScope {
+				fnID := 0
+				if c.scopeIndex >= 0 && c.scopeIndex < len(c.scopes) {
+					fnID = c.scopes[c.scopeIndex].functionID
+				}
+				return fmt.Sprintf("%s@%s:%d#fn%d", e.Value, sym.Scope, sym.Index, fnID)
+			}
+			return fmt.Sprintf("%s@%s:%d", e.Value, sym.Scope, sym.Index)
+		}
+		return e.Value
+	case *ast.MemberExpression:
+		return c.secretSinkObjectName(e.Object) + "." + e.Property.Value
+	case *ast.StringLiteral:
+		return e.Value
+	default:
+		return "<unknown>"
+	}
+}
+
+func (c *Compiler) secretSinkObjectName(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.Identifier:
+		return e.Value
+	case *ast.MemberExpression:
+		return c.secretSinkObjectName(e.Object) + "." + e.Property.Value
+	default:
+		return "<unknown>"
+	}
+}
+
+// isSecretExpr reports whether an expression is statically known to produce a
+// Secret value. This is best-effort; the runtime remains the backstop.
+func (c *Compiler) isSecretExpr(expr ast.Expression) bool {
+	switch e := expr.(type) {
+	case *ast.CallExpression:
+		if member, ok := e.Function.(*ast.MemberExpression); ok {
+			if ident, ok := member.Object.(*ast.Identifier); ok && ident.Value == "Secret" {
+				return member.Property.Value == "wrap" || member.Property.Value == "map"
+			}
+		}
+	case *ast.Identifier:
+		return c.secretVars[e.Value]
+	case *ast.MemberExpression:
+		if ident, ok := e.Object.(*ast.Identifier); ok && ident.Value == "Secret" {
+			return e.Property.Value == "wrap" || e.Property.Value == "map"
+		}
+	case *ast.ArrayLiteral:
+		for _, elem := range e.Elements {
+			if c.isSecretExpr(elem) {
+				return true
+			}
+		}
+	case *ast.TupleLiteral:
+		for _, elem := range e.Elements {
+			if c.isSecretExpr(elem) {
+				return true
+			}
+		}
+	case *ast.HashLiteral:
+		for _, pair := range e.Pairs {
+			if c.isSecretExpr(pair.Key) || c.isSecretExpr(pair.Value) {
+				return true
+			}
+		}
+	case *ast.DoExpression:
+		return c.isSecretExpr(e.FinalExpression)
+	case *ast.SecretWithExpression:
+		return c.isSecretExpr(e.FinalExpression)
+	case *ast.MatchExpression:
+		for _, mc := range e.Cases {
+			if c.isSecretExpr(mc.Body) {
+				return true
+			}
+		}
+	case *ast.PipeExpression:
+		return c.isSecretExpr(e.Left) || c.isSecretExpr(e.Right)
+	case *ast.EffectPipeExpression:
+		return c.isSecretExpr(e.Left) || c.isSecretExpr(e.Right)
+	}
+	return false
 }
 
 // isEffectExpression checks if an expression refers to an effect function
@@ -492,6 +601,8 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 		sourceMapIndex:        0,
 		compiledFunctionNames: make(map[string]bool),
 		staticChecker:         newStaticConstraintChecker(),
+		secretVars:            make(map[string]bool),
+		moduleID:              "entry",
 	}
 }
 
@@ -499,6 +610,11 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 func (c *Compiler) Compile(node ast.Node) error {
 	switch node := node.(type) {
 	case *ast.Program:
+		// A Compiler instance may be reused by the REPL. Reset lexical Secret
+		// provenance so a failed compilation cannot pollute later inputs.
+		c.secretVars = make(map[string]bool)
+		c.secretVarsStack = nil
+
 		// Expand composite parameter annotations (`A & B` / `A | B`) into
 		// synthetic constraint declarations before registration/lowering.
 		// Prepend so a synthetic constraint is compiled before the function
@@ -567,6 +683,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 		symbol := c.symbolTable.Define(node.Name.Value)
 		// Track simple constants for static constraint checking (x = 5; f(x)).
 		c.staticChecker.trackConst(node.Name.Value, node.Value)
+		// Track Secret provenance for compile-time effect-boundary checks.
+		c.secretVars[node.Name.Value] = c.isSecretExpr(node.Value)
 		err := c.Compile(node.Value)
 		if err != nil {
 			return err
@@ -855,6 +973,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		// Create function object
 		fn := &value.Function{
 			Name:           node.Name.Value,
+			ModuleID:       c.moduleID,
 			Parameters:     make([]string, len(node.Parameters)),
 			ParamTypeNames: make([]string, len(node.Parameters)),
 			Body:           instructions,
@@ -927,6 +1046,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		fn := &value.Function{
 			Name:       node.Name.Value,
+			ModuleID:   c.moduleID,
 			Parameters: make([]string, len(node.Parameters)),
 			Body:       instructions,
 			NumLocals:  numLocals,
@@ -984,6 +1104,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 				fn := &value.Function{
 					Name:       variant.Name,
+					ModuleID:   c.moduleID,
 					Parameters: make([]string, len(variant.Fields)),
 					Body:       instructions,
 					NumLocals:  numLocals,
@@ -1194,11 +1315,72 @@ func (c *Compiler) Compile(node ast.Node) error {
 	case *ast.CallExpression:
 		c.setPosFromToken(node.Token)
 
+		// Built-in Secret constructors/transforms.
+		if member, ok := node.Function.(*ast.MemberExpression); ok {
+			if ident, ok := member.Object.(*ast.Identifier); ok && ident.Value == "Secret" {
+				switch member.Property.Value {
+				case "capability":
+					if c.moduleID != "entry" {
+						return c.newCompileError(node.Token,
+							"Secret.capability may only be called by the entry module")
+					}
+					if len(node.Arguments) != 2 {
+						return c.newCompileError(node.Token, "Secret.capability expects exactly 2 arguments (sink, scope)")
+					}
+					sinkName := c.secretSinkName(node.Arguments[0])
+					if sinkName == "<unknown>" {
+						return c.newCompileError(node.Token, "Secret.capability sink must be a named function")
+					}
+					c.emit(bytecode.OpConstant, c.addConstant(value.String(sinkName)))
+					if err := c.Compile(node.Arguments[1]); err != nil {
+						return err
+					}
+					c.emit(bytecode.OpSecretCapability)
+					return nil
+				case "wrap":
+					if len(node.Arguments) != 1 {
+						return c.newCompileError(node.Token, "Secret.wrap expects exactly 1 argument")
+					}
+					if err := c.Compile(node.Arguments[0]); err != nil {
+						return err
+					}
+					c.emit(bytecode.OpSecretWrap)
+					return nil
+				case "map":
+					if len(node.Arguments) != 2 {
+						return c.newCompileError(node.Token, "Secret.map expects exactly 2 arguments")
+					}
+					if isEffect, known := c.isEffectExpression(node.Arguments[1]); known && isEffect {
+						return c.newCompileError(node.Token, "Secret.map callback must be a pure function")
+					}
+					if err := c.Compile(node.Arguments[0]); err != nil {
+						return err
+					}
+					if err := c.Compile(node.Arguments[1]); err != nil {
+						return err
+					}
+					c.emit(bytecode.OpSecretMap)
+					return nil
+				}
+			}
+		}
+
 		// Static constraint check: validate literal arguments at compile time
 		if ident, ok := node.Function.(*ast.Identifier); ok {
 			errs := c.staticChecker.checkCallExpression(ident.Value, node.Arguments, node.Token)
 			for _, errMsg := range errs {
 				return c.newCompileError(node.Token, errMsg)
+			}
+		}
+
+		// Best-effort compile-time Secret leak check: an effect call must not
+		// receive a Secret unless it is inside an authorized !!!> stage.
+		if isEffect, known := c.isEffectExpression(node.Function); known && isEffect {
+			for _, arg := range node.Arguments {
+				if c.isSecretExpr(arg) {
+					return c.newCompileError(node.Token,
+						"Secret cannot be passed to an effect; use the secret-authorized '!!!>' pipeline")
+				}
 			}
 		}
 
@@ -1237,6 +1419,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 		fn := &value.Function{
 			Name:       "<lambda>",
+			ModuleID:   c.moduleID,
 			Parameters: make([]string, len(node.Parameters)),
 			Body:       instructions,
 			NumLocals:  numLocals,
@@ -1369,7 +1552,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 
 	case *ast.EffectPipeExpression:
 		// expr !> func! is equivalent to func!(expr), returns success/failure
-		// Effect functions automatically wrap their return in success
+		// !!!> additionally authorizes Secret values to cross the effect boundary.
 		// Stack order for call: [func, arg1, arg2, ...]
 
 		// Check if right side is NOT an effect function - should use |> instead
@@ -1378,8 +1561,60 @@ func (c *Compiler) Compile(node ast.Node) error {
 			funcExpr = call.Function
 		}
 		if isEffect, canDetermine := c.isEffectExpression(funcExpr); canDetermine && !isEffect {
+			if node.AllowSecret {
+				return c.newCompileError(node.Token,
+					"cannot use '!!!>' with pure function; use '|>' or '!>' instead")
+			}
 			return c.newCompileError(node.Token,
 				"cannot use '!>' with pure function; use '|>' instead")
+		}
+
+		if !node.AllowSecret && c.isSecretExpr(node.Left) {
+			return c.newCompileError(node.Token,
+				"Secret cannot be passed to '!>'; use the secret-authorized '!!!>' pipeline")
+		}
+		if node.AllowSecret && c.secretWithDepth == 0 {
+			return c.newCompileError(node.Token,
+				"'!!!>' requires an active Secret.with(cap) scope")
+		}
+
+		// Pipe input becomes the first argument, including for calls:
+		// x !> f(y) -> f(x, y)
+		if call, ok := node.Right.(*ast.CallExpression); ok {
+			if !node.AllowSecret {
+				for _, arg := range call.Arguments {
+					if c.isSecretExpr(arg) {
+						return c.newCompileError(node.Token,
+							"Secret cannot be passed to '!>'; use the secret-authorized '!!!>' pipeline")
+					}
+				}
+			}
+
+			err := c.Compile(call.Function)
+			if err == nil {
+				err = c.Compile(node.Left)
+			}
+			if err == nil {
+				for _, arg := range call.Arguments {
+					if err = c.Compile(arg); err != nil {
+						break
+					}
+				}
+			}
+			if err != nil {
+				return err
+			}
+
+			if node.AllowSecret {
+				sinkName := c.secretSinkName(call.Function)
+				if sinkName == "<unknown>" {
+					return c.newCompileError(node.Token, "'!!!>' sink must be a named function")
+				}
+				c.emit(bytecode.OpCheckSecretCapability, c.addConstant(value.String(sinkName)))
+				c.emit(bytecode.OpAllowSecretCall)
+			}
+			c.emit(bytecode.OpCall, 1+len(call.Arguments))
+			return nil
 		}
 
 		// Compile the right side (effect function) first
@@ -1392,6 +1627,15 @@ func (c *Compiler) Compile(node ast.Node) error {
 		err = c.Compile(node.Left)
 		if err != nil {
 			return err
+		}
+
+		if node.AllowSecret {
+			sinkName := c.secretSinkName(node.Right)
+			if sinkName == "<unknown>" {
+				return c.newCompileError(node.Token, "'!!!>' sink must be a named function")
+			}
+			c.emit(bytecode.OpCheckSecretCapability, c.addConstant(value.String(sinkName)))
+			c.emit(bytecode.OpAllowSecretCall)
 		}
 
 		// Just call normally - func! already wraps return in success
@@ -1578,6 +1822,27 @@ func (c *Compiler) Compile(node ast.Node) error {
 		if err != nil {
 			return err
 		}
+
+	case *ast.SecretWithExpression:
+		// Secret.with(capability) { ... }: activate the capability while the
+		// block is evaluated and require !!!> for Secret effect writes.
+		if err := c.Compile(node.Capability); err != nil {
+			return err
+		}
+		c.emit(bytecode.OpSecretWithBegin)
+		c.secretWithDepth++
+		for _, stmt := range node.Statements {
+			if err := c.Compile(stmt); err != nil {
+				c.secretWithDepth--
+				return err
+			}
+		}
+		if err := c.Compile(node.FinalExpression); err != nil {
+			c.secretWithDepth--
+			return err
+		}
+		c.secretWithDepth--
+		c.emit(bytecode.OpSecretWithEnd)
 
 	case *ast.DoExpression:
 		// Compile do...end block: execute all intermediate statements (each pops its value),
@@ -1993,6 +2258,11 @@ func (c *Compiler) setPosFromToken(tok token.Token) {
 	c.currentColumn = tok.Column
 }
 
+// SetModuleID sets the canonical module identity attached to compiled functions.
+func (c *Compiler) SetModuleID(moduleID string) {
+	c.moduleID = moduleID
+}
+
 // SetFileName sets the source file name for error messages and source maps
 func (c *Compiler) SetFileName(name string) {
 	c.fileName = name
@@ -2088,11 +2358,13 @@ func (c *Compiler) enterScope() {
 }
 
 func (c *Compiler) enterScopeWithName(funcName string) {
+	c.nextFunctionID++
 	scope := CompilationScope{
 		instructions:        bytecode.Instructions{},
 		lastInstruction:     EmittedInstruction{},
 		previousInstruction: EmittedInstruction{},
 		funcName:            funcName,
+		functionID:          c.nextFunctionID,
 	}
 	c.scopes = append(c.scopes, scope)
 	c.scopeIndex++
@@ -2101,6 +2373,14 @@ func (c *Compiler) enterScopeWithName(funcName string) {
 	sm.File = c.fileName
 	c.sourceMaps = append(c.sourceMaps, sm)
 	c.sourceMapIndex++
+
+	// Secret provenance is lexical: a nested function cannot rebind the
+	// outer function's tracked Secret names.
+	saved := make(map[string]bool, len(c.secretVars))
+	for k, v := range c.secretVars {
+		saved[k] = v
+	}
+	c.secretVarsStack = append(c.secretVarsStack, saved)
 
 	c.symbolTable = NewEnclosedSymbolTable(c.symbolTable)
 }
@@ -2111,6 +2391,10 @@ func (c *Compiler) leaveScope() bytecode.Instructions {
 	c.scopes = c.scopes[:len(c.scopes)-1]
 	c.scopeIndex--
 	c.symbolTable = c.symbolTable.Outer
+	if n := len(c.secretVarsStack); n > 0 {
+		c.secretVars = c.secretVarsStack[n-1]
+		c.secretVarsStack = c.secretVarsStack[:n-1]
+	}
 
 	return instructions
 }
@@ -2128,6 +2412,10 @@ func (c *Compiler) leaveScopeWithSourceMap() (bytecode.Instructions, *bytecode.S
 	c.sourceMaps = c.sourceMaps[:len(c.sourceMaps)-1]
 	c.sourceMapIndex--
 	c.symbolTable = c.symbolTable.Outer
+	if n := len(c.secretVarsStack); n > 0 {
+		c.secretVars = c.secretVarsStack[n-1]
+		c.secretVarsStack = c.secretVarsStack[:n-1]
+	}
 
 	return instructions, sm
 }

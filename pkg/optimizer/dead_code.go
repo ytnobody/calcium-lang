@@ -309,9 +309,10 @@ func eliminateDeadCodePipeExpression(pe *ast.PipeExpression) *ast.PipeExpression
 
 func eliminateDeadCodeEffectPipeExpression(ep *ast.EffectPipeExpression) *ast.EffectPipeExpression {
 	return &ast.EffectPipeExpression{
-		Token: ep.Token,
-		Left:  eliminateDeadCode(ep.Left).(ast.Expression),
-		Right: eliminateDeadCode(ep.Right).(ast.Expression),
+		Token:       ep.Token,
+		Left:        eliminateDeadCode(ep.Left).(ast.Expression),
+		Right:       eliminateDeadCode(ep.Right).(ast.Expression),
+		AllowSecret: ep.AllowSecret,
 	}
 }
 

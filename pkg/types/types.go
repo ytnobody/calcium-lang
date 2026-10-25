@@ -13,6 +13,7 @@ type Kind int
 const (
 	KindAny     Kind = iota // dynamic / unknown type (the "?" of gradual typing)
 	KindMaybe               // Maybe (Some(value) | None)
+	KindSecret              // opaque secret value
 	KindBool                // bool
 	KindInt                 // int
 	KindFloat               // float
@@ -60,6 +61,19 @@ func (*MaybeType) IsCompatibleWith(other TypeExpr) bool {
 		return true
 	}
 	_, ok := other.(*MaybeType)
+	return ok
+}
+
+// SecretType represents the opaque Secret type.
+type SecretType struct{}
+
+func (*SecretType) typeExpr()      {}
+func (*SecretType) String() string { return "Secret" }
+func (*SecretType) IsCompatibleWith(other TypeExpr) bool {
+	if _, ok := other.(*AnyType); ok {
+		return true
+	}
+	_, ok := other.(*SecretType)
 	return ok
 }
 
@@ -326,30 +340,33 @@ func (n *NamedType) IsCompatibleWith(other TypeExpr) bool {
 // ---- singleton instances for common types ----
 
 var (
-	Any   TypeExpr = &AnyType{}
-	Maybe TypeExpr = &MaybeType{}
-	Bool  TypeExpr = &BoolType{}
-	Int   TypeExpr = &IntType{}
-	Float TypeExpr = &FloatType{}
-	Str   TypeExpr = &StringType{}
-	Rx    TypeExpr = &RegexType{}
-	Fn    TypeExpr = &FuncType{}
-	Arr   TypeExpr = &ArrayType{}
-	Hsh   TypeExpr = &HashType{}
-	Tup   TypeExpr = &TupleType{}
-	Succ  TypeExpr = &SuccessType{}
-	Fail  TypeExpr = &FailureType{}
+	Any    TypeExpr = &AnyType{}
+	Maybe  TypeExpr = &MaybeType{}
+	Secret TypeExpr = &SecretType{}
+	Bool   TypeExpr = &BoolType{}
+	Int    TypeExpr = &IntType{}
+	Float  TypeExpr = &FloatType{}
+	Str    TypeExpr = &StringType{}
+	Rx     TypeExpr = &RegexType{}
+	Fn     TypeExpr = &FuncType{}
+	Arr    TypeExpr = &ArrayType{}
+	Hsh    TypeExpr = &HashType{}
+	Tup    TypeExpr = &TupleType{}
+	Succ   TypeExpr = &SuccessType{}
+	Fail   TypeExpr = &FailureType{}
 )
 
 // FromName returns the TypeExpr for a given built-in type name, or nil if unknown.
-// Built-in type names are: Any, Maybe, Bool, Int, Float, String, Array, Hash,
-// Tuple, Func, Regex, Success, Failure.
+// Built-in type names are: Any, Maybe, Secret, Bool, Int, Float, String, Array,
+// Hash, Tuple, Func, Regex, Success, Failure.
 func FromName(name string) TypeExpr {
 	switch name {
 	case "Any":
 		return Any
 	case "Maybe":
 		return Maybe
+	case "Secret":
+		return Secret
 	case "Bool":
 		return Bool
 	case "Int":

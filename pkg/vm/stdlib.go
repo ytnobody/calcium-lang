@@ -64,6 +64,7 @@ func (vm *VM) LoadStdlibModule(moduleName string) (*value.Module, error) {
 
 	// Create a compiler with primitive builtins registered
 	comp := compiler.New()
+	comp.SetModuleID(moduleName)
 
 	// Register primitives as builtins in the compiler's symbol table
 	// Use sorted order to ensure consistent builtin indices
@@ -93,6 +94,9 @@ func (vm *VM) LoadStdlibModule(moduleName string) (*value.Module, error) {
 
 	// Create a new VM to execute the module
 	moduleVM := New(comp.Constants())
+	moduleVM.SetMainModuleID(moduleName)
+	moduleVM.secretWriteAllowed = vm.secretWriteAllowed
+	moduleVM.projectRoot = vm.projectRoot
 
 	// Register primitives as builtins in the VM (in same sorted order)
 	primitiveBuiltins := make([]*value.Builtin, 0, len(primitives))
@@ -251,6 +255,7 @@ func (vm *VM) LoadExternalModule(moduleName string) (*value.Module, error) {
 
 	// Create a compiler with primitive builtins registered
 	comp := compiler.New()
+	comp.SetModuleID(foundPath)
 
 	// Register primitives as builtins in the compiler's symbol table
 	primitives := GetPrimitives()
@@ -279,6 +284,9 @@ func (vm *VM) LoadExternalModule(moduleName string) (*value.Module, error) {
 
 	// Create a new VM to execute the module
 	moduleVM := New(comp.Constants())
+	moduleVM.SetMainModuleID(foundPath)
+	moduleVM.secretWriteAllowed = vm.secretWriteAllowed
+	moduleVM.projectRoot = vm.projectRoot
 	moduleVM.sourcePath = filepath.Dir(foundPath) // Set source path for nested module loading
 
 	// Register primitives as builtins in the VM (in same sorted order)
@@ -466,6 +474,7 @@ func (vm *VM) compileAndCacheRemoteModule(cacheKey string, content []byte, cache
 
 	// Create a compiler with primitive builtins registered
 	comp := compiler.New()
+	comp.SetModuleID(cacheKey)
 
 	// Register primitives as builtins in the compiler's symbol table
 	primitives := GetPrimitives()
@@ -494,6 +503,9 @@ func (vm *VM) compileAndCacheRemoteModule(cacheKey string, content []byte, cache
 
 	// Create a new VM to execute the module
 	moduleVM := New(comp.Constants())
+	moduleVM.SetMainModuleID(cacheKey)
+	moduleVM.secretWriteAllowed = vm.secretWriteAllowed
+	moduleVM.projectRoot = vm.projectRoot
 	moduleVM.sourcePath = cacheDir // Set source path for nested module loading
 
 	// Register primitives as builtins in the VM (in same sorted order)

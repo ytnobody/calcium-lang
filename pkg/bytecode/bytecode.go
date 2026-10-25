@@ -122,6 +122,15 @@ const (
 
 	// Regex match
 	OpRegexMatch // left ~ right: match string against regex
+
+	// Secret operations
+	OpSecretWrap            // Pop value, push Secret(value)
+	OpSecretMap             // Pop fn and Secret, call fn(secret value), push Secret(result)
+	OpSecretCapability      // Pop scope and sink name, push SecretCapability
+	OpSecretWithBegin       // Pop capability and activate it
+	OpSecretWithEnd         // Deactivate the current capability
+	OpCheckSecretCapability // Check active capability for sink name (2-byte constant index)
+	OpAllowSecretCall       // Authorize the immediately following call to receive Secrets
 )
 
 // Definition describes an opcode
@@ -228,6 +237,15 @@ var definitions = map[OpCode]*Definition{
 
 	// Regex match
 	OpRegexMatch: {"OpRegexMatch", []int{}}, // No operands: pops regex (TOS) and string (TOS-1), pushes bool
+
+	// Secret operations
+	OpSecretWrap:            {"OpSecretWrap", []int{}},             // Pop value, push Secret(value)
+	OpSecretMap:             {"OpSecretMap", []int{}},              // Pop fn and Secret, push Secret(fn(value))
+	OpSecretCapability:      {"OpSecretCapability", []int{}},       // Pop scope and sink name, push capability
+	OpSecretWithBegin:       {"OpSecretWithBegin", []int{}},        // Pop capability and activate it
+	OpSecretWithEnd:         {"OpSecretWithEnd", []int{}},          // Deactivate the current capability
+	OpCheckSecretCapability: {"OpCheckSecretCapability", []int{2}}, // 2-byte sink name constant index
+	OpAllowSecretCall:       {"OpAllowSecretCall", []int{}},        // authorize the next call
 }
 
 // Lookup returns the definition for an opcode

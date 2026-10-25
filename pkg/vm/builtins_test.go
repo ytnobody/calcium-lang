@@ -2,10 +2,14 @@ package vm
 
 import (
 	"bytes"
+	"io"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/value"
@@ -2252,6 +2256,67 @@ func TestPrimitiveTypeOf(t *testing.T) {
 	result := primitiveTypeOf()
 	if result.Type != value.TYPE_FAILURE {
 		t.Error("expected failure for no args")
+	}
+}
+
+func TestTomlStringifyRejectsSecret(t *testing.T) {
+	h := value.NewHash()
+	h.Set(value.String("token"), value.SecretVal(value.String("token")))
+	result := primitiveTomlStringify(value.HashVal(h))
+	if result.Type != value.TYPE_FAILURE {
+		t.Fatalf("expected failure, got %s: %s", result.Type, result.String())
+	}
+	if !strings.Contains(result.AsFailure().AsString(), "Secret") {
+		t.Errorf("unexpected error: %s", result.AsFailure().AsString())
+	}
+}
+
+func TestHttpPostSecretTrustedSink(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	scope := value.NewHash()
+	scope.Set(value.String("url"), value.String(server.URL))
+	cap := value.SecretCapabilityVal("http.post_secret", value.HashVal(scope))
+	secret := value.SecretVal(value.String("SECRET-BODY"))
+	headers := value.HashVal(value.NewHash())
+
+	result := primitiveHttpPostSecret(
+		value.String(server.URL),
+		secret,
+		cap,
+		value.String("text/plain"),
+		headers,
+	)
+	if result.Type != value.TYPE_HASH {
+		t.Fatalf("expected response hash, got %s: %s", result.Type, result.String())
+	}
+	resp := result.AsHash()
+	if _, ok := resp.Get(value.String("body")); ok {
+		t.Error("secret response body must not be returned to Calcium code")
+	}
+}
+
+func TestHttpPostSecretRejectsWrongCapability(t *testing.T) {
+	scope := value.NewHash()
+	scope.Set(value.String("url"), value.String("https://example.com"))
+	cap := value.SecretCapabilityVal("http.post_secret", value.HashVal(scope))
+	secret := value.SecretVal(value.String("SECRET-BODY"))
+	headers := value.HashVal(value.NewHash())
+
+	result := primitiveHttpPostSecret(
+		value.String("https://other.example.com"),
+		secret,
+		cap,
+		value.String("text/plain"),
+		headers,
+	)
+	if result.Type != value.TYPE_FAILURE {
+		t.Fatalf("expected failure for URL mismatch, got %s", result.Type)
 	}
 }
 

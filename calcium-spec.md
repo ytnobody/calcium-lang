@@ -1587,6 +1587,7 @@ Process functions:
 |----------|-------------|---------|
 | `os.proc_start(cmd, args)` | Launch a persistent external program | `success(handle)` / `failure(msg)` |
 | `os.proc_write(handle, data)` | Write a string to the process stdin | `success(true)` / `failure(msg)` |
+| `os.proc_write_secret(secret, handle, cap)` | Trusted sink: write a Secret string to stdin; `cap` must authorize the sink and `{handle: handle}` | `success(true)` / `failure(msg)` |
 | `os.proc_read_line(handle)` | Block and read one `\n`-terminated line from stdout | `success(line)` / `failure(msg)` |
 | `os.proc_close(handle)` | Forcefully terminate and reap the child | `success(true)` |
 | `os.proc_wait(handle)` | Block until exit; return the exit code | `success(code)` / `failure(msg)` |

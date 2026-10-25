@@ -15,6 +15,7 @@ func! neq(label, actual, expected) = match actual == expected
 func! ok(label, value) = match value
     true => __println(concat("  ✓ ", label))
     false => __println(concat("  ✗ ", concat(label, ": Expected truthy value, got false")))
+    Maybe.None => __println(concat("  ✗ ", concat(label, ": Expected truthy value, got Maybe.None")))
     _ => __println(concat("  ✓ ", label));
 
 // is_true asserts that value is exactly true
@@ -27,10 +28,15 @@ func! is_false(label, value) = match value
     false => __println(concat("  ✓ ", label))
     _ => __println(concat("  ✗ ", concat(label, concat(": Expected false, got ", to_string(value)))));
 
-// is_null asserts that value is null
-func! is_null(label, value) = match __type_of(value)
-    "null" => __println(concat("  ✓ ", label))
-    _ => __println(concat("  ✗ ", concat(label, concat(": Expected null, got ", to_string(value)))));
+// is_none asserts that value is Maybe.None
+func! is_none(label, value) = match value
+    Maybe.None => __println(concat("  ✓ ", label))
+    _ => __println(concat("  ✗ ", concat(label, concat(": Expected Maybe.None, got ", to_string(value)))));
+
+// is_some asserts that value is Maybe.Some(...)
+func! is_some(label, value) = match value
+    Maybe.Some(_) => __println(concat("  ✓ ", label))
+    _ => __println(concat("  ✗ ", concat(label, concat(": Expected Maybe.Some, got ", to_string(value)))));
 
 // is_type asserts that value has the expected type
 func! is_type(label, value, expected_type) = match __type_of(value) == expected_type
@@ -57,7 +63,7 @@ func! contains(label, arr, element) = match _array_contains(arr, element)
 
 func _array_contains(arr, element) = match len(arr)
     0 => false
-    _ => match head(arr) == element
+    _ => match arr[0] == element
         true => true
         false => _array_contains(tail(arr), element);
 
@@ -85,11 +91,6 @@ func! lt(label, actual, expected) = match actual < expected
 func! lte(label, actual, expected) = match actual <= expected
     true => __println(concat("  ✓ ", concat(label, concat(": ", concat(to_string(actual), concat(" <= ", to_string(expected)))))))
     false => __println(concat("  ✗ ", concat(label, concat(": Expected ", concat(to_string(actual), concat(" <= ", to_string(expected)))))));
-
-// not_null asserts that value is not null
-func! not_null(label, value) = match __type_of(value)
-    "null" => __println(concat("  ✗ ", concat(label, ": Expected non-null value, got null")))
-    _ => __println(concat("  ✓ ", label));
 
 // near asserts that two numbers are approximately equal (within epsilon)
 func! near(label, actual, expected, epsilon) = match _abs_diff(actual, expected) <= epsilon

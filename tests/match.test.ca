@@ -29,7 +29,7 @@ func always_default(x) = match x
 // === Recursive Pattern Matching ===
 func sum_list(lst) = match len(lst)
     0 => 0
-    _ => head(lst) + sum_list(tail(lst));
+    _ => lst[0] + sum_list(tail(lst));
 
 // === Nested Match ===
 func classify_positive(x) = match x > 100

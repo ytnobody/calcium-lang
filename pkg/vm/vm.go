@@ -317,7 +317,6 @@ func (vm *VM) initBuiltins() {
 		{Name: "Array", Fn: builtinIsArray},
 		{Name: "Hash", Fn: builtinIsHash},
 		{Name: "Tuple", Fn: builtinIsTuple},
-		{Name: "Null", Fn: builtinIsNull},
 		{Name: "Function", Fn: builtinIsFunction},
 		{Name: "Number", Fn: builtinIsNumber},
 		// Built-in common constraints
@@ -771,6 +770,16 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			vm.push(value.Bool(false))
 		}
 
+	case bytecode.OpConstructMaybeSome:
+		val := vm.pop()
+		if err := vm.push(value.ADTVal(&value.ADT{
+			TypeName: "Maybe",
+			Tag:      "Maybe.Some",
+			Values:   []value.Value{val},
+		})); err != nil {
+			return err
+		}
+
 	case bytecode.OpCallEffect:
 		numArgs := int(ins[ip+1])
 		vm.currentFrame().ip += 1
@@ -940,10 +949,9 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			arr := left.AsArray()
 			idx := int(index.AsInt())
 			if idx < 0 || idx >= len(arr) {
-				vm.push(value.Null())
-			} else {
-				vm.push(arr[idx])
+				return fmt.Errorf("index out of bounds: array has %d elements but index is %d\nhint: use get(array, index) to get a Maybe, or get(array, index, default)", len(arr), idx)
 			}
+			vm.push(arr[idx])
 		case value.TYPE_TUPLE:
 			if index.Type != value.TYPE_INT {
 				return fmt.Errorf("type error: tuple index must be an integer, got %s\nhint: use an integer value to access tuple elements (e.g., tup[0])", index.Type)
@@ -951,10 +959,9 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			tup := left.AsTuple()
 			idx := int(index.AsInt())
 			if idx < 0 || idx >= len(tup) {
-				vm.push(value.Null())
-			} else {
-				vm.push(tup[idx])
+				return fmt.Errorf("index out of bounds: tuple has %d elements but index is %d", len(tup), idx)
 			}
+			vm.push(tup[idx])
 		case value.TYPE_ADT:
 			if index.Type != value.TYPE_INT {
 				return fmt.Errorf("type error: ADT field index must be an integer, got %s", index.Type)
@@ -962,18 +969,16 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			adt := left.AsADT()
 			idx := int(index.AsInt())
 			if idx < 0 || idx >= len(adt.Values) {
-				vm.push(value.Null())
-			} else {
-				vm.push(adt.Values[idx])
+				return fmt.Errorf("index out of bounds: ADT value has %d fields but index is %d", len(adt.Values), idx)
 			}
+			vm.push(adt.Values[idx])
 		case value.TYPE_HASH:
 			hash := left.AsHash()
 			val, found := hash.Get(index)
 			if !found {
-				vm.push(value.Null())
-			} else {
-				vm.push(val)
+				return fmt.Errorf("hash key not found: %s\nhint: use get(hash, key) to get a Maybe, or get(hash, key, default)", index.String())
 			}
+			vm.push(val)
 		default:
 			return fmt.Errorf("type error: index operator '[]' is not supported for type %s\nhint: indexing is only supported for arrays, tuples, hashes, and ADT values", left.Type)
 		}
@@ -1033,10 +1038,9 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			hash := obj.AsHash()
 			val, found := hash.Get(value.String(propName))
 			if !found {
-				vm.push(value.Null())
-			} else {
-				vm.push(val)
+				return fmt.Errorf("hash key not found: %s\nhint: use get(hash, key) to get a Maybe, or get(hash, key, default)", propName)
 			}
+			vm.push(val)
 		case value.TYPE_TASK:
 			task := obj.AsTask()
 			switch propName {
@@ -1152,7 +1156,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 						if !ok {
 							return value.Failure(value.String("channel.send: channel closed during send"))
 						}
-						return value.Null()
+						return value.MaybeNone()
 					},
 				}))
 			case "receive":
@@ -1171,7 +1175,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 					Name: "close",
 					Fn: func(args ...value.Value) value.Value {
 						ch.Close()
-						return value.Null()
+						return value.MaybeNone()
 					},
 				}))
 			case "source":
@@ -1263,8 +1267,8 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		}
 		vm.push(value.ModuleVal(module))
 
-	case bytecode.OpNull:
-		vm.push(value.Null())
+	case bytecode.OpNone:
+		vm.push(value.MaybeNone())
 
 	case bytecode.OpTrue:
 		vm.push(value.Bool(true))
@@ -1865,7 +1869,7 @@ func (vm *VM) callValueSync(callee value.Value, args []value.Value) (value.Value
 	case value.TYPE_BUILTIN:
 		builtin := callee.AsBuiltin()
 		if builtin.Fn == nil {
-			return value.Null(), fmt.Errorf("builtin %s cannot be used as callback", builtin.Name)
+			return value.Invalid(), fmt.Errorf("builtin %s cannot be used as callback", builtin.Name)
 		}
 		return builtin.Fn(args...), nil
 	case value.TYPE_PARTIAL_BUILTIN:
@@ -1873,7 +1877,7 @@ func (vm *VM) callValueSync(callee value.Value, args []value.Value) (value.Value
 		allArgs := append(partial.Args, args...)
 		return vm.callPartialBuiltinSync(partial.Name, allArgs)
 	default:
-		return value.Null(), fmt.Errorf("cannot call %s", callee.Type)
+		return value.Invalid(), fmt.Errorf("cannot call %s", callee.Type)
 	}
 }
 
@@ -1940,14 +1944,14 @@ func (vm *VM) callPartialBuiltinSync(name string, args []value.Value) (value.Val
 		}
 		return accumulator, nil
 	default:
-		return value.Null(), fmt.Errorf("unknown partial builtin: %s", name)
+		return value.Invalid(), fmt.Errorf("unknown partial builtin: %s", name)
 	}
 }
 
 // callClosureSync executes a closure synchronously and returns its result
 func (vm *VM) callClosureSync(cl *value.Closure, args []value.Value) (value.Value, error) {
 	if len(args) != len(cl.Fn.Parameters) {
-		return value.Null(), fmt.Errorf("wrong number of arguments: want=%d, got=%d",
+		return value.Invalid(), fmt.Errorf("wrong number of arguments: want=%d, got=%d",
 			len(cl.Fn.Parameters), len(args))
 	}
 
@@ -1999,7 +2003,7 @@ func (vm *VM) callClosureSync(cl *value.Closure, args []value.Value) (value.Valu
 			// Restore state on error
 			vm.sp = savedSP
 			vm.framesIndex = savedFramesIndex
-			return value.Null(), err
+			return value.Invalid(), err
 		}
 	}
 
@@ -2013,7 +2017,7 @@ func (vm *VM) callClosureSync(cl *value.Closure, args []value.Value) (value.Valu
 // StackTop returns the top of the stack
 func (vm *VM) StackTop() value.Value {
 	if vm.sp == 0 {
-		return value.Null()
+		return value.Invalid()
 	}
 	return vm.stack[vm.sp-1]
 }
@@ -2107,7 +2111,7 @@ func (vm *VM) runStayLoop(stay *StayLoop) (value.Value, error) {
 				}
 				result, err := vm.callValueSync(event.Handler.Callback, args)
 				if err != nil {
-					return value.Null(), err
+					return value.Invalid(), err
 				}
 				// The callback may call async.continue or async.leave
 				// which modifies the stay state
@@ -2127,9 +2131,9 @@ func (vm *VM) runStayLoop(stay *StayLoop) (value.Value, error) {
 					break
 				}
 			}
-			// If no active handlers and no pending tasks, exit with null
+			// If no active handlers and no pending tasks, exit with Maybe.None
 			if !hasActive && len(stay.Tasks) == 0 {
-				return value.Null(), nil
+				return value.MaybeNone(), nil
 			}
 			// Small sleep to avoid busy waiting
 			time.Sleep(1 * time.Millisecond)
@@ -2148,7 +2152,7 @@ func (vm *VM) executeStayGetState(key string) error {
 
 	val, found := stay.State.Get(value.String(key))
 	if !found {
-		return vm.push(value.Null())
+		return vm.push(value.MaybeNone())
 	}
 	return vm.push(val)
 }
@@ -2172,8 +2176,8 @@ func (vm *VM) executeContinue(numPairs int) error {
 		stay.State.Set(pair.key, pair.val)
 	}
 
-	// Continue returns null (the loop continues)
-	return vm.push(value.Null())
+	// Continue returns Maybe.None (the loop continues)
+	return vm.push(value.MaybeNone())
 }
 
 // executeLeave exits the stay loop with a value
@@ -2231,7 +2235,7 @@ func (vm *VM) executeSpawn() error {
 		select {
 		case <-task.Cancel:
 			task.SetStatus(value.TaskCancelled)
-			task.SetResult(value.Null())
+			task.SetResult(value.MaybeNone())
 		default:
 			result, err := vm.callValueSync(fn, []value.Value{})
 			if err != nil {
@@ -2373,7 +2377,7 @@ func (vm *VM) executeCancel() error {
 		return fmt.Errorf("async.cancel: expected task or handler, got %s", target.Type)
 	}
 
-	return vm.push(value.Null())
+	return vm.push(value.MaybeNone())
 }
 
 // executeAll waits for all tasks to complete
@@ -2418,7 +2422,7 @@ func (vm *VM) executeTimeout() error {
 	go func() {
 		time.Sleep(time.Duration(ms) * time.Millisecond)
 		select {
-		case es.Channel <- value.Null():
+		case es.Channel <- value.MaybeNone():
 		case <-es.Done:
 		}
 		close(es.Done)
@@ -2448,7 +2452,7 @@ func (vm *VM) executeInterval() error {
 			select {
 			case <-ticker.C:
 				select {
-				case es.Channel <- value.Null():
+				case es.Channel <- value.MaybeNone():
 				default:
 					// Channel full, skip this tick
 				}
@@ -2485,8 +2489,8 @@ func (vm *VM) initStdinSource() {
 					return
 				}
 			}
-			// EOF reached - send null value before closing to trigger eof event handler
-			vm.eofSource.Channel <- value.Null()
+			// EOF reached - send Maybe.None before closing to trigger eof event handler
+			vm.eofSource.Channel <- value.MaybeNone()
 			close(vm.eofSource.Channel)
 		}()
 	})
@@ -2570,9 +2574,12 @@ func builtinGet(args ...value.Value) value.Value {
 			if len(args) == 3 {
 				return args[2]
 			}
-			return value.Null()
+			return value.MaybeNone()
 		}
-		return arr[idx]
+		if len(args) == 3 {
+			return arr[idx]
+		}
+		return value.MaybeSome(arr[idx])
 	}
 
 	// Handle hash: get(hash, key, [default])
@@ -2583,12 +2590,15 @@ func builtinGet(args ...value.Value) value.Value {
 		hash := args[0].AsHash()
 		key := args[1].AsString()
 		if idx, ok := hash.Lookup[key]; ok {
-			return hash.Pairs[idx].Value
+			if len(args) == 3 {
+				return hash.Pairs[idx].Value
+			}
+			return value.MaybeSome(hash.Pairs[idx].Value)
 		}
 		if len(args) == 3 {
 			return args[2]
 		}
-		return value.Null()
+		return value.MaybeNone()
 	}
 
 	return value.Failure(value.String("get: first argument must be array or hash"))
@@ -2633,9 +2643,9 @@ func builtinHead(args ...value.Value) value.Value {
 	}
 	arr := args[0].AsArray()
 	if len(arr) == 0 {
-		return value.Null()
+		return value.MaybeNone()
 	}
-	return arr[0]
+	return value.MaybeSome(arr[0])
 }
 
 func builtinTail(args ...value.Value) value.Value {
@@ -2814,7 +2824,7 @@ func (vm *VM) builtinPrint(args ...value.Value) value.Value {
 		}
 		fmt.Fprint(w, arg.String())
 	}
-	return value.Null()
+	return value.MaybeNone()
 }
 
 // println - prints values with newline (core.io!)
@@ -2827,7 +2837,7 @@ func (vm *VM) builtinPrintln(args ...value.Value) value.Value {
 		fmt.Fprint(w, arg.String())
 	}
 	fmt.Fprintln(w)
-	return value.Null()
+	return value.MaybeNone()
 }
 
 // ============================================================
@@ -2864,7 +2874,7 @@ func builtinWriteFile(args ...value.Value) value.Value {
 	if err != nil {
 		return value.Failure(value.String(fmt.Sprintf("write_file: %v", err)))
 	}
-	return value.Success(value.Null())
+	return value.Success(value.MaybeNone())
 }
 
 // list_dir - lists files/directories in a directory (core.io)
@@ -2898,7 +2908,7 @@ func builtinMkdir(args ...value.Value) value.Value {
 	if err != nil {
 		return value.Failure(value.String(fmt.Sprintf("mkdir: %v", err)))
 	}
-	return value.Success(value.Null())
+	return value.Success(value.MaybeNone())
 }
 
 // exists - checks if a file or directory exists (core.io)
@@ -2931,7 +2941,7 @@ func builtinDeleteFile(args ...value.Value) value.Value {
 	if err != nil {
 		return value.Failure(value.String(fmt.Sprintf("delete_file: %v", err)))
 	}
-	return value.Success(value.Null())
+	return value.Success(value.MaybeNone())
 }
 
 // file_info - returns file metadata as a hash (core.io)
@@ -3147,10 +3157,13 @@ func builtinCharAt(args ...value.Value) value.Value {
 	// canonical core.string implementation (see __str_char_at in primitives.go).
 	runes := []rune(args[0].AsString())
 	idx := int(args[1].AsInt())
-	if idx < 0 || idx >= len(runes) {
-		return value.Null()
+	if idx < 0 {
+		idx = len(runes) + idx
 	}
-	return value.String(string(runes[idx]))
+	if idx < 0 || idx >= len(runes) {
+		return value.MaybeNone()
+	}
+	return value.MaybeSome(value.String(string(runes[idx])))
 }
 
 // index_of - finds first index of substring (core.string)
@@ -3403,7 +3416,7 @@ func (vm *VM) builtinAsyncSpawn(args ...value.Value) value.Value {
 		select {
 		case <-task.Cancel:
 			task.SetStatus(value.TaskCancelled)
-			task.SetResult(value.Null())
+			task.SetResult(value.MaybeNone())
 		default:
 			result, err := spawnVM.callValueSync(fn, []value.Value{})
 			if err != nil {
@@ -3499,7 +3512,7 @@ func (vm *VM) builtinAsyncContinue(args ...value.Value) value.Value {
 		}
 	}
 
-	return value.Null()
+	return value.MaybeNone()
 }
 
 // builtinAsyncLeave - async.leave(value) exits the stay loop with a value
@@ -3509,7 +3522,7 @@ func (vm *VM) builtinAsyncLeave(args ...value.Value) value.Value {
 		return value.Failure(value.String("async.leave: not in a stay block"))
 	}
 
-	var leaveValue value.Value = value.Null()
+	var leaveValue value.Value = value.MaybeNone()
 	if len(args) > 0 {
 		leaveValue = args[0]
 	}
@@ -3551,7 +3564,7 @@ func (vm *VM) builtinAsyncCancel(args ...value.Value) value.Value {
 		return value.Failure(value.String(fmt.Sprintf("async.cancel: expected task or handler, got %s", target.Type)))
 	}
 
-	return value.Null()
+	return value.MaybeNone()
 }
 
 // builtinAsyncAll - async.all(tasks) waits for all tasks to complete
@@ -3595,7 +3608,7 @@ func (vm *VM) builtinAsyncAll(args ...value.Value) value.Value {
 //
 // Channel supports:
 //
-//	ch.send(value)              // send a value (returns null or failure)
+//	ch.send(value)              // send a value (returns Maybe.None or failure)
 //	ch.receive()                // receive a value (blocks until available)
 //	ch.close()                  // close the channel
 //	ch.source                   // EventSource for use with async.expects
@@ -3645,7 +3658,7 @@ func (vm *VM) builtinScheduleTimeout(args ...value.Value) value.Value {
 	go func() {
 		time.Sleep(time.Duration(ms) * time.Millisecond)
 		select {
-		case es.Channel <- value.Null():
+		case es.Channel <- value.MaybeNone():
 		case <-es.Done:
 		}
 	}()
@@ -3678,7 +3691,7 @@ func (vm *VM) builtinScheduleInterval(args ...value.Value) value.Value {
 			select {
 			case <-ticker.C:
 				select {
-				case es.Channel <- value.Null():
+				case es.Channel <- value.MaybeNone():
 				default:
 					// Channel full, skip this tick
 				}
@@ -4023,15 +4036,6 @@ func builtinIsTuple(args ...value.Value) value.Value {
 		return value.Bool(false)
 	}
 	return value.Bool(args[0].Type == value.TYPE_TUPLE)
-}
-
-// builtinIsNull checks whether the argument is null.
-// Used as a primitive constraint: null |> Null?
-func builtinIsNull(args ...value.Value) value.Value {
-	if len(args) != 1 {
-		return value.Bool(false)
-	}
-	return value.Bool(args[0].Type == value.TYPE_NULL)
 }
 
 // builtinIsFunction checks whether the argument is a callable function value.

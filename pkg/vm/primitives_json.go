@@ -60,7 +60,7 @@ func skipJSONWhitespace(s string, pos int) int {
 func parseJSONValue(s string, pos int) (value.Value, int, error) {
 	pos = skipJSONWhitespace(s, pos)
 	if pos >= len(s) {
-		return value.Null(), pos, fmt.Errorf("unexpected end of input")
+		return value.Invalid(), pos, fmt.Errorf("unexpected end of input")
 	}
 	switch s[pos] {
 	case '"':
@@ -79,13 +79,13 @@ func parseJSONValue(s string, pos int) (value.Value, int, error) {
 		if s[pos] == '-' || (s[pos] >= '0' && s[pos] <= '9') {
 			return parseJSONNumber(s, pos)
 		}
-		return value.Null(), pos, fmt.Errorf("unexpected character: %c at position %d", s[pos], pos)
+		return value.Invalid(), pos, fmt.Errorf("unexpected character: %c at position %d", s[pos], pos)
 	}
 }
 
 func parseJSONString(s string, pos int) (value.Value, int, error) {
 	if pos >= len(s) || s[pos] != '"' {
-		return value.Null(), pos, fmt.Errorf("expected '\"' at position %d", pos)
+		return value.Invalid(), pos, fmt.Errorf("expected '\"' at position %d", pos)
 	}
 	pos++ // skip opening quote
 	var buf strings.Builder
@@ -97,7 +97,7 @@ func parseJSONString(s string, pos int) (value.Value, int, error) {
 		if c == '\\' {
 			pos++
 			if pos >= len(s) {
-				return value.Null(), pos, fmt.Errorf("unexpected end of string escape")
+				return value.Invalid(), pos, fmt.Errorf("unexpected end of string escape")
 			}
 			esc := s[pos]
 			switch esc {
@@ -119,12 +119,12 @@ func parseJSONString(s string, pos int) (value.Value, int, error) {
 				buf.WriteByte('\t')
 			case 'u':
 				if pos+4 >= len(s) {
-					return value.Null(), pos, fmt.Errorf("incomplete unicode escape")
+					return value.Invalid(), pos, fmt.Errorf("incomplete unicode escape")
 				}
 				hex := s[pos+1 : pos+5]
 				codepoint, err := strconv.ParseUint(hex, 16, 32)
 				if err != nil {
-					return value.Null(), pos, fmt.Errorf("invalid unicode escape: \\u%s", hex)
+					return value.Invalid(), pos, fmt.Errorf("invalid unicode escape: \\u%s", hex)
 				}
 				r := rune(codepoint)
 				// Handle surrogate pairs
@@ -151,7 +151,7 @@ func parseJSONString(s string, pos int) (value.Value, int, error) {
 		buf.WriteByte(c)
 		pos++
 	}
-	return value.Null(), pos, fmt.Errorf("unterminated string")
+	return value.Invalid(), pos, fmt.Errorf("unterminated string")
 }
 
 func parseJSONNumber(s string, pos int) (value.Value, int, error) {
@@ -160,7 +160,7 @@ func parseJSONNumber(s string, pos int) (value.Value, int, error) {
 		pos++
 	}
 	if pos >= len(s) || s[pos] < '0' || s[pos] > '9' {
-		return value.Null(), pos, fmt.Errorf("invalid number at position %d", start)
+		return value.Invalid(), pos, fmt.Errorf("invalid number at position %d", start)
 	}
 	for pos < len(s) && s[pos] >= '0' && s[pos] <= '9' {
 		pos++
@@ -187,7 +187,7 @@ func parseJSONNumber(s string, pos int) (value.Value, int, error) {
 	if isFloat {
 		f, err := strconv.ParseFloat(numStr, 64)
 		if err != nil {
-			return value.Null(), pos, fmt.Errorf("invalid float: %s", numStr)
+			return value.Invalid(), pos, fmt.Errorf("invalid float: %s", numStr)
 		}
 		return value.Float(f), pos, nil
 	}
@@ -195,7 +195,7 @@ func parseJSONNumber(s string, pos int) (value.Value, int, error) {
 	if err != nil {
 		f, ferr := strconv.ParseFloat(numStr, 64)
 		if ferr != nil {
-			return value.Null(), pos, fmt.Errorf("invalid number: %s", numStr)
+			return value.Invalid(), pos, fmt.Errorf("invalid number: %s", numStr)
 		}
 		return value.Float(f), pos, nil
 	}
@@ -206,28 +206,28 @@ func parseJSONTrue(s string, pos int) (value.Value, int, error) {
 	if pos+4 <= len(s) && s[pos:pos+4] == "true" {
 		return value.Bool(true), pos + 4, nil
 	}
-	return value.Null(), pos, fmt.Errorf("expected 'true' at position %d", pos)
+	return value.Invalid(), pos, fmt.Errorf("expected 'true' at position %d", pos)
 }
 
 func parseJSONFalse(s string, pos int) (value.Value, int, error) {
 	if pos+5 <= len(s) && s[pos:pos+5] == "false" {
 		return value.Bool(false), pos + 5, nil
 	}
-	return value.Null(), pos, fmt.Errorf("expected 'false' at position %d", pos)
+	return value.Invalid(), pos, fmt.Errorf("expected 'false' at position %d", pos)
 }
 
 func parseJSONNull(s string, pos int) (value.Value, int, error) {
 	if pos+4 <= len(s) && s[pos:pos+4] == "null" {
-		return value.Null(), pos + 4, nil
+		return value.MaybeNone(), pos + 4, nil
 	}
-	return value.Null(), pos, fmt.Errorf("expected 'null' at position %d", pos)
+	return value.Invalid(), pos, fmt.Errorf("expected 'null' at position %d", pos)
 }
 
 func parseJSONArray(s string, pos int) (value.Value, int, error) {
 	pos++ // skip '['
 	pos = skipJSONWhitespace(s, pos)
 	if pos >= len(s) {
-		return value.Null(), pos, fmt.Errorf("unterminated array")
+		return value.Invalid(), pos, fmt.Errorf("unterminated array")
 	}
 	if s[pos] == ']' {
 		return value.Array(nil), pos + 1, nil
@@ -236,23 +236,23 @@ func parseJSONArray(s string, pos int) (value.Value, int, error) {
 	for {
 		elem, next, err := parseJSONValue(s, pos)
 		if err != nil {
-			return value.Null(), next, err
+			return value.Invalid(), next, err
 		}
 		elements = append(elements, elem)
 		pos = skipJSONWhitespace(s, next)
 		if pos >= len(s) {
-			return value.Null(), pos, fmt.Errorf("unterminated array")
+			return value.Invalid(), pos, fmt.Errorf("unterminated array")
 		}
 		if s[pos] == ']' {
 			return value.Array(elements), pos + 1, nil
 		}
 		if s[pos] != ',' {
-			return value.Null(), pos, fmt.Errorf("expected ',' or ']' in array at position %d", pos)
+			return value.Invalid(), pos, fmt.Errorf("expected ',' or ']' in array at position %d", pos)
 		}
 		pos++
 		pos = skipJSONWhitespace(s, pos)
 		if pos < len(s) && s[pos] == ']' {
-			return value.Null(), pos, fmt.Errorf("trailing comma in array at position %d", pos)
+			return value.Invalid(), pos, fmt.Errorf("trailing comma in array at position %d", pos)
 		}
 	}
 }
@@ -261,7 +261,7 @@ func parseJSONObject(s string, pos int) (value.Value, int, error) {
 	pos++ // skip '{'
 	pos = skipJSONWhitespace(s, pos)
 	if pos >= len(s) {
-		return value.Null(), pos, fmt.Errorf("unterminated object")
+		return value.Invalid(), pos, fmt.Errorf("unterminated object")
 	}
 	if s[pos] == '}' {
 		h := value.NewHash()
@@ -270,36 +270,36 @@ func parseJSONObject(s string, pos int) (value.Value, int, error) {
 	h := value.NewHash()
 	for {
 		if pos >= len(s) || s[pos] != '"' {
-			return value.Null(), pos, fmt.Errorf("expected string key in object at position %d", pos)
+			return value.Invalid(), pos, fmt.Errorf("expected string key in object at position %d", pos)
 		}
 		keyVal, next, err := parseJSONString(s, pos)
 		if err != nil {
-			return value.Null(), next, err
+			return value.Invalid(), next, err
 		}
 		pos = skipJSONWhitespace(s, next)
 		if pos >= len(s) || s[pos] != ':' {
-			return value.Null(), pos, fmt.Errorf("expected ':' after object key at position %d", pos)
+			return value.Invalid(), pos, fmt.Errorf("expected ':' after object key at position %d", pos)
 		}
 		pos++
 		val, next2, err := parseJSONValue(s, pos)
 		if err != nil {
-			return value.Null(), next2, err
+			return value.Invalid(), next2, err
 		}
 		h.Set(keyVal, val)
 		pos = skipJSONWhitespace(s, next2)
 		if pos >= len(s) {
-			return value.Null(), pos, fmt.Errorf("unterminated object")
+			return value.Invalid(), pos, fmt.Errorf("unterminated object")
 		}
 		if s[pos] == '}' {
 			return value.HashVal(h), pos + 1, nil
 		}
 		if s[pos] != ',' {
-			return value.Null(), pos, fmt.Errorf("expected ',' or '}' in object at position %d", pos)
+			return value.Invalid(), pos, fmt.Errorf("expected ',' or '}' in object at position %d", pos)
 		}
 		pos++
 		pos = skipJSONWhitespace(s, pos)
 		if pos < len(s) && s[pos] == '}' {
-			return value.Null(), pos, fmt.Errorf("trailing comma in object at position %d", pos)
+			return value.Invalid(), pos, fmt.Errorf("trailing comma in object at position %d", pos)
 		}
 	}
 }
@@ -316,7 +316,7 @@ func stringifyJSON(v value.Value) (string, error) {
 
 func writeJSON(buf *strings.Builder, v value.Value) error {
 	switch v.Type {
-	case value.TYPE_NULL:
+	case value.TYPE_INVALID:
 		buf.WriteString("null")
 	case value.TYPE_BOOL:
 		if v.AsBool() {
@@ -364,6 +364,20 @@ func writeJSON(buf *strings.Builder, v value.Value) error {
 			}
 		}
 		buf.WriteByte('}')
+	case value.TYPE_ADT:
+		adt := v.AsADT()
+		if adt.TypeName == "Maybe" {
+			switch adt.Tag {
+			case "Maybe.None":
+				buf.WriteString("null")
+				return nil
+			case "Maybe.Some":
+				if len(adt.Values) == 1 {
+					return writeJSON(buf, adt.Values[0])
+				}
+			}
+		}
+		return fmt.Errorf("json: cannot serialize ADT value %s.%s", adt.TypeName, adt.Tag)
 	default:
 		writeJSONString(buf, v.String())
 	}

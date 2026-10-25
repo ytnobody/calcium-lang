@@ -285,6 +285,22 @@ func (p *Parser) peekTokenIs(t token.TokenType) bool {
 	return p.peekToken.Type == t
 }
 
+// peekN returns the token n positions ahead of curToken (n=1 is peekToken).
+// Tokens are buffered in p.lookahead so that normal nextToken calls consume
+// them in order.
+func (p *Parser) peekN(n int) token.Token {
+	if n <= 0 {
+		return p.curToken
+	}
+	if n == 1 {
+		return p.peekToken
+	}
+	for len(p.lookahead) < n-1 {
+		p.lookahead = append(p.lookahead, p.l.NextToken())
+	}
+	return p.lookahead[n-2]
+}
+
 // isEndToken checks if a token is the contextual "end" keyword.
 // "end" is treated as a contextual keyword (not a reserved word) so it can still
 // be used as an identifier (e.g., parameter names like "start, end") outside do blocks.
@@ -586,7 +602,7 @@ func (p *Parser) parseTypedAssignmentStatement() *ast.AssignmentStatement {
 		// We can't easily "unread" tokens so we report an error.
 		p.errors = append(p.errors, p.formatErrorWithContext(
 			typeTok.Line, typeTok.Column,
-			fmt.Sprintf("unknown type name %q in type annotation; expected a built-in type (Int, Float, String, Bool, Null, Array, Hash, Tuple, Func, Regex, Any, Success, Failure)", typeName),
+			fmt.Sprintf("unknown type name %q in type annotation; expected a built-in type (Int, Float, String, Bool, Maybe, Array, Hash, Tuple, Func, Regex, Any, Success, Failure)", typeName),
 		))
 		return nil
 	}
@@ -1380,9 +1396,9 @@ func (p *Parser) parseBraceBlockExpression() ast.Expression {
 		return nil
 	}
 
-	// If block is empty, create a null-returning do expression
+	// If block is empty, create a do expression returning Maybe.None
 	if len(expr.Statements) == 0 {
-		// Use integer 0 as a placeholder for null return from empty block
+		// Use integer 0 as a placeholder for the empty block result
 		expr.FinalExpression = &ast.IntegerLiteral{Token: p.curToken, Value: 0}
 		return expr
 	}
@@ -1702,6 +1718,10 @@ func (p *Parser) parseMatchCase() *ast.MatchCase {
 	if p.curTokenIs(token.UNDERSCORE) {
 		mc.IsDefault = true
 		mc.Pattern = &ast.WildcardExpression{Token: p.curToken}
+	} else if p.curTokenIs(token.IDENT) && isUpperCase(p.curToken.Literal) &&
+		p.peekTokenIs(token.DOT) && p.peekN(2).Type == token.IDENT && isUpperCase(p.peekN(2).Literal) {
+		// Qualified constructor pattern: Type.Name or Type.Name(x, y)
+		mc.Pattern = p.parseQualifiedConstructorPattern()
 	} else if p.curTokenIs(token.IDENT) && p.peekTokenIs(token.LPAREN) && isUpperCase(p.curToken.Literal) {
 		// Constructor pattern: Name(x, y) where Name starts with uppercase
 		mc.Pattern = p.parseConstructorPattern()
@@ -1752,6 +1772,36 @@ func (p *Parser) parseConstructorPattern() ast.Expression {
 
 	if !p.expectPeek(token.RPAREN) {
 		return nil
+	}
+
+	return cp
+}
+
+// parseQualifiedConstructorPattern parses patterns such as Maybe.None,
+// Maybe.Some(x), and Maybe.Some(x, y). The current token is the type name.
+func (p *Parser) parseQualifiedConstructorPattern() ast.Expression {
+	cp := &ast.ConstructorPattern{
+		Token:    p.curToken,
+		TypeName: p.curToken.Literal,
+	}
+
+	p.nextToken() // consume '.'
+	p.nextToken() // constructor name
+	cp.Name = p.curToken.Literal
+
+	if p.peekTokenIs(token.LPAREN) {
+		p.nextToken() // consume '('
+		cp.Fields = []*ast.Identifier{}
+		if !p.peekTokenIs(token.RPAREN) {
+			p.nextToken()
+			cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+			for p.peekTokenIs(token.COMMA) {
+				p.nextToken() // consume ','
+				p.nextToken() // move to next field
+				cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+			}
+		}
+		p.expectPeek(token.RPAREN)
 	}
 
 	return cp

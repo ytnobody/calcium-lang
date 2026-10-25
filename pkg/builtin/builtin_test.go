@@ -174,7 +174,7 @@ func TestBuiltinToString(t *testing.T) {
 		{"float to string", []value.Value{value.Float(3.14)}, "3.14"},
 		{"bool to string", []value.Value{value.Bool(true)}, "true"},
 		{"string to string", []value.Value{value.String("hello")}, "hello"},
-		{"null to string", []value.Value{value.Null()}, "null"},
+		{"invalid to string", []value.Value{value.Invalid()}, "invalid"},
 	}
 
 	for _, tt := range tests {
@@ -214,11 +214,11 @@ func TestBuiltinGet(t *testing.T) {
 		args     []value.Value
 		expected value.Value
 	}{
-		{"get first element", []value.Value{arr, value.Int(0)}, value.String("a")},
-		{"get middle element", []value.Value{arr, value.Int(1)}, value.String("b")},
-		{"get last element", []value.Value{arr, value.Int(2)}, value.String("c")},
-		{"out of bounds returns null", []value.Value{arr, value.Int(10)}, value.Null()},
-		{"negative index returns null", []value.Value{arr, value.Int(-1)}, value.Null()},
+		{"get first element", []value.Value{arr, value.Int(0)}, value.MaybeSome(value.String("a"))},
+		{"get middle element", []value.Value{arr, value.Int(1)}, value.MaybeSome(value.String("b"))},
+		{"get last element", []value.Value{arr, value.Int(2)}, value.MaybeSome(value.String("c"))},
+		{"out of bounds returns None", []value.Value{arr, value.Int(10)}, value.MaybeNone()},
+		{"negative index returns None", []value.Value{arr, value.Int(-1)}, value.MaybeNone()},
 		{"out of bounds with default", []value.Value{arr, value.Int(10), value.String("default")}, value.String("default")},
 	}
 
@@ -307,9 +307,9 @@ func TestBuiltinHead(t *testing.T) {
 		args     []value.Value
 		expected value.Value
 	}{
-		{"head of non-empty array", []value.Value{value.Array([]value.Value{value.Int(1), value.Int(2), value.Int(3)})}, value.Int(1)},
-		{"head of single element", []value.Value{value.Array([]value.Value{value.String("only")})}, value.String("only")},
-		{"head of empty array", []value.Value{value.Array([]value.Value{})}, value.Null()},
+		{"head of non-empty array", []value.Value{value.Array([]value.Value{value.Int(1), value.Int(2), value.Int(3)})}, value.MaybeSome(value.Int(1))},
+		{"head of single element", []value.Value{value.Array([]value.Value{value.String("only")})}, value.MaybeSome(value.String("only"))},
+		{"head of empty array", []value.Value{value.Array([]value.Value{})}, value.MaybeNone()},
 	}
 
 	for _, tt := range tests {

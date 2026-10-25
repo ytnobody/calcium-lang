@@ -21,13 +21,14 @@ const (
 
 // Constant type tags for serialization
 const (
-	TypeTagNull     byte = 0
-	TypeTagBool     byte = 1
-	TypeTagInt      byte = 2
-	TypeTagFloat    byte = 3
-	TypeTagString   byte = 4
-	TypeTagFunction byte = 5
-	TypeTagRegex    byte = 6
+	TypeTagLegacyNone byte = 0 // legacy bytecode files may contain this tag
+	TypeTagBool       byte = 1
+	TypeTagInt        byte = 2
+	TypeTagFloat      byte = 3
+	TypeTagString     byte = 4
+	TypeTagFunction   byte = 5
+	TypeTagRegex      byte = 6
+	TypeTagADT        byte = 7
 )
 
 // CompiledBytecode represents a complete compiled program that can be serialized
@@ -141,9 +142,6 @@ func Deserialize(data []byte) (*CompiledBytecode, error) {
 
 func serializeConstant(w *bytes.Buffer, v value.Value) error {
 	switch v.Type {
-	case value.TYPE_NULL:
-		return w.WriteByte(TypeTagNull)
-
 	case value.TYPE_BOOL:
 		if err := w.WriteByte(TypeTagBool); err != nil {
 			return err
@@ -183,6 +181,27 @@ func serializeConstant(w *bytes.Buffer, v value.Value) error {
 		}
 		return serializeRegex(w, v.AsRegex())
 
+	case value.TYPE_ADT:
+		if err := w.WriteByte(TypeTagADT); err != nil {
+			return err
+		}
+		adt := v.AsADT()
+		if err := writeString(w, adt.TypeName); err != nil {
+			return err
+		}
+		if err := writeString(w, adt.Tag); err != nil {
+			return err
+		}
+		if err := writeUint32(w, uint32(len(adt.Values))); err != nil {
+			return err
+		}
+		for _, elem := range adt.Values {
+			if err := serializeConstant(w, elem); err != nil {
+				return err
+			}
+		}
+		return nil
+
 	default:
 		return fmt.Errorf("unsupported constant type for serialization: %s", v.Type)
 	}
@@ -191,57 +210,81 @@ func serializeConstant(w *bytes.Buffer, v value.Value) error {
 func deserializeConstant(r *bytes.Reader) (value.Value, error) {
 	tag, err := r.ReadByte()
 	if err != nil {
-		return value.Null(), err
+		return value.Invalid(), err
 	}
 
 	switch tag {
-	case TypeTagNull:
-		return value.Null(), nil
+	case TypeTagLegacyNone:
+		// Legacy bytecode encoded null constants; surface them as Maybe.None.
+		return value.MaybeNone(), nil
 
 	case TypeTagBool:
 		b, err := r.ReadByte()
 		if err != nil {
-			return value.Null(), err
+			return value.Invalid(), err
 		}
 		return value.Bool(b != 0), nil
 
 	case TypeTagInt:
 		i, err := readInt64(r)
 		if err != nil {
-			return value.Null(), err
+			return value.Invalid(), err
 		}
 		return value.Int(i), nil
 
 	case TypeTagFloat:
 		f, err := readFloat64(r)
 		if err != nil {
-			return value.Null(), err
+			return value.Invalid(), err
 		}
 		return value.Float(f), nil
 
 	case TypeTagString:
 		s, err := readString(r)
 		if err != nil {
-			return value.Null(), err
+			return value.Invalid(), err
 		}
 		return value.String(s), nil
 
 	case TypeTagFunction:
 		fn, err := deserializeFunction(r)
 		if err != nil {
-			return value.Null(), err
+			return value.Invalid(), err
 		}
 		return value.Func(fn), nil
 
 	case TypeTagRegex:
 		re, err := deserializeRegex(r)
 		if err != nil {
-			return value.Null(), err
+			return value.Invalid(), err
 		}
 		return value.RegexVal(re), nil
 
+	case TypeTagADT:
+		typeName, err := readString(r)
+		if err != nil {
+			return value.Invalid(), err
+		}
+		tag, err := readString(r)
+		if err != nil {
+			return value.Invalid(), err
+		}
+		numValues, err := readUint32(r)
+		if err != nil {
+			return value.Invalid(), err
+		}
+		values := make([]value.Value, numValues)
+		for i := uint32(0); i < numValues; i++ {
+			v, err := deserializeConstant(r)
+			if err != nil {
+				return value.Invalid(), err
+			}
+			values[i] = v
+		}
+		return value.ADTVal(&value.ADT{TypeName: typeName, Tag: tag, Values: values}), nil
+
 	default:
-		return value.Null(), fmt.Errorf("unknown constant type tag: %d", tag)
+		return value.Invalid(), fmt.Errorf("unknown constant type tag: %d", tag)
 	}
 }
 

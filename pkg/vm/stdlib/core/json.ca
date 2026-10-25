@@ -3,13 +3,13 @@
 
 // parse converts a JSON string to a Calcium value
 // Returns success(value) on success, failure(message) on error
-// Supports: strings, numbers (int/float), booleans, null, arrays, objects
+// Supports: strings, numbers (int/float), booleans, JSON null (Maybe.None), arrays, objects
 // Example: json.parse('{"name": "Alice", "age": 30}')
 func parse(s) = __json_parse(s);
 
 // stringify converts a Calcium value to a JSON string
 // Returns success(string) on success, failure(message) on error
-// Supports: strings, numbers, booleans, null, arrays, hashes
+// Supports: strings, numbers, booleans, JSON null (Maybe.None), arrays, hashes
 // Example: json.stringify({name: "Alice", age: 30})
 func stringify(v) = __json_stringify(v);
 

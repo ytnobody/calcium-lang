@@ -748,7 +748,7 @@ src = schedule.interval(100);  // Fires every 100ms
 | `string.ends_with(s, suffix)` | Check suffix |
 | `string.replace(s, old, new)` | Replace text |
 | `string.substring(s, start, end)` | Extract substring |
-| `string.char_at(s, index)` | Get character |
+| `string.char_at(s, index)` | Get character as `Maybe.Some(c)` / `Maybe.None` |
 | `string.index_of(s, sub)` | Find position |
 
 ### core.array
@@ -771,7 +771,7 @@ Testing and assertion module. All functions require a label as the first argumen
 | `assert.neq(label, actual, expected)` | Assert inequality |
 | `assert.is_true(label, value)` | Assert value is true |
 | `assert.is_false(label, value)` | Assert value is false |
-| `assert.is_null(label, value)` | Assert value is null |
+| `assert.is_none(label, value)` | Assert value is `Maybe.None` |
 | `assert.is_type(label, value, type)` | Assert value has type |
 | `assert.len_eq(label, collection, length)` | Assert collection length |
 | `assert.throws(label, result)` | Assert result is failure |
@@ -818,10 +818,10 @@ These functions are available without imports:
 | `len(x)` | Length of array or string |
 | `concat(...)` | Concatenate strings |
 | `to_string(x)` | Convert to string |
-| `get(coll, key)` | Safe access → success/failure |
-| `get(coll, key, default)` | Safe access with default |
+| `get(coll, key)` | Safe access → `Maybe.Some(value)` / `Maybe.None` |
+| `get(coll, key, default)` | Safe access with default (returns raw value) |
 | `has(coll, key)` | Check if key exists |
-| `head(arr)` | First element |
+| `head(arr)` | First element as `Maybe.Some(v)` / `Maybe.None` |
 | `tail(arr)` | All but first element |
 | `push(arr, elem)` | Append element |
 | `range(start, end)` | Generate integer array |

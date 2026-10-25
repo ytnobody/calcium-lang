@@ -61,7 +61,7 @@ test.new()
     |> test.ok("has existing key", has(h, "a"))
     |> test.is("has missing key", has(h, "x"), false)
     // get
-    |> test.is("get existing", get(h, "a"), 1)
+    |> test.is("get existing", get(h, "a"), Maybe.Some(1))
     // Mixed Value Types
     |> test.is("num value", mixed.num, 42)
     |> test.is("str value", mixed.str, "hello")

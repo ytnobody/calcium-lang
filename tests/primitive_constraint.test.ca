@@ -5,8 +5,8 @@ use core.types;
 
 io.println("# Primitive Constraint Tests");
 
-// Get a null value for testing
-null_val = types.null;
+// Get an absent value for testing
+none_val = Maybe.None;
 
 // Helper functions using constraint check syntax
 func is_int(x) = x |> Int? !? { success(_) => true  failure(_) => false };
@@ -14,14 +14,13 @@ func is_float(x) = x |> Float? !? { success(_) => true  failure(_) => false };
 func is_string(x) = x |> String? !? { success(_) => true  failure(_) => false };
 func is_bool(x) = x |> Bool? !? { success(_) => true  failure(_) => false };
 func is_array(x) = x |> Array? !? { success(_) => true  failure(_) => false };
-func is_null(x) = x |> Null? !? { success(_) => true  failure(_) => false };
 func is_function(x) = x |> Function? !? { success(_) => true  failure(_) => false };
 func is_number(x) = x |> Number? !? { success(_) => true  failure(_) => false };
 
 func add(a, b) = a + b;
 
 test.new()
-    |> test.plan(38)
+    |> test.plan(34)
     // Int?
     |> test.ok("42 is Int", is_int(42))
     |> test.ok("-1 is Int", is_int(-1))
@@ -29,7 +28,7 @@ test.new()
     |> test.is("3.14 is not Int", is_int(3.14), false)
     |> test.is("\"hi\" is not Int", is_int("hi"), false)
     |> test.is("true is not Int", is_int(true), false)
-    |> test.is("null is not Int", is_int(null_val), false)
+    |> test.is("None is not Int", is_int(none_val), false)
     // Float?
     |> test.ok("3.14 is Float", is_float(3.14))
     |> test.ok("-1.5 is Float", is_float(-1.5))
@@ -50,11 +49,6 @@ test.new()
     |> test.ok("[] is Array", is_array([]))
     |> test.is("42 is not Array", is_array(42), false)
     |> test.is("\"arr\" is not Array", is_array("arr"), false)
-    // Null?
-    |> test.ok("null is Null", is_null(null_val))
-    |> test.is("0 is not Null", is_null(0), false)
-    |> test.is("false is not Null", is_null(false), false)
-    |> test.is("\"\" is not Null", is_null(""), false)
     // Function?
     |> test.ok("add is Function", is_function(add))
     |> test.ok("len is Function", is_function(len))
@@ -67,5 +61,5 @@ test.new()
     |> test.ok("-1.5 is Number", is_number(-1.5))
     |> test.is("\"42\" is not Number", is_number("42"), false)
     |> test.is("true is not Number", is_number(true), false)
-    |> test.is("null is not Number", is_number(null_val), false)
+    |> test.is("None is not Number", is_number(none_val), false)
     |> test.done();

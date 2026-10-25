@@ -12,7 +12,7 @@ func TestTypeString(t *testing.T) {
 		typ  Type
 		want string
 	}{
-		{TYPE_NULL, "null"},
+		{TYPE_INVALID, "invalid"},
 		{TYPE_BOOL, "bool"},
 		{TYPE_INT, "int"},
 		{TYPE_FLOAT, "float"},
@@ -43,13 +43,13 @@ func TestTypeString(t *testing.T) {
 
 // Test constructors
 func TestConstructors(t *testing.T) {
-	t.Run("Null", func(t *testing.T) {
-		v := Null()
-		if v.Type != TYPE_NULL {
-			t.Errorf("Null().Type = %v, want TYPE_NULL", v.Type)
+	t.Run("Invalid", func(t *testing.T) {
+		v := Invalid()
+		if v.Type != TYPE_INVALID {
+			t.Errorf("Invalid().Type = %v, want TYPE_INVALID", v.Type)
 		}
 		if v.Data != nil {
-			t.Errorf("Null().Data = %v, want nil", v.Data)
+			t.Errorf("Invalid().Data = %v, want nil", v.Data)
 		}
 	})
 
@@ -122,7 +122,7 @@ func TestConstructors(t *testing.T) {
 	})
 
 	t.Run("BuiltinFunc", func(t *testing.T) {
-		b := &Builtin{Name: "print", Fn: func(args ...Value) Value { return Null() }}
+		b := &Builtin{Name: "print", Fn: func(args ...Value) Value { return Invalid() }}
 		v := BuiltinFunc(b)
 		if v.Type != TYPE_BUILTIN {
 			t.Errorf("BuiltinFunc().Type = %v, want TYPE_BUILTIN", v.Type)
@@ -346,7 +346,7 @@ func TestToNumber(t *testing.T) {
 		{Int(-10), -10.0, true},
 		{Float(3.14), 3.14, true},
 		{String("hello"), 0, false},
-		{Null(), 0, false},
+		{Invalid(), 0, false},
 		{Bool(true), 0, false},
 	}
 
@@ -367,7 +367,7 @@ func TestIsTruthy(t *testing.T) {
 		val  Value
 		want bool
 	}{
-		{Null(), false},
+		{Invalid(), false},
 		{Bool(true), true},
 		{Bool(false), false},
 		{Int(0), false},
@@ -422,7 +422,7 @@ func TestEquals(t *testing.T) {
 			a, b Value
 			want bool
 		}{
-			{Null(), Null(), true},
+			{Invalid(), Invalid(), true},
 			{Bool(true), Bool(true), true},
 			{Bool(true), Bool(false), false},
 			{Int(42), Int(42), true},
@@ -505,7 +505,7 @@ func TestValueString(t *testing.T) {
 		val  Value
 		want string
 	}{
-		{Null(), "null"},
+		{Invalid(), "invalid"},
 		{Bool(true), "true"},
 		{Bool(false), "false"},
 		{Int(42), "42"},

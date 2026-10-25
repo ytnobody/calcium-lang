@@ -66,7 +66,7 @@ Each constant consists of type tag (1 byte) + data:
 
 | Type Tag | Type | Data Format |
 |----------|------|-------------|
-| 0 | null | None |
+| 0 | legacy absence | `Maybe.None` when read |
 | 1 | bool | 1 byte (0 or 1) |
 | 2 | int | 8 bytes (int64, big-endian) |
 | 3 | float | 8 bytes (IEEE 754) |

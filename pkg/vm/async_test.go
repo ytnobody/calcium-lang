@@ -313,7 +313,7 @@ func testEvalWithTimeout(t *testing.T, input string, timeout time.Duration) valu
 		}
 
 		result := vm.LastPoppedStackElem()
-		if result.Type == value.TYPE_NULL && vm.sp > 0 {
+		if result.Type == value.TYPE_INVALID && vm.sp > 0 {
 			result = vm.StackTop()
 		}
 		done <- result
@@ -324,10 +324,10 @@ func testEvalWithTimeout(t *testing.T, input string, timeout time.Duration) valu
 		return result
 	case err := <-errCh:
 		t.Fatal(err)
-		return value.Null()
+		return value.Invalid()
 	case <-time.After(timeout):
 		t.Fatal("test timed out")
-		return value.Null()
+		return value.Invalid()
 	}
 }
 
@@ -432,7 +432,7 @@ func testEval(t *testing.T, input string) value.Value {
 	// For stay expressions, the result is on the stack
 	// For other expressions, it's the last popped element
 	result := vm.LastPoppedStackElem()
-	if result.Type == value.TYPE_NULL && vm.sp > 0 {
+	if result.Type == value.TYPE_INVALID && vm.sp > 0 {
 		result = vm.StackTop()
 	}
 	return result

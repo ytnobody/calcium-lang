@@ -61,7 +61,7 @@ All assertion functions print a TAP result line immediately and return the updat
 
 #### `ok(ctx, label, value)`
 
-Asserts that `value` is truthy (not `false`, `null`, `0`, or `""`).
+Asserts that `value` is truthy (not `false`, `Maybe.None`, `0`, or `""`).
 
 ```calcium
 ctx = test.ok(ctx, "truthy check", true);

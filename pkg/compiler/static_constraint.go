@@ -359,9 +359,6 @@ func checkBuiltinTypeConstraint(constraintName string, arg ast.Expression) (bool
 			}
 		}
 		return isInt || isFloat, true
-	case "Null":
-		// null literal - we don't have a NullLiteral AST type typically
-		return false, false
 	case "Array":
 		_, ok := arg.(*ast.ArrayLiteral)
 		return ok, true

@@ -14,22 +14,22 @@ func reverse(arr) = reduce(arr, _reverse_fn, []);
 
 // slice extracts a portion of the array (3 arguments)
 func slice(arr, start, end) =
-    range(start, end) |> map(i => get(arr, i));
+    range(start, end) |> map(i => arr[i]);
 
 // slice_from extracts from start to end of array (2 arguments)
 func slice_from(arr, start) =
-    range(start, len(arr)) |> map(i => get(arr, i));
+    range(start, len(arr)) |> map(i => arr[i]);
 
 // Helper for index_of and find_index
 func _first_or_neg1(arr) = match len(arr) == 0
     true => -1
-    false => head(arr);
+    false => arr[0];
 
 // index_of finds the first index of an element using filter
 // Returns -1 if not found
 func index_of(arr, elem) =
     range(0, len(arr))
-    |> filter(i => get(arr, i) == elem)
+    |> filter(i => arr[i] == elem)
     |> _first_or_neg1;
 
 // Helper for flatten
@@ -52,12 +52,12 @@ func unique(arr) = reduce(arr, _unique_fn, []);
 // zip combines two arrays into an array of pairs
 func zip(arr1, arr2) =
     range(0, _min(len(arr1), len(arr2)))
-    |> map(i => [get(arr1, i), get(arr2, i)]);
+    |> map(i => [arr1[i], arr2[i]]);
 
 // Helper for take
 func _take_check(arr, n) = match n >= len(arr)
     true => arr
-    false => range(0, n) |> map(i => get(arr, i));
+    false => range(0, n) |> map(i => arr[i]);
 
 // take returns the first n elements
 func take(arr, n) = match n <= 0
@@ -67,7 +67,7 @@ func take(arr, n) = match n <= 0
 // Helper for drop
 func _drop_check(arr, n) = match n >= len(arr)
     true => []
-    false => range(n, len(arr)) |> map(i => get(arr, i));
+    false => range(n, len(arr)) |> map(i => arr[i]);
 
 // drop removes the first n elements
 func drop(arr, n) = match n <= 0
@@ -89,7 +89,7 @@ func all(arr, pred) = reduce(arr, (acc, x) => acc && pred(x), true);
 // Helper for find
 func _find_result(filtered) = match len(filtered) == 0
     true => failure("not found")
-    false => success(head(filtered));
+    false => success(filtered[0]);
 
 // find returns the first element satisfying the predicate
 func find(arr, pred) =
@@ -99,7 +99,7 @@ func find(arr, pred) =
 // find_index returns the index of the first element satisfying the predicate
 func find_index(arr, pred) =
     range(0, len(arr))
-    |> filter(i => pred(get(arr, i)))
+    |> filter(i => pred(arr[i]))
     |> _first_or_neg1;
 
 // count counts elements satisfying the predicate
@@ -119,8 +119,8 @@ func _sort_geq(arr, pivot) = filter(arr, x => x >= pivot);
 func sort(arr) = match len(arr) <= 1
     true => arr
     false => concat(
-        sort(_sort_less(tail(arr), head(arr))),
-        concat([head(arr)], sort(_sort_geq(tail(arr), head(arr))))
+        sort(_sort_less(tail(arr), arr[0])),
+        concat([arr[0]], sort(_sort_geq(tail(arr), arr[0])))
     );
 
 // sort_by sorts an array using a custom comparison function
@@ -135,8 +135,8 @@ func _sort_by_geq(arr, pivot, cmp) = filter(arr, x => !cmp(x, pivot));
 func sort_by(arr, cmp) = match len(arr) <= 1
     true => arr
     false => concat(
-        sort_by(_sort_by_less(tail(arr), head(arr), cmp), cmp),
-        concat([head(arr)], sort_by(_sort_by_geq(tail(arr), head(arr), cmp), cmp))
+        sort_by(_sort_by_less(tail(arr), arr[0], cmp), cmp),
+        concat([arr[0]], sort_by(_sort_by_geq(tail(arr), arr[0], cmp), cmp))
     );
 
 // Helper for chunk
@@ -152,7 +152,7 @@ func chunk(arr, n) = match len(arr) <= n
 // intersperse places a separator between elements
 func intersperse(arr, sep) = match len(arr) <= 1
     true => arr
-    false => concat([head(arr), sep], intersperse(tail(arr), sep));
+    false => concat([arr[0], sep], intersperse(tail(arr), sep));
 
 // enumerate adds indices to elements: [a, b] -> [[0, a], [1, b]]
 func enumerate(arr) = zip(range(0, len(arr)), arr);

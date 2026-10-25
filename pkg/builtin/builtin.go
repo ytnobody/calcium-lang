@@ -125,10 +125,13 @@ func builtinGet(args ...value.Value) value.Value {
 		if len(args) == 3 {
 			return args[2] // Return default value
 		}
-		return value.Null()
+		return value.MaybeNone()
 	}
 
-	return arr[idx]
+	if len(args) == 3 {
+		return arr[idx]
+	}
+	return value.MaybeSome(arr[idx])
 }
 
 // has(array, value) - checks if array contains value
@@ -163,10 +166,10 @@ func builtinHead(args ...value.Value) value.Value {
 
 	arr := args[0].AsArray()
 	if len(arr) == 0 {
-		return value.Null()
+		return value.MaybeNone()
 	}
 
-	return arr[0]
+	return value.MaybeSome(arr[0])
 }
 
 // tail(array) - returns array without first element

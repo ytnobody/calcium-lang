@@ -88,7 +88,7 @@ const (
 	OpLoadModule // Load module by name index
 
 	// Special
-	OpNull  // Push null
+	OpNone  // Push the legacy absence value (Maybe.None)
 	OpTrue  // Push true
 	OpFalse // Push false
 
@@ -113,8 +113,9 @@ const (
 	OpTailCall // Tail call (reuse current frame)
 
 	// ADT operations
-	OpConstructADT // Create ADT variant: operands [tag_name_index (2), arity (1)]
-	OpMatchADT     // Match ADT variant: operands [tag_name_index (2), arity (1)]
+	OpConstructADT       // Create ADT variant: operands [tag_name_index (2), arity (1)]
+	OpMatchADT           // Match ADT variant: operands [tag_name_index (2), arity (1)]
+	OpConstructMaybeSome // Construct the built-in Maybe.Some(value)
 
 	// Function overloading
 	OpAddOverload // Pop new closure (TOS) and existing closure/overloaded (TOS-1), push overloaded closure
@@ -193,7 +194,7 @@ var definitions = map[OpCode]*Definition{
 
 	OpLoadModule: {"OpLoadModule", []int{2}}, // 2-byte module path constant index
 
-	OpNull:  {"OpNull", []int{}},
+	OpNone:  {"OpNone", []int{}},
 	OpTrue:  {"OpTrue", []int{}},
 	OpFalse: {"OpFalse", []int{}},
 
@@ -218,8 +219,9 @@ var definitions = map[OpCode]*Definition{
 	OpTailCall: {"OpTailCall", []int{1}}, // 1-byte argument count
 
 	// ADT operations
-	OpConstructADT: {"OpConstructADT", []int{2, 1}}, // 2-byte tag name constant index, 1-byte arity
-	OpMatchADT:     {"OpMatchADT", []int{2, 1}},     // 2-byte tag name constant index, 1-byte arity
+	OpConstructADT:       {"OpConstructADT", []int{2, 1}},   // 2-byte tag name constant index, 1-byte arity
+	OpMatchADT:           {"OpMatchADT", []int{2, 1}},       // 2-byte tag name constant index, 1-byte arity
+	OpConstructMaybeSome: {"OpConstructMaybeSome", []int{}}, // construct Maybe.Some(value)
 
 	// Function overloading
 	OpAddOverload: {"OpAddOverload", []int{}}, // No operands: pops new closure and existing, pushes overloaded

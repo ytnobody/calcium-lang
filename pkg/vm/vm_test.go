@@ -42,6 +42,21 @@ func runVmTests(t *testing.T, tests []vmTestCase) {
 	}
 }
 
+func runVmErrorTests(t *testing.T, inputs []string) {
+	t.Helper()
+	for _, input := range inputs {
+		program := parse(input)
+		comp := compiler.New()
+		if err := comp.Compile(program); err != nil {
+			t.Fatalf("compiler error for %q: %s", input, err)
+		}
+		vm := New(comp.Constants())
+		if err := vm.Run(comp.Bytecode().Instructions); err == nil {
+			t.Errorf("expected runtime error for %q", input)
+		}
+	}
+}
+
 func parse(input string) *ast.Program {
 	l := lexer.New(input)
 	p := parser.New(l)
@@ -85,7 +100,7 @@ func testExpectedValue(t *testing.T, expected interface{}, actual value.Value) {
 			testExpectedValue(t, elem, arr[i])
 		}
 	case nil:
-		if actual.Type != value.TYPE_NULL {
+		if actual.Type != value.TYPE_INVALID {
 			t.Errorf("object is not Null: %T (%+v)", actual, actual)
 		}
 	}
@@ -274,12 +289,10 @@ func TestArrayIndex(t *testing.T) {
 }
 
 func TestArrayOutOfBounds(t *testing.T) {
-	tests := []vmTestCase{
-		{"[1, 2, 3][99];", nil},
-		{"[1, 2, 3][-1];", nil},
-	}
-
-	runVmTests(t, tests)
+	runVmErrorTests(t, []string{
+		"[1, 2, 3][99];",
+		"[1, 2, 3][-1];",
+	})
 }
 
 func TestFunctions(t *testing.T) {
@@ -970,9 +983,10 @@ func TestBuiltinToString(t *testing.T) {
 
 func TestBuiltinGet(t *testing.T) {
 	tests := []vmTestCase{
-		{`get([1, 2, 3], 0);`, 1},
-		{`get([1, 2, 3], 2);`, 3},
+		{`match get([1, 2, 3], 0) Maybe.Some(v) => v Maybe.None => 0;`, 1},
+		{`match get([1, 2, 3], 2) Maybe.Some(v) => v Maybe.None => 0;`, 3},
 		{`get([1, 2, 3], 5, 99);`, 99}, // default value
+		{`match get([1, 2, 3], 5) Maybe.Some(v) => v Maybe.None => 99;`, 99},
 	}
 	runVmTests(t, tests)
 }
@@ -988,8 +1002,9 @@ func TestBuiltinHas(t *testing.T) {
 
 func TestBuiltinHeadTail(t *testing.T) {
 	tests := []vmTestCase{
-		{`head([1, 2, 3]);`, 1},
-		{`head([42]);`, 42},
+		{`match head([1, 2, 3]) Maybe.Some(v) => v Maybe.None => 0;`, 1},
+		{`match head([42]) Maybe.Some(v) => v Maybe.None => 0;`, 42},
+		{`match head([]) Maybe.Some(v) => v Maybe.None => 99;`, 99},
 	}
 	runVmTests(t, tests)
 
@@ -1317,8 +1332,9 @@ func TestCoreStringModule(t *testing.T) {
 		{`use core.string; string.substring("hello", 1, 4);`, "ell"},
 		{`use core.string; string.substring_from("hello", 2);`, "llo"},
 		// char_at
-		{`use core.string; string.char_at("hello", 0);`, "h"},
-		{`use core.string; string.char_at("hello", 4);`, "o"},
+		{`use core.string; match string.char_at("hello", 0) Maybe.Some(c) => c Maybe.None => "";`, "h"},
+		{`use core.string; match string.char_at("hello", 4) Maybe.Some(c) => c Maybe.None => "";`, "o"},
+		{`use core.string; match string.char_at("hello", 9) Maybe.Some(c) => false Maybe.None => true;`, true},
 		// index_of
 		{`use core.string; string.index_of("hello", "l");`, int64(2)},
 		{`use core.string; string.index_of("hello", "x");`, int64(-1)},
@@ -1404,9 +1420,7 @@ func TestHashLiterals(t *testing.T) {
 		{`h = {name: "Alice"}; h["name"];`, "Alice"},
 		// Dynamic key
 		{`h = {name: "Bob"}; k = "name"; h[k];`, "Bob"},
-		// Non-existent key returns null
-		{`h = {name: "Alice"}; h.missing;`, nil},
-		{`h = {name: "Alice"}; h["missing"];`, nil},
+		// Missing keys are errors; use get(h, key) for Maybe.
 		// String keys with spaces
 		{`h = {"my key": 42}; h["my key"];`, int64(42)},
 	}
@@ -1451,14 +1465,21 @@ func TestArrayDestructuring(t *testing.T) {
 		{`[x] = [42]; x;`, int64(42)},
 		// Two elements
 		{`[x, y] = [10, 20]; x + y;`, int64(30)},
-		// Fewer elements in array (null for missing)
-		{`[a, b, c] = [1, 2]; c;`, nil},
 		// More elements in array (extras ignored)
 		{`[a, b] = [1, 2, 3, 4]; a + b;`, int64(3)},
 		// With expressions on right side
 		{`arr = [100, 200]; [x, y] = arr; x;`, int64(100)},
 	}
 	runVmTests(t, tests)
+}
+
+func TestMissingAccessErrors(t *testing.T) {
+	runVmErrorTests(t, []string{
+		`h = {name: "Alice"}; h.missing;`,
+		`h = {name: "Alice"}; h["missing"];`,
+		`[a, b, c] = [1, 2];`,
+		`t = (1, 2); t[5];`,
+	})
 }
 
 func TestHeadTailDestructuring(t *testing.T) {
@@ -1801,10 +1822,6 @@ func TestTupleLiteral(t *testing.T) {
 			expected: int64(30),
 		},
 		// Tuple out-of-bounds returns null
-		{
-			input:    `t = (1, 2); t[5];`,
-			expected: nil,
-		},
 		// Tuple length
 		{
 			input:    `len((1, 2, 3));`,
@@ -1855,7 +1872,7 @@ func TestTupleLiteral(t *testing.T) {
 				t.Errorf("for %q: expected %q, got %q", tt.input, expected, actual)
 			}
 		case nil:
-			if stackElem.Type != value.TYPE_NULL {
+			if stackElem.Type != value.TYPE_INVALID {
 				t.Errorf("for %q: expected null, got %s", tt.input, stackElem.String())
 			}
 		default:
@@ -1959,6 +1976,19 @@ func runVmExpr(t *testing.T, input string) value.Value {
 	return machine.LastPoppedStackElem()
 }
 
+func TestBuiltinMaybe(t *testing.T) {
+	tests := []vmTestCase{
+		{input: `match Maybe.Some(42) Maybe.Some(v) => v Maybe.None => 0;`, expected: int64(42)},
+		{input: `match Maybe.None Maybe.Some(v) => v Maybe.None => 0;`, expected: int64(0)},
+		{input: `Maybe.Some(1) == Maybe.Some(1);`, expected: true},
+		{input: `Maybe.None == Maybe.None;`, expected: true},
+		{input: `Maybe.Some(1) == Maybe.None;`, expected: false},
+		{input: `match ([1, 2, 3] |> map(Maybe.Some))[0] Maybe.Some(v) => v Maybe.None => 0;`, expected: int64(1)},
+		{input: `func unwrap_or(m, d) = match m Maybe.Some(v) => v Maybe.None => d; unwrap_or(Maybe.None, 7);`, expected: int64(7)},
+	}
+	runVmTests(t, tests)
+}
+
 func TestADT(t *testing.T) {
 	tests := []vmTestCase{
 		// Zero-arity constructor
@@ -2042,7 +2072,7 @@ func TestADT(t *testing.T) {
 				t.Errorf("for %q: expected %q, got %q", tt.input, expected, actual)
 			}
 		case nil:
-			if stackElem.Type != value.TYPE_NULL {
+			if stackElem.Type != value.TYPE_INVALID {
 				t.Errorf("for %q: expected null, got %s", tt.input, stackElem.String())
 			}
 		default:

@@ -12,7 +12,7 @@ type Kind int
 
 const (
 	KindAny     Kind = iota // dynamic / unknown type (the "?" of gradual typing)
-	KindNull                // null
+	KindMaybe               // Maybe (Some(value) | None)
 	KindBool                // bool
 	KindInt                 // int
 	KindFloat               // float
@@ -49,17 +49,17 @@ func (*AnyType) typeExpr()                            {}
 func (*AnyType) String() string                       { return "Any" }
 func (*AnyType) IsCompatibleWith(other TypeExpr) bool { return true }
 
-// NullType represents the null type.
-type NullType struct{}
+// MaybeType represents the built-in Maybe type (Some(value) | None).
+// The payload type is not tracked yet; all Maybes are compatible.
+type MaybeType struct{}
 
-func (*NullType) typeExpr()      {}
-func (*NullType) String() string { return "Null" }
-func (*NullType) IsCompatibleWith(other TypeExpr) bool {
-	_, ok := other.(*AnyType)
-	if ok {
+func (*MaybeType) typeExpr()      {}
+func (*MaybeType) String() string { return "Maybe" }
+func (*MaybeType) IsCompatibleWith(other TypeExpr) bool {
+	if _, ok := other.(*AnyType); ok {
 		return true
 	}
-	_, ok = other.(*NullType)
+	_, ok := other.(*MaybeType)
 	return ok
 }
 
@@ -327,7 +327,7 @@ func (n *NamedType) IsCompatibleWith(other TypeExpr) bool {
 
 var (
 	Any   TypeExpr = &AnyType{}
-	Null  TypeExpr = &NullType{}
+	Maybe TypeExpr = &MaybeType{}
 	Bool  TypeExpr = &BoolType{}
 	Int   TypeExpr = &IntType{}
 	Float TypeExpr = &FloatType{}
@@ -342,14 +342,14 @@ var (
 )
 
 // FromName returns the TypeExpr for a given built-in type name, or nil if unknown.
-// Built-in type names are: Any, Null, Bool, Int, Float, String, Array, Hash,
+// Built-in type names are: Any, Maybe, Bool, Int, Float, String, Array, Hash,
 // Tuple, Func, Regex, Success, Failure.
 func FromName(name string) TypeExpr {
 	switch name {
 	case "Any":
 		return Any
-	case "Null":
-		return Null
+	case "Maybe":
+		return Maybe
 	case "Bool":
 		return Bool
 	case "Int":

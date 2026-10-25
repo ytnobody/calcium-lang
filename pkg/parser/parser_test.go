@@ -1622,6 +1622,41 @@ func TestConstructorPatternInMatch(t *testing.T) {
 	}
 }
 
+func TestQualifiedConstructorPatternInMatch(t *testing.T) {
+	input := `match value
+		Maybe.None => 0
+		Maybe.Some(x) => x;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	match, ok := stmt.Expression.(*ast.MatchExpression)
+	if !ok {
+		t.Fatalf("exp not *ast.MatchExpression. got=%T", stmt.Expression)
+	}
+	if len(match.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(match.Cases))
+	}
+
+	none, ok := match.Cases[0].Pattern.(*ast.ConstructorPattern)
+	if !ok {
+		t.Fatalf("case 0 pattern not *ast.ConstructorPattern. got=%T", match.Cases[0].Pattern)
+	}
+	if none.TypeName != "Maybe" || none.Name != "None" || len(none.Fields) != 0 {
+		t.Errorf("unexpected zero-arity pattern: %#v", none)
+	}
+
+	some, ok := match.Cases[1].Pattern.(*ast.ConstructorPattern)
+	if !ok {
+		t.Fatalf("case 1 pattern not *ast.ConstructorPattern. got=%T", match.Cases[1].Pattern)
+	}
+	if some.TypeName != "Maybe" || some.Name != "Some" || len(some.Fields) != 1 || some.Fields[0].Value != "x" {
+		t.Errorf("unexpected qualified pattern: %#v", some)
+	}
+}
+
 func TestArrayDestructuringStatement(t *testing.T) {
 	input := `[a, b, c] = [1, 2, 3];`
 	l := lexer.New(input)

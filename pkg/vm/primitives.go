@@ -29,7 +29,7 @@ func primitiveprint(args ...value.Value) value.Value {
 		return value.Failure(value.String("__print: expected 1 argument"))
 	}
 	fmt.Print(args[0].String())
-	return value.Null()
+	return value.MaybeNone()
 }
 
 // __println prints a string to stdout with newline
@@ -38,7 +38,7 @@ func primitivePrintln(args ...value.Value) value.Value {
 		return value.Failure(value.String("__println: expected 1 argument"))
 	}
 	fmt.Println(args[0].String())
-	return value.Null()
+	return value.MaybeNone()
 }
 
 // __read_file reads a file and returns its contents
@@ -74,7 +74,7 @@ func primitiveWriteFile(args ...value.Value) value.Value {
 	if err != nil {
 		return value.Failure(value.String(fmt.Sprintf("__write_file: %v", err)))
 	}
-	return value.Success(value.Null())
+	return value.Success(value.MaybeNone())
 }
 
 // __list_dir lists entries in a directory
@@ -108,7 +108,7 @@ func primitiveMkdir(args ...value.Value) value.Value {
 	if err != nil {
 		return value.Failure(value.String(fmt.Sprintf("__mkdir: %v", err)))
 	}
-	return value.Success(value.Null())
+	return value.Success(value.MaybeNone())
 }
 
 // __exists checks whether a file or directory exists
@@ -141,7 +141,7 @@ func primitiveDeleteFile(args ...value.Value) value.Value {
 	if err != nil {
 		return value.Failure(value.String(fmt.Sprintf("__delete_file: %v", err)))
 	}
-	return value.Success(value.Null())
+	return value.Success(value.MaybeNone())
 }
 
 // __file_info returns metadata about a file or directory as a hash
@@ -461,10 +461,10 @@ func primitiveStrCharAt(args ...value.Value) value.Value {
 	}
 
 	if idx < 0 || idx >= len(runes) {
-		return value.Failure(value.String("__str_char_at: index out of bounds"))
+		return value.MaybeNone()
 	}
 
-	return value.String(string(runes[idx]))
+	return value.MaybeSome(value.String(string(runes[idx])))
 }
 
 // __str_from_code converts a unicode code point to its string representation
@@ -795,11 +795,6 @@ func primitiveTypeOf(args ...value.Value) value.Value {
 	return value.String(args[0].Type.String())
 }
 
-// __null returns the null value
-func primitiveNull(args ...value.Value) value.Value {
-	return value.Null()
-}
-
 // =============================================================================
 // HTTP Primitives
 // =============================================================================
@@ -1097,7 +1092,7 @@ func primitiveTomlStringify(args ...value.Value) value.Value {
 func goValueToCalcium(v interface{}) value.Value {
 	switch val := v.(type) {
 	case nil:
-		return value.Null()
+		return value.MaybeNone()
 	case bool:
 		return value.Bool(val)
 	case int:
@@ -1129,7 +1124,7 @@ func goValueToCalcium(v interface{}) value.Value {
 // calciumValueToGo converts a Calcium value to a Go value
 func calciumValueToGo(v value.Value) interface{} {
 	switch v.Type {
-	case value.TYPE_NULL:
+	case value.TYPE_INVALID:
 		return nil
 	case value.TYPE_BOOL:
 		return v.AsBool()
@@ -1154,6 +1149,17 @@ func calciumValueToGo(v value.Value) interface{} {
 			result[keyStr] = calciumValueToGo(pair.Value)
 		}
 		return result
+	case value.TYPE_ADT:
+		adt := v.AsADT()
+		if adt.TypeName == "Maybe" {
+			if adt.Tag == "Maybe.None" {
+				return nil
+			}
+			if adt.Tag == "Maybe.Some" && len(adt.Values) == 1 {
+				return calciumValueToGo(adt.Values[0])
+			}
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -1399,7 +1405,7 @@ func primitiveEnvSet(args ...value.Value) value.Value {
 	if err := os.Setenv(name, val); err != nil {
 		return value.Failure(value.String(fmt.Sprintf("__env_set: %v", err)))
 	}
-	return value.Success(value.Null())
+	return value.Success(value.MaybeNone())
 }
 
 // __env_unset removes an environment variable
@@ -1415,7 +1421,7 @@ func primitiveEnvUnset(args ...value.Value) value.Value {
 	if err := os.Unsetenv(name); err != nil {
 		return value.Failure(value.String(fmt.Sprintf("__env_unset: %v", err)))
 	}
-	return value.Success(value.Null())
+	return value.Success(value.MaybeNone())
 }
 
 // __env_list returns all environment variables as a hash
@@ -1462,7 +1468,7 @@ func primitiveOsExit(args ...value.Value) value.Value {
 	// Never leave child processes running after our process exits.
 	KillAll()
 	os.Exit(int(args[0].AsInt()))
-	return value.Null() // unreachable
+	return value.MaybeNone() // unreachable
 }
 
 // =============================================================================
@@ -1526,7 +1532,6 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__to_int":   {Name: "__to_int", Fn: primitiveToInt},
 		"__to_float": {Name: "__to_float", Fn: primitiveToFloat},
 		"__type_of":  {Name: "__type_of", Fn: primitiveTypeOf},
-		"__null":     {Name: "__null", Fn: primitiveNull},
 
 		// TOML
 		"__toml_parse":     {Name: "__toml_parse", Fn: primitiveTomlParse},

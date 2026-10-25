@@ -11,7 +11,7 @@ import (
 type Type int
 
 const (
-	TYPE_NULL Type = iota
+	TYPE_INVALID Type = iota
 	TYPE_BOOL
 	TYPE_INT
 	TYPE_FLOAT
@@ -37,8 +37,8 @@ const (
 
 func (t Type) String() string {
 	switch t {
-	case TYPE_NULL:
-		return "null"
+	case TYPE_INVALID:
+		return "invalid"
 	case TYPE_BOOL:
 		return "bool"
 	case TYPE_INT:
@@ -314,11 +314,11 @@ func (c *Channel) Receive() (Value, bool) {
 	select {
 	case val, ok := <-c.Source.Channel:
 		if !ok {
-			return Null(), false
+			return Invalid(), false
 		}
 		return val, true
 	case <-c.Source.Done:
-		return Null(), false
+		return Invalid(), false
 	}
 }
 
@@ -373,9 +373,20 @@ type Hash struct {
 
 // Constructors
 
-// Null creates a null value
-func Null() Value {
-	return Value{Type: TYPE_NULL, Data: nil}
+// Invalid creates the internal invalid value used for error paths and an
+// empty VM stack. It is never exposed to Calcium programs.
+func Invalid() Value {
+	return Value{Type: TYPE_INVALID, Data: nil}
+}
+
+// MaybeNone creates the built-in Maybe.None value.
+func MaybeNone() Value {
+	return ADTVal(&ADT{TypeName: "Maybe", Tag: "Maybe.None", Values: []Value{}})
+}
+
+// MaybeSome wraps a value in the built-in Maybe.Some constructor.
+func MaybeSome(v Value) Value {
+	return ADTVal(&ADT{TypeName: "Maybe", Tag: "Maybe.Some", Values: []Value{v}})
 }
 
 // Bool creates a boolean value
@@ -504,13 +515,13 @@ func (h *Hash) Set(key, val Value) {
 	}
 }
 
-// Get retrieves a value by key, returns (value, true) if found, (null, false) if not
+// Get retrieves a value by key, returns (value, true) if found, (invalid, false) if not
 func (h *Hash) Get(key Value) (Value, bool) {
 	keyStr := key.String()
 	if idx, exists := h.Lookup[keyStr]; exists {
 		return h.Pairs[idx].Value, true
 	}
-	return Null(), false
+	return Invalid(), false
 }
 
 // Keys returns all keys in insertion order
@@ -653,7 +664,7 @@ func (v Value) ToNumber() (float64, bool) {
 // IsTruthy returns whether the value is truthy
 func (v Value) IsTruthy() bool {
 	switch v.Type {
-	case TYPE_NULL:
+	case TYPE_INVALID:
 		return false
 	case TYPE_BOOL:
 		return v.AsBool()
@@ -700,7 +711,7 @@ func (v Value) Equals(other Value) bool {
 	}
 
 	switch v.Type {
-	case TYPE_NULL:
+	case TYPE_INVALID:
 		return true
 	case TYPE_BOOL:
 		return v.AsBool() == other.AsBool()
@@ -767,8 +778,8 @@ func (v Value) Equals(other Value) bool {
 // String returns a string representation of the value
 func (v Value) String() string {
 	switch v.Type {
-	case TYPE_NULL:
-		return "null"
+	case TYPE_INVALID:
+		return "invalid"
 	case TYPE_BOOL:
 		if v.AsBool() {
 			return "true"

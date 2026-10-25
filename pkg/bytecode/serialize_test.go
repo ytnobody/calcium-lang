@@ -46,7 +46,6 @@ func TestSerializeDeserializeAllTypes(t *testing.T) {
 	cb := &CompiledBytecode{
 		Instructions: Make(OpConstant, 0),
 		Constants: []value.Value{
-			value.Null(),
 			value.Bool(true),
 			value.Bool(false),
 			value.Int(123456789),
@@ -74,23 +73,18 @@ func TestSerializeDeserializeAllTypes(t *testing.T) {
 		index    int
 		expected interface{}
 	}{
-		{0, nil},               // null
-		{1, true},              // bool true
-		{2, false},             // bool false
-		{3, int64(123456789)},  // positive int
-		{4, int64(-987654321)}, // negative int
-		{5, 3.14159265359},     // float
-		{6, "Hello, World!"},   // ASCII string
-		{7, "日本語テスト"},          // Unicode string
+		{0, true},              // bool true
+		{1, false},             // bool false
+		{2, int64(123456789)},  // positive int
+		{3, int64(-987654321)}, // negative int
+		{4, 3.14159265359},     // float
+		{5, "Hello, World!"},   // ASCII string
+		{6, "日本語テスト"},          // Unicode string
 	}
 
 	for _, tt := range tests {
 		v := cb2.Constants[tt.index]
 		switch expected := tt.expected.(type) {
-		case nil:
-			if v.Type != value.TYPE_NULL {
-				t.Errorf("Index %d: expected null, got %s", tt.index, v.Type)
-			}
 		case bool:
 			if v.Type != value.TYPE_BOOL || v.AsBool() != expected {
 				t.Errorf("Index %d: expected bool %v, got %v", tt.index, expected, v)
@@ -108,6 +102,41 @@ func TestSerializeDeserializeAllTypes(t *testing.T) {
 				t.Errorf("Index %d: expected string %q, got %v", tt.index, expected, v)
 			}
 		}
+	}
+}
+
+func TestSerializeDeserializeADT(t *testing.T) {
+	cb := &CompiledBytecode{
+		Instructions: Make(OpConstant, 0),
+		Constants: []value.Value{
+			value.ADTVal(&value.ADT{TypeName: "Maybe", Tag: "Maybe.None", Values: []value.Value{}}),
+			value.ADTVal(&value.ADT{
+				TypeName: "Maybe",
+				Tag:      "Maybe.Some",
+				Values:   []value.Value{value.Int(42)},
+			}),
+		},
+	}
+
+	data, err := cb.Serialize()
+	if err != nil {
+		t.Fatalf("Serialize failed: %v", err)
+	}
+	cb2, err := Deserialize(data)
+	if err != nil {
+		t.Fatalf("Deserialize failed: %v", err)
+	}
+	if len(cb2.Constants) != 2 {
+		t.Fatalf("Expected 2 constants, got %d", len(cb2.Constants))
+	}
+
+	none := cb2.Constants[0].AsADT()
+	if none.TypeName != "Maybe" || none.Tag != "Maybe.None" || len(none.Values) != 0 {
+		t.Errorf("unexpected None: %#v", none)
+	}
+	some := cb2.Constants[1].AsADT()
+	if some.TypeName != "Maybe" || some.Tag != "Maybe.Some" || len(some.Values) != 1 || some.Values[0].AsInt() != 42 {
+		t.Errorf("unexpected Some: %#v", some)
 	}
 }
 

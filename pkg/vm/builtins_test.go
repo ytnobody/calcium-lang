@@ -382,24 +382,35 @@ func TestBuiltinSubstring(t *testing.T) {
 	}
 }
 
+func maybeSomeString(v value.Value) string {
+	if v.Type != value.TYPE_ADT || len(v.AsADT().Values) != 1 {
+		return ""
+	}
+	return v.AsADT().Values[0].AsString()
+}
+
+func isMaybeNone(v value.Value) bool {
+	return v.Type == value.TYPE_ADT && v.AsADT().Tag == "Maybe.None"
+}
+
 func TestBuiltinCharAt(t *testing.T) {
 	result := builtinCharAt(value.String("hello"), value.Int(0))
-	if result.AsString() != "h" {
-		t.Errorf("expected 'h', got %q", result.AsString())
+	if maybeSomeString(result) != "h" {
+		t.Errorf("expected 'h', got %q", result.String())
 	}
 	result = builtinCharAt(value.String("hello"), value.Int(4))
-	if result.AsString() != "o" {
-		t.Errorf("expected 'o', got %q", result.AsString())
+	if maybeSomeString(result) != "o" {
+		t.Errorf("expected 'o', got %q", result.String())
 	}
 	// Out of bounds
 	result = builtinCharAt(value.String("hi"), value.Int(10))
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null for out of bounds, got %s", result.Type)
+	if !isMaybeNone(result) {
+		t.Errorf("expected Maybe.None for out of bounds, got %s", result.String())
 	}
 	// Negative index
 	result = builtinCharAt(value.String("hi"), value.Int(-1))
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null for negative index, got %s", result.Type)
+	if maybeSomeString(result) != "i" {
+		t.Errorf("expected 'i' for negative index, got %q", result.String())
 	}
 	// Error cases
 	result = builtinCharAt(value.String("hello"))
@@ -417,16 +428,16 @@ func TestBuiltinCharAt(t *testing.T) {
 
 	// Multi-byte: char_at indexes by rune, not byte.
 	result = builtinCharAt(value.String("aアb😀"), value.Int(1))
-	if result.AsString() != "ア" {
-		t.Errorf("expected 'ア', got %q", result.AsString())
+	if maybeSomeString(result) != "ア" {
+		t.Errorf("expected 'ア', got %q", result.String())
 	}
 	result = builtinCharAt(value.String("aアb😀"), value.Int(3))
-	if result.AsString() != "😀" {
-		t.Errorf("expected '😀', got %q", result.AsString())
+	if maybeSomeString(result) != "😀" {
+		t.Errorf("expected '😀', got %q", result.String())
 	}
 	result = builtinCharAt(value.String("aアb😀"), value.Int(4))
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null for out-of-range rune index, got %s", result.Type)
+	if !isMaybeNone(result) {
+		t.Errorf("expected Maybe.None for out-of-range rune index, got %s", result.String())
 	}
 }
 
@@ -1481,8 +1492,8 @@ func TestPrimitiveExp(t *testing.T) {
 
 func TestPrimitivePrint(t *testing.T) {
 	result := primitiveprint(value.String("hello"))
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null return, got %s", result.Type)
+	if result.Type != value.TYPE_ADT || result.AsADT().Tag != "Maybe.None" {
+		t.Errorf("expected Maybe.None return, got %s", result.Type)
 	}
 	result = primitiveprint()
 	if result.Type != value.TYPE_FAILURE {
@@ -1492,8 +1503,8 @@ func TestPrimitivePrint(t *testing.T) {
 
 func TestPrimitivePrintln(t *testing.T) {
 	result := primitivePrintln(value.String("hello"))
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null return, got %s", result.Type)
+	if result.Type != value.TYPE_ADT || result.AsADT().Tag != "Maybe.None" {
+		t.Errorf("expected Maybe.None return, got %s", result.Type)
 	}
 	result = primitivePrintln()
 	if result.Type != value.TYPE_FAILURE {
@@ -1809,20 +1820,20 @@ func TestPrimitiveStrSubstring(t *testing.T) {
 
 func TestPrimitiveStrCharAt(t *testing.T) {
 	result := primitiveStrCharAt(value.String("hello"), value.Int(0))
-	if result.AsString() != "h" {
-		t.Errorf("expected 'h', got %q", result.AsString())
+	if maybeSomeString(result) != "h" {
+		t.Errorf("expected 'h', got %q", result.String())
 	}
 
 	// Negative index
 	result = primitiveStrCharAt(value.String("hello"), value.Int(-1))
-	if result.AsString() != "o" {
-		t.Errorf("expected 'o', got %q", result.AsString())
+	if maybeSomeString(result) != "o" {
+		t.Errorf("expected 'o', got %q", result.String())
 	}
 
 	// Out of bounds
 	result = primitiveStrCharAt(value.String("hi"), value.Int(10))
-	if result.Type != value.TYPE_FAILURE {
-		t.Error("expected failure for out of bounds")
+	if !isMaybeNone(result) {
+		t.Error("expected Maybe.None for out of bounds")
 	}
 
 	// Error cases
@@ -2153,7 +2164,7 @@ func TestPrimitiveToInt(t *testing.T) {
 		{"bool true", value.Bool(true), false, 1},
 		{"bool false", value.Bool(false), false, 0},
 		{"invalid string", value.String("abc"), true, 0},
-		{"null", value.Null(), true, 0},
+		{"invalid", value.Invalid(), true, 0},
 	}
 
 	for _, tt := range tests {
@@ -2192,7 +2203,7 @@ func TestPrimitiveToFloat(t *testing.T) {
 		{"int to float", value.Int(42), false, 42.0},
 		{"string to float", value.String("3.14"), false, 3.14},
 		{"invalid string", value.String("abc"), true, 0},
-		{"null", value.Null(), true, 0},
+		{"invalid", value.Invalid(), true, 0},
 	}
 
 	for _, tt := range tests {
@@ -2228,7 +2239,7 @@ func TestPrimitiveTypeOf(t *testing.T) {
 		{value.Float(1.0), "float"},
 		{value.String("hello"), "string"},
 		{value.Bool(true), "bool"},
-		{value.Null(), "null"},
+		{value.Invalid(), "invalid"},
 	}
 
 	for _, tt := range tests {
@@ -2241,13 +2252,6 @@ func TestPrimitiveTypeOf(t *testing.T) {
 	result := primitiveTypeOf()
 	if result.Type != value.TYPE_FAILURE {
 		t.Error("expected failure for no args")
-	}
-}
-
-func TestPrimitiveNull(t *testing.T) {
-	result := primitiveNull()
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null, got %s", result.Type)
 	}
 }
 
@@ -2319,7 +2323,7 @@ func TestGoValueToCalcium(t *testing.T) {
 		input    interface{}
 		expected value.Type
 	}{
-		{"nil", nil, value.TYPE_NULL},
+		{"nil", nil, value.TYPE_ADT},
 		{"bool", true, value.TYPE_BOOL},
 		{"int", 42, value.TYPE_INT},
 		{"int64", int64(42), value.TYPE_INT},
@@ -2341,10 +2345,16 @@ func TestGoValueToCalcium(t *testing.T) {
 }
 
 func TestCalciumValueToGo(t *testing.T) {
-	// Null
-	result := calciumValueToGo(value.Null())
+	// Legacy null
+	result := calciumValueToGo(value.Invalid())
 	if result != nil {
-		t.Error("expected nil for null")
+		t.Error("expected nil for legacy null")
+	}
+
+	// Maybe.None
+	result = calciumValueToGo(value.MaybeNone())
+	if result != nil {
+		t.Error("expected nil for Maybe.None")
 	}
 
 	// Bool

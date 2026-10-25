@@ -545,8 +545,8 @@ func TestEvalCompileError(t *testing.T) {
 	}
 }
 
-// TestEvalNullResult tests that null-like results are handled.
-func TestEvalNullResult(t *testing.T) {
+// TestEvalAbsenceResult tests that absence-like results are handled.
+func TestEvalAbsenceResult(t *testing.T) {
 	cfg := Config{}
 	s := NewSession(cfg)
 

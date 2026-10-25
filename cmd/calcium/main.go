@@ -763,7 +763,7 @@ func runREPL() {
 					fmt.Printf("Error: %v\n", err)
 					continue
 				}
-				if result != "" && result != "null" {
+				if result != "" && result != "Maybe.None" && result != "invalid" {
 					fmt.Println(result)
 				}
 				continue
@@ -786,7 +786,7 @@ func runREPL() {
 				fmt.Printf("Error: %v\n", err)
 				continue
 			}
-			if result != "" && result != "null" {
+			if result != "" && result != "Maybe.None" && result != "invalid" {
 				fmt.Println(result)
 			}
 			continue
@@ -825,7 +825,7 @@ func runREPL() {
 			continue
 		}
 
-		if result != "" && result != "null" {
+		if result != "" && result != "Maybe.None" && result != "invalid" {
 			fmt.Println(result)
 		}
 	}

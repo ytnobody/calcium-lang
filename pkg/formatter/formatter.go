@@ -482,14 +482,18 @@ func (f *Formatter) formatDoExpression(e *ast.DoExpression) string {
 }
 
 func (f *Formatter) formatConstructorPattern(e *ast.ConstructorPattern) string {
+	name := e.Name
+	if e.TypeName != "" {
+		name = e.TypeName + "." + e.Name
+	}
 	if len(e.Fields) == 0 {
-		return e.Name
+		return name
 	}
 	fields := make([]string, len(e.Fields))
 	for i, field := range e.Fields {
 		fields[i] = field.Value
 	}
-	return e.Name + "(" + strings.Join(fields, ", ") + ")"
+	return name + "(" + strings.Join(fields, ", ") + ")"
 }
 
 func (f *Formatter) formatStayExpression(e *ast.StayExpression) string {

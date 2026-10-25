@@ -265,7 +265,7 @@ func New() *Compiler {
 		"map", "filter", "reduce",
 		"keys", "values", "hash_set", "hash_merge",
 		// Primitive type constraint checkers (usable as Name? in constraint expressions)
-		"Int", "Float", "String", "Bool", "Array", "Hash", "Tuple", "Null",
+		"Int", "Float", "String", "Bool", "Array", "Hash", "Tuple",
 		"Function", "Number",
 		// Built-in common constraints
 		"NonZero", "Positive", "NonNegative", "Natural", "Finite",
@@ -420,6 +420,29 @@ func (c *Compiler) getAllDefinedNames() []string {
 	return names
 }
 
+// constructorTag returns the tag used by the ADT runtime and match compiler.
+// Qualified built-in patterns use Type.Name; user-defined patterns keep the
+// historical unqualified variant tag.
+func (c *Compiler) constructorTag(cp *ast.ConstructorPattern) string {
+	if cp.TypeName != "" {
+		return cp.TypeName + "." + cp.Name
+	}
+	return cp.Name
+}
+
+// builtinMaybeSome builds a first-class constructor function for Maybe.Some.
+// It uses a dedicated opcode so the function carries no constant-pool
+// dependencies and therefore serializes cleanly.
+func (c *Compiler) builtinMaybeSome() value.Value {
+	body := append(bytecode.Make(bytecode.OpConstructMaybeSome), bytecode.Make(bytecode.OpReturn)...)
+	return value.Func(&value.Function{
+		Name:       "Some",
+		Parameters: []string{"value"},
+		Body:       body,
+		NumLocals:  1,
+	})
+}
+
 // isEffectExpression checks if an expression refers to an effect function
 // Returns: (isEffect bool, canDetermine bool)
 // canDetermine is false if we can't statically determine the effect status
@@ -572,7 +595,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			// Push index
 			c.emit(bytecode.OpConstant, c.addConstant(value.Int(int64(i))))
 
-			// Get element (handles null for out of bounds)
+			// Get element
 			c.emit(bytecode.OpIndex)
 
 			// Define variable and assign (reassignment is forbidden)
@@ -1446,6 +1469,19 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpCheckConstraint)
 
 	case *ast.MemberExpression:
+		// Built-in Maybe constructors are accessed as Maybe.Some / Maybe.None.
+		if ident, ok := node.Object.(*ast.Identifier); ok && ident.Value == "Maybe" {
+			switch node.Property.Value {
+			case "None":
+				c.setPosFromToken(node.Token)
+				c.emit(bytecode.OpConstant, c.addConstant(value.MaybeNone()))
+				return nil
+			case "Some":
+				c.setPosFromToken(node.Token)
+				c.emit(bytecode.OpConstant, c.addConstant(c.builtinMaybeSome()))
+				return nil
+			}
+		}
 		err := c.Compile(node.Object)
 		if err != nil {
 			return err
@@ -1692,7 +1728,7 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 			c.emit(bytecode.OpDup)
 
 			// Emit OpMatchADT which pops dup, checks tag, pushes true/false
-			tagIdx := c.addConstant(value.String(cp.Name))
+			tagIdx := c.addConstant(value.String(c.constructorTag(cp)))
 			c.emit(bytecode.OpMatchADT, tagIdx, len(cp.Fields))
 
 			var jumpToNextPos int

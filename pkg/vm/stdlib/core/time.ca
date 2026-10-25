@@ -119,22 +119,22 @@ func from_iso(str) = __time_parse(str, "2006-01-02T15:04:05Z07:00");
 func from_date(str) = __time_parse(str, "2006-01-02");
 
 // year extracts the year from a timestamp
-func year(timestamp) = get(__time_components(timestamp), "year");
+func year(timestamp) = get(__time_components(timestamp), "year", 0);
 
 // month extracts the month (1-12) from a timestamp
-func month(timestamp) = get(__time_components(timestamp), "month");
+func month(timestamp) = get(__time_components(timestamp), "month", 0);
 
 // day_of extracts the day of month from a timestamp
-func day_of(timestamp) = get(__time_components(timestamp), "day");
+func day_of(timestamp) = get(__time_components(timestamp), "day", 0);
 
 // hour_of extracts the hour (0-23) from a timestamp
-func hour_of(timestamp) = get(__time_components(timestamp), "hour");
+func hour_of(timestamp) = get(__time_components(timestamp), "hour", 0);
 
 // minute_of extracts the minute (0-59) from a timestamp
-func minute_of(timestamp) = get(__time_components(timestamp), "minute");
+func minute_of(timestamp) = get(__time_components(timestamp), "minute", 0);
 
 // second_of extracts the second (0-59) from a timestamp
-func second_of(timestamp) = get(__time_components(timestamp), "second");
+func second_of(timestamp) = get(__time_components(timestamp), "second", 0);
 
 // weekday returns the day of the week (0=Sunday, 6=Saturday)
-func weekday(timestamp) = get(__time_components(timestamp), "weekday");
+func weekday(timestamp) = get(__time_components(timestamp), "weekday", 0);

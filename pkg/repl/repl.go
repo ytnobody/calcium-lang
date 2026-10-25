@@ -260,7 +260,7 @@ func (s *Session) evalAndPrint(input string) {
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
-	if result != "" && result != "null" {
+	if result != "" && result != "Maybe.None" && result != "invalid" {
 		fmt.Println(result)
 	}
 }

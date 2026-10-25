@@ -171,6 +171,25 @@ func calculate(n) = do
 end;
 ```
 
+### Built-in Maybe
+
+`Maybe` is a built-in optional-value type with qualified constructors.
+
+```calcium
+x = Maybe.Some(42);
+y = Maybe.None;
+
+func unwrap_or(m, default) = match m
+  Maybe.Some(v) => v
+  Maybe.None => default;
+
+unwrap_or(x, 0);  // 42
+unwrap_or(y, 0);  // 0
+
+// Maybe.Some is first-class
+[1, 2, 3] |> map(Maybe.Some);
+```
+
 ### Algebraic Data Types (ADT)
 
 ```calcium
@@ -263,7 +282,7 @@ use core.http!
 func! greet(name) = io.println("Hello, " + name);
 
 // Using effect pipeline
-"world" !> greet;  // Returns success(null)
+"world" !> greet;  // Returns success(Maybe.None)
 
 // HTTP requests are effects
 result = http.get("https://api.example.com/data", {});
@@ -336,7 +355,7 @@ func greet(name: String): String = "Hello, " + name;
 // Lambda type annotations
 square = (x: Int): Int => x * x;
 
-// Available types: Int, Float, String, Bool, Null, Array, Hash, Tuple, Func, Regex, Any
+// Available types: Int, Float, String, Bool, Maybe, Array, Hash, Tuple, Func, Regex, Any
 // Result types: Result, Success, Failure
 ```
 
@@ -440,7 +459,7 @@ range(1, 6);  // [1, 2, 3, 4, 5]
 // Useful for recursive functions
 func sum_list(arr) = match len(arr)
     0 => 0
-    _ => head(arr) + sum_list(tail(arr));
+    _ => arr[0] + sum_list(tail(arr));
 ```
 
 ### Hashes (Associative Arrays)
@@ -681,7 +700,7 @@ Module resolution order:
 | `string.replace(s, old, new)` | Replace all occurrences |
 | `string.substring(s, start, end)` | Extract substring |
 | `string.index_of(s, sub)` | Find substring position |
-| `string.char_at(s, index)` | Get character at index |
+| `string.char_at(s, index)` | Get character at index as `Maybe.Some(c)` / `Maybe.None` |
 | `string.from_code(cp)` | Convert a unicode code point to its string representation (success/failure) |
 | `string.repeat(s, n)` | Repeat string n times |
 | `string.pad_left(s, len, char)` | Pad on left |
@@ -807,7 +826,7 @@ Module resolution order:
 | `assert.ok(label, value)` | Truthy check |
 | `assert.is_true(label, value)` | Exactly true |
 | `assert.is_false(label, value)` | Exactly false |
-| `assert.is_null(label, value)` | Null check |
+| `assert.is_none(label, value)` | `Maybe.None` check |
 | `assert.is_type(label, value, type)` | Type check |
 | `assert.gt(label, a, b)` | Greater than |
 | `assert.gte(label, a, b)` | Greater or equal |
@@ -835,10 +854,10 @@ Module resolution order:
 | `len(x)` | Get length of array/string/hash/tuple |
 | `concat(a, b)` | Concatenate arrays or strings |
 | `to_string(value)` | Convert to string |
-| `head(arr)` | Get first element |
+| `head(arr)` | First element as `Maybe.Some(v)` / `Maybe.None` |
 | `tail(arr)` | Get all but first element |
 | `push(arr, elem)` | Append element to array |
-| `get(collection, key)` | Get element by key/index |
+| `get(collection, key)` | Safe lookup → `Maybe.Some(value)` / `Maybe.None` |
 | `has(hash, key)` | Check if hash has key |
 | `keys(hash)` | Get all keys from hash |
 | `values(hash)` | Get all values from hash |

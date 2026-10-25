@@ -56,7 +56,7 @@ func TestParseCompositeAnnotation_ThreeParts(t *testing.T) {
 }
 
 func TestParseCompositeAnnotation_MixedOperatorRejected(t *testing.T) {
-	p := parser.New(lexer.New(`func f(a: Int & String | Null) = a;`))
+	p := parser.New(lexer.New(`func f(a: Int & String | Maybe) = a;`))
 	p.ParseProgram()
 	if len(p.Errors()) == 0 {
 		t.Fatal("expected parse error for mixing '&' and '|'")

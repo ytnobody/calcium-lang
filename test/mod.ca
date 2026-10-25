@@ -38,11 +38,7 @@ func ok(ctx, label, value) =
         false => _record_fail(ctx, label, "expected truthy value, got false")
         0 => _record_fail(ctx, label, "expected truthy value, got 0")
         "" => _record_fail(ctx, label, "expected truthy value, got empty string")
-        _ => _ok_check_null(ctx, label, value);
-
-func _ok_check_null(ctx, label, value) =
-    match __type_of(value)
-        "null" => _record_fail(ctx, label, "expected truthy value, got null")
+        Maybe.None => _record_fail(ctx, label, "expected truthy value, got Maybe.None")
         _ => _record_pass(ctx, label);
 
 // is asserts that actual equals expected

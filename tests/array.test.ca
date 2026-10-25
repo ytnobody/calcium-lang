@@ -23,9 +23,9 @@ test.new()
     |> test.plan(25)
     // Basic Operations
     |> test.is("array length", len(arr), 5)
-    |> test.is("head", head(arr), 1)
+    |> test.is("head", head(arr), Maybe.Some(1))
     |> test.is("tail length", len(tail(arr)), 4)
-    |> test.is("head of tail", head(tail(arr)), 2)
+    |> test.is("head of tail", head(tail(arr)), Maybe.Some(2))
     // Index Access
     |> test.is("index 0", arr[0], 1)
     |> test.is("index 2", arr[2], 3)

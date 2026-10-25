@@ -22,8 +22,8 @@ func TestBuiltinGetArrayAllPaths(t *testing.T) {
 
 	// Valid index
 	result := builtinGet(arr, value.Int(1))
-	if result.AsInt() != 20 {
-		t.Errorf("expected 20, got %v", result)
+	if result.Type != value.TYPE_ADT || len(result.AsADT().Values) != 1 || result.AsADT().Values[0].AsInt() != 20 {
+		t.Errorf("expected Maybe.Some(20), got %v", result)
 	}
 
 	// Out of bounds with default
@@ -34,14 +34,14 @@ func TestBuiltinGetArrayAllPaths(t *testing.T) {
 
 	// Out of bounds without default
 	result = builtinGet(arr, value.Int(10))
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null, got %v", result)
+	if result.Type != value.TYPE_ADT || result.AsADT().Tag != "Maybe.None" {
+		t.Errorf("expected Maybe.None, got %v", result)
 	}
 
 	// Negative index
 	result = builtinGet(arr, value.Int(-1))
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null for negative index, got %v", result)
+	if result.Type != value.TYPE_ADT || result.AsADT().Tag != "Maybe.None" {
+		t.Errorf("expected Maybe.None for negative index, got %v", result)
 	}
 
 	// Non-integer index for array
@@ -59,14 +59,14 @@ func TestBuiltinGetHashAllPaths(t *testing.T) {
 
 	// Valid key
 	result := builtinGet(hash, value.String("name"))
-	if result.AsString() != "Alice" {
-		t.Errorf("expected Alice, got %v", result)
+	if result.Type != value.TYPE_ADT || len(result.AsADT().Values) != 1 || result.AsADT().Values[0].AsString() != "Alice" {
+		t.Errorf("expected Maybe.Some(Alice), got %v", result)
 	}
 
 	// Missing key without default
 	result = builtinGet(hash, value.String("missing"))
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null, got %v", result)
+	if result.Type != value.TYPE_ADT || result.AsADT().Tag != "Maybe.None" {
+		t.Errorf("expected Maybe.None, got %v", result)
 	}
 
 	// Missing key with default
@@ -227,7 +227,7 @@ func TestBuiltinHashMergeErrors(t *testing.T) {
 func TestStackTopEmpty(t *testing.T) {
 	vm := New(nil)
 	result := vm.StackTop()
-	if result.Type != value.TYPE_NULL {
+	if result.Type != value.TYPE_INVALID {
 		t.Errorf("expected null for empty stack, got %v", result)
 	}
 }
@@ -653,12 +653,8 @@ func TestADTFieldOutOfBounds(t *testing.T) {
 		t.Fatalf("compiler error: %s", err)
 	}
 	vm := New(comp.Constants())
-	if err := vm.Run(comp.Bytecode().Instructions); err != nil {
-		t.Fatalf("vm error: %s", err)
-	}
-	result := vm.LastPoppedStackElem()
-	if result.Type != value.TYPE_NULL {
-		t.Errorf("expected null for out of bounds ADT index, got %v", result)
+	if err := vm.Run(comp.Bytecode().Instructions); err == nil {
+		t.Fatal("expected runtime error for out of bounds ADT index")
 	}
 }
 
@@ -949,9 +945,9 @@ func TestClosureWithFreeVars(t *testing.T) {
 func TestHashDotAccess(t *testing.T) {
 	tests := []vmTestCase{
 		{`h = {name: "Alice"}; h.name;`, "Alice"},
-		{`h = {x: 10}; h.y;`, nil}, // missing key returns null
 	}
 	runVmTests(t, tests)
+	runVmErrorTests(t, []string{`h = {x: 10}; h.y;`})
 }
 
 // --- getFrameSourceMap edge case ---

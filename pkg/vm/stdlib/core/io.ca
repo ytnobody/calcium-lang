@@ -17,7 +17,7 @@ func! say(x) = __println(to_string(x));
 func read_file(path) = __read_file(path);
 
 // write_file writes content to a file
-// Returns success(null) or failure(error)
+// Returns success(Maybe.None) or failure(error)
 func! write_file(path, content) = __write_file(path, to_string(content));
 
 // format creates a formatted string by replacing {} with values
@@ -27,7 +27,7 @@ func format(template, args) = _format_helper(template, args);
 func _format_helper(template, args) = match len(args)
     0 => template
     true => _format_helper(
-        _replace_first(template, "{}", to_string(head(args))),
+        _replace_first(template, "{}", to_string(args[0])),
         tail(args)
     );
 
@@ -54,7 +54,7 @@ func! write_lines(path, lines) =
 func list_dir(path) = __list_dir(path);
 
 // mkdir creates a directory (and any necessary parents)
-// Returns success(null) or failure(error)
+// Returns success(Maybe.None) or failure(error)
 func! mkdir(path) = __mkdir(path);
 
 // exists checks whether a file or directory exists at the given path
@@ -62,7 +62,7 @@ func! mkdir(path) = __mkdir(path);
 func exists(path) = __exists(path);
 
 // delete_file removes a file at the given path
-// Returns success(null) or failure(error)
+// Returns success(Maybe.None) or failure(error)
 func! delete_file(path) = __delete_file(path);
 
 // file_info returns metadata about a file or directory as a hash

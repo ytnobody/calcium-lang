@@ -85,6 +85,42 @@ Effect functions (`func!`) implicitly return result types:
 - On success: `success(result)`
 - On failure: `failure(error)`
 
+### Built-in Maybe (optional values)
+
+Calcium provides a built-in `Maybe` type for values that may be absent. It is
+an ordinary algebraic data type with two variants:
+
+```calcium
+Maybe.Some(value)   // a present value
+Maybe.None          // an absent value
+```
+
+`Maybe` can be used as a type annotation and pattern-matched like any ADT. The
+constructors are namespace-qualified so they do not collide with user-defined
+variants named `Some`/`None`.
+
+```calcium
+func unwrap_or(m, default) = match m
+  Maybe.Some(v) => v
+  Maybe.None => default;
+
+x: Maybe = Maybe.Some(42);
+y: Maybe = Maybe.None;
+
+unwrap_or(x, 0);  // 42
+unwrap_or(y, 0);  // 0
+```
+
+`Maybe.Some` is first-class, so it can be passed to higher-order functions:
+
+```calcium
+[1, 2, 3] |> map(Maybe.Some);  // [Maybe.Some(1), Maybe.Some(2), Maybe.Some(3)]
+```
+
+The built-in `Maybe` currently has no payload type parameter; every `Maybe`
+value is compatible with the `Maybe` annotation. Payload-generic
+`Maybe<T>` is a possible future extension.
+
 ### User-defined Variant Types (Algebraic Data Types)
 
 Algorithms can define their own variant types (algebraic data types) with `type`.
@@ -172,33 +208,38 @@ Notes:
   (`sqlite.ConstraintError` etc.); variants and constraints are exported from
   modules and checked with `?`.
 
-### About null
+### Absence and Maybe
 
-Calcium has a `null` value (also reachable as `types.null`). It represents
-"no value" and is what `get` and missing-key access return.
+Calcium has no user-visible `null` value. Absence is represented by the
+built-in `Maybe` type:
+
+- `get`, `head`, and `string.char_at` return `Maybe.Some(value)` or
+  `Maybe.None`.
+- Missing direct access (hash member/index, array/tuple/ADT index) is an error.
+- JSON `null`, database `NULL`, and TOML values map to `Maybe.None`.
+- Effect functions that have no useful return value return `success(Maybe.None)`.
 
 ```calcium
 h = {name: "Tanaka"};
 
-get(h, "name");      // "Tanaka"
-get(h, "age");       // null
+get(h, "name");      // Maybe.Some("Tanaka")
+get(h, "age");       // Maybe.None
 get(h, "age", 0);    // 0 (with default value)
 
 h.name;              // "Tanaka"
-h.age;               // null (missing key access)
+h.age;               // Error: missing key (use get for a Maybe)
 
-// JSON null maps to null
 use core.json;
 v = json.parse('{"name": "Tanaka", "age": null}') !? {
     success(x) => x
     failure(e) => e
 };
-get(v, "age");       // null
+get(v, "age");       // Maybe.Some(Maybe.None): key exists, value is null
 ```
 
-`null` is distinct from arrays, hashes, strings, numbers and booleans, so it
-naturally represents an absent or empty result -- for example, a single-row
-query that matched no row returns `success(null)`.
+An object key whose value is JSON `null` is distinct from an absent key:
+`get` returns `Maybe.Some(Maybe.None)` for the former and `Maybe.None` for the
+latter. `json.stringify(Maybe.None)` produces `null`.
 
 ### Variables
 
@@ -265,8 +306,8 @@ numbers[-2];   // 20 (second from end)
 numbers[10];   // Error
 
 // Use get for safe access
-numbers |> get(0);      // success(10)
-numbers |> get(10);     // failure("index out of bounds")
+numbers |> get(0);      // Maybe.Some(10)
+numbers |> get(10);     // Maybe.None
 numbers |> get(10, 0);  // 0 (default value)
 ```
 
@@ -1403,8 +1444,8 @@ func! main() =
 
 ```calcium
 len(xs)                  // Length of array or string
-get(collection, key)     // Safe access -> success/failure
-get(collection, key, default)  // With default value
+get(collection, key)     // Safe access -> Maybe (Some/None)
+get(collection, key, default)  // With default value (returns the raw value)
 has(collection, key)     // Whether key or index exists -> true/false
                          // Hash: has(person, "name")
                          // Array: has(numbers, 5)  // Whether index 5 exists
@@ -1432,7 +1473,7 @@ string.to_lower(s)           // Alias for lower
 string.replace(s, old, new)  // Replace all occurrences
 string.substring(s, start, end) // Extract rune-indexed substring [start, end)
 string.substring_from(s, start) // Extract substring from start to end
-string.char_at(s, index)     // Character (rune) at index
+string.char_at(s, index)     // Character (rune) at index -> Maybe
 string.index_of(s, substr)   // First index of substring, -1 if absent
 string.starts_with(s, prefix)// Prefix check
 string.ends_with(s, suffix)  // Suffix check

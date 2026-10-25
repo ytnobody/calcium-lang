@@ -64,6 +64,7 @@ func (vm *VM) LoadStdlibModule(moduleName string) (*value.Module, error) {
 
 	// Create a compiler with primitive builtins registered
 	comp := compiler.New()
+	comp.SetModuleID(moduleName)
 
 	// Register primitives as builtins in the compiler's symbol table
 	// Use sorted order to ensure consistent builtin indices
@@ -251,6 +252,7 @@ func (vm *VM) LoadExternalModule(moduleName string) (*value.Module, error) {
 
 	// Create a compiler with primitive builtins registered
 	comp := compiler.New()
+	comp.SetModuleID(foundPath)
 
 	// Register primitives as builtins in the compiler's symbol table
 	primitives := GetPrimitives()
@@ -466,6 +468,7 @@ func (vm *VM) compileAndCacheRemoteModule(cacheKey string, content []byte, cache
 
 	// Create a compiler with primitive builtins registered
 	comp := compiler.New()
+	comp.SetModuleID(cacheKey)
 
 	// Register primitives as builtins in the compiler's symbol table
 	primitives := GetPrimitives()

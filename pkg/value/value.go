@@ -101,6 +101,7 @@ type Value struct {
 // Function represents a user-defined function
 type Function struct {
 	Name           string
+	ModuleID       string // canonical module identity that defined this function
 	Parameters     []string
 	ParamTypeNames []string    // type annotation names for each parameter (empty string = untyped/any)
 	Body           []byte      // Bytecode

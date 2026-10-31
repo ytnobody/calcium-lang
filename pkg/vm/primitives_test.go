@@ -325,3 +325,62 @@ func TestPrimitiveEnvErrors(t *testing.T) {
 		t.Error("expected failure for extra args")
 	}
 }
+
+// =============================================================================
+// Byte access primitives
+// =============================================================================
+
+func TestPrimitiveStrToBytes(t *testing.T) {
+	// "aあ" is 1 + 3 bytes, and byte access must not collapse it to runes.
+	result := primitiveStrToBytes(value.String("aあ\n"))
+	if result.Type != value.TYPE_ARRAY {
+		t.Fatalf("expected array, got %s", result.Type)
+	}
+	got := result.AsArray()
+	want := []int64{97, 227, 129, 130, 10}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d bytes, got %d", len(want), len(got))
+	}
+	for i, w := range want {
+		if got[i].AsInt() != w {
+			t.Errorf("byte %d: expected %d, got %d", i, w, got[i].AsInt())
+		}
+	}
+
+	if r := primitiveStrToBytes(value.Int(1)); !r.IsFailure() {
+		t.Errorf("expected failure for a non-string argument")
+	}
+	if r := primitiveStrToBytes(); !r.IsFailure() {
+		t.Errorf("expected failure for a missing argument")
+	}
+}
+
+func TestPrimitiveStrFromBytes(t *testing.T) {
+	bs := value.Array([]value.Value{
+		value.Int(97), value.Int(227), value.Int(129), value.Int(130),
+	})
+	result := primitiveStrFromBytes(bs)
+	if result.Type != value.TYPE_STRING {
+		t.Fatalf("expected string, got %s", result.Type)
+	}
+	if result.AsString() != "aあ" {
+		t.Errorf("expected %q, got %q", "aあ", result.AsString())
+	}
+
+	// Single bytes must round-trip verbatim, which is what makes byte-wise
+	// unescaping of multi-byte text work.
+	single := primitiveStrFromBytes(value.Array([]value.Value{value.Int(227)}))
+	if len(single.AsString()) != 1 || single.AsString()[0] != 227 {
+		t.Errorf("expected a single 0xE3 byte, got %q", single.AsString())
+	}
+
+	if r := primitiveStrFromBytes(value.Array([]value.Value{value.Int(256)})); !r.IsFailure() {
+		t.Errorf("expected failure for a byte out of range")
+	}
+	if r := primitiveStrFromBytes(value.Array([]value.Value{value.String("x")})); !r.IsFailure() {
+		t.Errorf("expected failure for a non-int element")
+	}
+	if r := primitiveStrFromBytes(value.String("x")); !r.IsFailure() {
+		t.Errorf("expected failure for a non-array argument")
+	}
+}

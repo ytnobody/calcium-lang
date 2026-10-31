@@ -840,6 +840,26 @@ src = schedule.interval(100);  // Fires every 100ms
 | `string.char_at(s, index)` | Get character as `Maybe.Some(c)` / `Maybe.None` |
 | `string.index_of(s, sub)` | Find position |
 
+### core.bytes
+
+Byte offsets, exposed separately from the rune-based `core.string`.
+
+| Function | Description |
+|----------|-------------|
+| `bytes.to_bytes(s)` | UTF-8 bytes as an array of ints 0-255 |
+| `bytes.from_bytes(bs)` | Array of bytes to string (copied verbatim) |
+| `bytes.byte_len(s)` | Length in bytes |
+| `bytes.char_count(s)` | Length in code points |
+
+```calcium
+use core.bytes;
+
+bytes.to_bytes("aあ");    // [97, 227, 129, 130]
+bytes.byte_len("aあ");    // 4
+bytes.char_count("aあ");  // 2
+bytes.from_bytes([97, 227, 129, 130]);  // "aあ"
+```
+
 ### core.array
 
 | Function | Description |

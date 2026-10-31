@@ -532,6 +532,49 @@ func primitiveStrContains(args ...value.Value) value.Value {
 	return value.Bool(strings.Contains(args[0].AsString(), args[1].AsString()))
 }
 
+// __str_to_bytes returns the UTF-8 bytes of a string as an array of ints.
+// The self-hosted front end works on bytes, because the reference lexer does:
+// columns and slices there are byte-based.
+func primitiveStrToBytes(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__str_to_bytes: expected 1 argument (string)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__str_to_bytes: argument must be string"))
+	}
+	b := []byte(args[0].AsString())
+	out := make([]value.Value, len(b))
+	for i, c := range b {
+		out[i] = value.Int(int64(c))
+	}
+	return value.Array(out)
+}
+
+// __str_from_bytes builds a string from an array of byte values (0-255). Bytes
+// are copied verbatim, so a run of single bytes reassembles the original UTF-8
+// text.
+func primitiveStrFromBytes(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__str_from_bytes: expected 1 argument (array of bytes)"))
+	}
+	if args[0].Type != value.TYPE_ARRAY {
+		return value.Failure(value.String("__str_from_bytes: argument must be an array"))
+	}
+	arr := args[0].AsArray()
+	b := make([]byte, len(arr))
+	for i, v := range arr {
+		if v.Type != value.TYPE_INT {
+			return value.Failure(value.String("__str_from_bytes: every element must be an int"))
+		}
+		n := v.AsInt()
+		if n < 0 || n > 255 {
+			return value.Failure(value.String(fmt.Sprintf("__str_from_bytes: byte out of range: %d", n)))
+		}
+		b[i] = byte(n)
+	}
+	return value.String(string(b))
+}
+
 // =============================================================================
 // Regex Primitives
 // =============================================================================
@@ -1628,6 +1671,8 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__str_trim":        {Name: "__str_trim", Fn: primitiveStrTrim},
 		"__str_upper":       {Name: "__str_upper", Fn: primitiveStrUpper},
 		"__str_lower":       {Name: "__str_lower", Fn: primitiveStrLower},
+		"__str_to_bytes":    {Name: "__str_to_bytes", Fn: primitiveStrToBytes},
+		"__str_from_bytes":  {Name: "__str_from_bytes", Fn: primitiveStrFromBytes},
 		"__str_replace":     {Name: "__str_replace", Fn: primitiveStrReplace},
 		"__str_substring":   {Name: "__str_substring", Fn: primitiveStrSubstring},
 		"__str_char_at":     {Name: "__str_char_at", Fn: primitiveStrCharAt},

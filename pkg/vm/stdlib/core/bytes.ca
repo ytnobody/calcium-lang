@@ -1,0 +1,25 @@
+// core.bytes - byte-level access to strings
+//
+// Every character operation in `core.string` is rune-based. Byte offsets are a
+// separate concern: they are what the UTF-8 encoding is made of, they are how
+// source positions are reported, and a byte-oriented scanner needs them.
+//
+// Keeping byte access in its own module keeps the rune/byte distinction
+// explicit instead of quietly widening `core.string`'s contract.
+
+namespace bytes;
+
+// to_bytes returns the UTF-8 bytes of a string as an array of integers 0-255.
+func to_bytes(s) = __str_to_bytes(s);
+
+// from_bytes builds a string from an array of byte values (0-255). Bytes are
+// copied verbatim, so a run of single bytes reassembles the original UTF-8
+// text, including multi-byte characters.
+func from_bytes(bs) = __str_from_bytes(bs);
+
+// byte_len returns the length of a string in bytes, which is generally not the
+// same as its length in characters.
+func byte_len(s) = len(__str_to_bytes(s));
+
+// char_count returns the length of a string in Unicode code points.
+func char_count(s) = __str_len(s);

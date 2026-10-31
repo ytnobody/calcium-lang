@@ -61,7 +61,7 @@ Calcium can handle the following 6 types of values:
 - Strings: `"hello"`, `"world"`
   - Escape sequences: `\\`(backslash), `\"`(double quote), `\'`(single quote), `\n`(newline), `\r`(carriage return), `\t`(tab), `\b`(backspace), `\f`(formfeed)
   - Unicode escapes: `\uXXXX` decodes a single BMP code point (4 hex digits, e.g. `\u0041` → `A`, `\u30A2` → `ア`). A surrogate pair written as two escapes (`\uD83D\uDE00`) decodes to a supplementary character (`😀`, U+1F600), consistent with the JSON module. Invalid hex, lone high/low surrogates, and out-of-range values are left as-is.
-  - **String semantics are rune-based (Unicode code points), not byte-based.** `len`, `char_at`, and `substring` index/count by rune. Every string operation in `core.string` and the builtin `len` MUST use rune semantics; byte-level access is an implementation detail and must never leak into the public API.
+  - **String semantics are rune-based (Unicode code points), not byte-based.** `len`, `char_at`, and `substring` index/count by rune. Every string operation in `core.string` and the builtin `len` MUST use rune semantics. Byte offsets are a separate concern and are exposed only through the explicitly named functions in `core.bytes` (see below); they must never leak into `core.string`.
 - Arrays: `[1, 2, 3]`, `["a", "b", "c"]`
 - Functions: `(x) => x * 2`
 - Result types: `success(value)`, `failure(error)`
@@ -1572,6 +1572,24 @@ string.words(s)              // Split into words (whitespace)
 string.reverse(s)            // Reverse characters (runes)
 string.from_code(cp)         // Code point -> string (success/failure)
 ```
+
+### bytes Namespace
+
+Byte offsets are what the UTF-8 encoding is made of, and they are what source
+positions are reported in. They are exposed here, separately from the
+rune-based `core.string`, so the distinction is always explicit.
+
+```calcium
+use bytes;
+
+bytes.to_bytes(s)        // UTF-8 bytes as an array of ints 0-255
+bytes.from_bytes(bs)     // Array of bytes -> string (bytes copied verbatim)
+bytes.byte_len(s)        // Length in bytes
+bytes.char_count(s)      // Length in Unicode code points
+```
+
+`bytes.from_bytes` copies bytes verbatim, so a run of single bytes reassembles
+the original text, including multi-byte characters.
 
 ### math Namespace
 

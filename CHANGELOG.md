@@ -58,7 +58,23 @@
 
 ### Standard library
 
+- Added the **`core.bytes`** module: `bytes.to_bytes`, `bytes.from_bytes`,
+  `bytes.byte_len` and `bytes.char_count`. Byte offsets are now available
+  explicitly, without widening `core.string`'s rune-based contract: a
+  byte-oriented scanner needs byte positions, but `len`, `char_at` and
+  `substring` remain code-point based. Backed by the new `__str_to_bytes` and
+  `__str_from_bytes` primitives.
+
 - Added `string.from_code(cp)`: converts a Unicode code point to its string representation (returns `success`/`failure`; rejects surrogates and out-of-range values).
+
+### Tooling
+
+- Added `calcium lex <file.ca> [...]`, which dumps the token stream as
+  `<line>:<column>\t<kind>\t<literal>` (one token per line, plus a
+  `# tokens: N` trailer). Literals escape only backslash, newline, tab and
+  carriage return, so a line always holds exactly one token. This makes the
+  lexer observable on its own, which is what the self-hosted implementation is
+  compared against before a parser exists.
 
 ### Language
 

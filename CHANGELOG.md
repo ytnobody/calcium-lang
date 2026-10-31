@@ -79,6 +79,17 @@
 
 ### Language
 
+- **A `match` can now be used inside a call, an array, a hash or a group.**
+  Case parsing stopped only at `;`, EOF or a shallower column, so
+  `f(match x a => 1 _ => 2)` was a parse error. A closing delimiter or a comma
+  cannot start a case, so the match now ends there.
+- **Qualified constructor patterns now match for user-defined types.** A value
+  stores the short variant tag, but a pattern like `Shape.Circle(r)` compares
+  against `"Shape.Circle"`, so it never matched — only the built-in `Maybe`,
+  whose tags happen to be spelled out in full, worked. Matching now accepts both
+  the bare variant and the type-qualified spelling, which is what makes a
+  variant matchable from another module.
+
 - **Constructor patterns can now match literal payloads.** A payload position may
   be a binding name, `_`, or a literal (`5`, `"ok"`, `-2`, `3.5`, `true`).
   Previously every payload token was parsed as a binding name, so `Number(0)`

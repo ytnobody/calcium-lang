@@ -2640,3 +2640,54 @@ greet("a", "b", "c");
 		t.Fatal("expected error for unmatched arity overload, got nil")
 	}
 }
+
+func TestADTQualifiedConstructorPattern(t *testing.T) {
+	// A pattern may name the variant alone or qualify it with its type. Values
+	// store the short tag, so a qualified pattern has to be compared against
+	// "TypeName.Tag" as well; without that, matching a variant from another
+	// module (where only the type-qualified spelling is meaningful) never
+	// matched anything.
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`type Shape = Circle(r) | Other; s = Circle(2);
+		  match s Shape.Circle(r) => "qualified" Other => "other" _ => "none";`, "qualified"},
+		{`type Shape = Circle(r) | Other; s = Circle(2);
+		  match s Circle(r) => "short" Other => "other" _ => "none";`, "short"},
+		{`type Shape = Circle(r) | Other; s = Other;
+		  match s Shape.Circle(r) => "qualified" Other => "other" _ => "none";`, "other"},
+		// The later declaration wins the constructor name, so the value is a B.
+		{`type A = Same(x) | Other; type B = Same(y) | Other; v = Same(1);
+		  match v A.Same(x) => "a" B.Same(y) => "b" _ => "none";`, "b"},
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_STRING || result.AsString() != tt.expected {
+			t.Errorf("%q: expected %q, got %v", tt.input, tt.expected, result)
+		}
+	}
+}
+
+func TestMatchInsideCallOrGroup(t *testing.T) {
+	// A closing delimiter or a comma cannot start a case, so a match can be used
+	// inside a call, an array or a group without a trailing ';'.
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{`func id(x) = x; id(match 1 1 => 7 _ => 0);`, 7},
+		{`(match 2 1 => 7 2 => 8 _ => 0);`, 8},
+		{`h = [match 1 1 => 7 _ => 0, match 2 2 => 9 _ => 0]; h[1];`, 9},
+		{`{k: match 3 3 => 5 _ => 0}.k;`, 5},
+		{`func two(a, b) = a + b; two(match 1 1 => 3 _ => 0, match 1 1 => 4 _ => 0);`, 7},
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_INT || result.AsInt() != tt.expected {
+			t.Errorf("%q: expected %d, got %v", tt.input, tt.expected, result)
+		}
+	}
+}

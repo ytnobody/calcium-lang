@@ -903,11 +903,16 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		// Pop the duplicated subject and check tag; only push bool result
 		subject := vm.pop()
 
-		if subject.Type == value.TYPE_ADT && subject.AsADT().Tag == expectedTag {
-			vm.push(value.Bool(true))
-		} else {
-			vm.push(value.Bool(false))
+		matched := false
+		if subject.Type == value.TYPE_ADT {
+			adt := subject.AsADT()
+			// A pattern may name the variant alone (`Circle`) or qualify it with
+			// its type (`Shape.Circle`). Variants store their short tag, so accept
+			// both spellings. Qualified patterns are how a variant is matched from
+			// another module, where the unqualified name may not be in scope.
+			matched = adt.Tag == expectedTag || adt.TypeName+"."+adt.Tag == expectedTag
 		}
+		vm.push(value.Bool(matched))
 
 	case bytecode.OpConstructMaybeSome:
 		val := vm.pop()

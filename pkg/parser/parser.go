@@ -1787,8 +1787,13 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	// belongs to an enclosing match.
 	caseColumn := 0
 
-	// Parse cases until we hit a semicolon or EOF
-	for !p.peekTokenIs(token.SEMICOLON) && !p.peekTokenIs(token.EOF) {
+	// Parse cases until the match ends. Besides ';' and EOF, a closing
+	// delimiter or a comma cannot start a case, which is what lets a match be
+	// used inside a call, an array, a hash or a parenthesised expression:
+	//   f(match x a => 1 _ => 2)
+	for !p.peekTokenIs(token.SEMICOLON) && !p.peekTokenIs(token.EOF) &&
+		!p.peekTokenIs(token.RPAREN) && !p.peekTokenIs(token.RBRACKET) &&
+		!p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.COMMA) {
 		if caseColumn > 0 && p.peekToken.Column < caseColumn {
 			break
 		}
@@ -1814,7 +1819,9 @@ func (p *Parser) parseMatchCase() *ast.MatchCase {
 		mc.Pattern = &ast.WildcardExpression{Token: p.curToken}
 	} else if p.curTokenIs(token.IDENT) && isUpperCase(p.curToken.Literal) &&
 		p.peekTokenIs(token.DOT) && p.peekN(2).Type == token.IDENT && isUpperCase(p.peekN(2).Literal) {
-		// Qualified constructor pattern: Type.Name or Type.Name(x, y)
+		// Qualified constructor pattern: Type.Name or Type.Name(x, y). The
+		// qualifier is a *type* name, so it is upper-case; a module namespace is
+		// not a type and cannot qualify a tag.
 		mc.Pattern = p.parseQualifiedConstructorPattern()
 	} else if p.curTokenIs(token.IDENT) && p.peekTokenIs(token.LPAREN) && isUpperCase(p.curToken.Literal) {
 		// Constructor pattern: Name(x, y) where Name starts with uppercase

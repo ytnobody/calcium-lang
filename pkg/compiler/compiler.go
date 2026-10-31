@@ -95,6 +95,10 @@ type Compiler struct {
 	secretVarsStack []map[string]bool
 
 	nextFunctionID int
+
+	// tail is true while compiling a node whose value is the enclosing
+	// function's return value. See Compile.
+	tail bool
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -607,7 +611,32 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 }
 
 // Compile compiles a program
+// Compile compiles a node. Only the value of a function body is in tail
+// position, so `c.tail` is true just for that node and is cleared before
+// descending into children; the constructs that can appear in tail position
+// (a match arm, a do block's final expression, a return value) re-enable it for
+// their subtree.
 func (c *Compiler) Compile(node ast.Node) error {
+	inTail := c.tail
+	c.tail = false
+
+	if err := c.compileNode(node, inTail); err != nil {
+		return err
+	}
+
+	// The node's value is the function's return value, and it was produced by a
+	// call: make that call a tail call so it reuses this frame instead of
+	// growing the stack. Doing it here rather than at the call site covers every
+	// construct whose value happens to end in a call (plain calls, pipelines,
+	// partial application).
+	if inTail && c.scopeIndex > 0 && c.lastInstructionIs(bytecode.OpCall) {
+		c.markTailCall(c.scopes[c.scopeIndex].lastInstruction.Position)
+	}
+
+	return nil
+}
+
+func (c *Compiler) compileNode(node ast.Node, inTail bool) error {
 	switch node := node.(type) {
 	case *ast.Program:
 		// A Compiler instance may be reused by the REPL. Reset lexical Secret
@@ -890,7 +919,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 			}
 		}
 
-		// Compile function body
+		// Compile function body (in tail position)
+		c.tail = true
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
@@ -1033,6 +1063,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.symbolTable.Define(param.Value)
 		}
 
+		c.tail = true
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
@@ -1418,6 +1449,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.symbolTable.Define(param.Value)
 		}
 
+		c.tail = true
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
@@ -1746,7 +1778,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpGetMember, nameIndex)
 
 	case *ast.MatchExpression:
-		err := c.compileMatch(node)
+		err := c.compileMatch(node, inTail)
 		if err != nil {
 			return err
 		}
@@ -1776,6 +1808,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpTrue)
 
 	case *ast.ReturnExpression:
+		c.tail = true
 		err := c.Compile(node.Value)
 		if err != nil {
 			return err
@@ -1865,7 +1898,9 @@ func (c *Compiler) Compile(node ast.Node) error {
 				return err
 			}
 		}
-		// Compile the final expression (its value stays on the stack as the block result)
+		// Compile the final expression (its value stays on the stack as the block
+		// result, so it inherits the block's tail position)
+		c.tail = inTail
 		err := c.Compile(node.FinalExpression)
 		if err != nil {
 			return err
@@ -1939,7 +1974,7 @@ func (c *Compiler) compileOr(node *ast.InfixExpression) error {
 	return nil
 }
 
-func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
+func (c *Compiler) compileMatch(node *ast.MatchExpression, inTail bool) error {
 	// Compile subject
 	err := c.Compile(node.Subject)
 	if err != nil {
@@ -1995,6 +2030,7 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 
 			// Guard passed: pop the subject, then run the body
 			c.emit(bytecode.OpPop)
+			c.tail = inTail
 			if err := c.Compile(mc.Body); err != nil {
 				return err
 			}
@@ -2047,6 +2083,7 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 			}
 
 			c.emit(bytecode.OpPop)
+			c.tail = inTail
 			if err := c.Compile(mc.Body); err != nil {
 				return err
 			}
@@ -2066,6 +2103,7 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 			}
 
 			c.emit(bytecode.OpPop)
+			c.tail = inTail
 			if err := c.Compile(mc.Body); err != nil {
 				return err
 			}
@@ -2335,18 +2373,36 @@ func (c *Compiler) replaceLastPopWithReturn() {
 // replaceLastCallWithTailCall replaces the last OpCall with OpTailCall
 // for tail call optimization. This is called when the call is in tail position
 // (i.e., the last expression in a function body, right before OpReturn).
+//
+// A tail call inside a non-final match arm is followed by the arm's
+// jump-to-end instruction, so "the last instruction before OpReturn" is that
+// jump rather than the call. The call is still in tail position: the jump is
+// only there to skip the remaining arms, and a tail call never returns to
+// execute it. That shape is the common one for recursive descent
+// (`Cons(h, t) => parse(t, ...)` with `Nil => ...` after it), so it must be
+// optimized too.
 func (c *Compiler) replaceLastCallWithTailCall() {
 	// Only optimize if we're inside a function scope (not global)
 	if c.scopeIndex == 0 {
 		return
 	}
 
-	last := c.scopes[c.scopeIndex].lastInstruction
+	scope := c.scopes[c.scopeIndex]
+	last := scope.lastInstruction
+
 	if last.Opcode == bytecode.OpCall {
-		// Replace OpCall with OpTailCall in-place
-		c.currentInstructions()[last.Position] = byte(bytecode.OpTailCall)
-		c.scopes[c.scopeIndex].lastInstruction.Opcode = bytecode.OpTailCall
+		c.markTailCall(last.Position)
+		return
 	}
+
+	if last.Opcode == bytecode.OpJump && scope.previousInstruction.Opcode == bytecode.OpCall {
+		c.markTailCall(scope.previousInstruction.Position)
+	}
+}
+
+// markTailCall rewrites the OpCall at pos into an OpTailCall.
+func (c *Compiler) markTailCall(pos int) {
+	c.currentInstructions()[pos] = byte(bytecode.OpTailCall)
 }
 
 func (c *Compiler) changeOperand(opPos int, operand int) {

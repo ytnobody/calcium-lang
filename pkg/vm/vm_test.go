@@ -1963,6 +1963,53 @@ func TestMatchFinalArmStillMatches(t *testing.T) {
 	}
 }
 
+func TestTailCallInNonFinalMatchArm(t *testing.T) {
+	// A recursive call in a non-final arm is still in tail position, but the
+	// arm's jump-to-end instruction follows it, so a peephole that only looks at
+	// the last instruction misses it. That shape is the common one for
+	// recursive descent (`Cons(h, t) => parse(t, ...)` with `Nil => ...` after).
+	program := parse(`
+		func loop(n, acc) = match n <= 0
+			true => acc
+			false => loop(n - 1, acc + 1);
+		loop(100000, 0);
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err != nil {
+		t.Fatalf("vm error (tail call not optimized?): %s", err)
+	}
+	testExpectedValue(t, 100000, vm.LastPoppedStackElem())
+}
+
+func TestTailCallInsideDoBlockInMatchArm(t *testing.T) {
+	program := parse(`
+		func loop(n, acc) = do
+			m = n - 1
+			match m < 0
+				true => acc
+				false => loop(m, acc + 1)
+		end;
+		loop(100000, 0);
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err != nil {
+		t.Fatalf("vm error (tail call not optimized?): %s", err)
+	}
+	testExpectedValue(t, 100000, vm.LastPoppedStackElem())
+}
+
 func TestCachedModuleStruct(t *testing.T) {
 	mod := CachedModule{
 		Author: "testauthor",

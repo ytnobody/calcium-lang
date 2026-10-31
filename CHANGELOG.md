@@ -28,6 +28,7 @@
   Tail calls are unaffected: the no-match handler is emitted before the final
   arm, so a tail call remains the last instruction before `OpReturn`.
 
+- **Tail calls are now optimized in any `match` arm and inside `do` blocks.** Previously only a call that happened to be the very last instruction before the function's return became a tail call, which in practice meant only the final arm. A recursive call in a non-final arm (`Cons(h, t) => parse(t, ...)` with `Nil => ...` after it) grew the stack and hit the 8,192-frame limit. Tail position is now tracked through match arms, `do` block final expressions and `return`.
 - **A nested `match` in an arm body no longer swallows the enclosing match's
   remaining arms.** `true => match y ... false => ...` used to attach the outer
   `false => ...` to the inner match, leaving the outer match with a single arm.

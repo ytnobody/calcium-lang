@@ -4,6 +4,37 @@
 
 ### Breaking changes
 
+- **Every `match` arm is now conditional, including the final one.** Previously
+  the final arm always ran, whatever its pattern, so `match tok A(n) => ... B(n)
+  => ...` destructured a `C` as `B` and ran the wrong branch. Now, if no arm
+  matches, the match raises a runtime error naming the value
+  (`no match arm matched 8`).
+
+  Code that relied on the implicit catch-all needs an explicit arm:
+
+  ```calcium
+  // before: the second `true` acted as "otherwise" by accident
+  func abs(n) = match n < 0  true => -n  true => n;
+  // after
+  func abs(n) = match n < 0  true => -n  _ => n;
+  ```
+
+  The same pattern appeared with non-boolean subjects, where the final `true`
+  never even compared equal (`match len(xs) 0 => ... true => ...`): those arms
+  now reject, which surfaces the latent bug instead of hiding it. The core
+  standard library has been fixed; dependent modules should be audited with
+  `calcium lint` or by running their tests.
+
+  Tail calls are unaffected: the no-match handler is emitted before the final
+  arm, so a tail call remains the last instruction before `OpReturn`.
+
+- **`match` on a constant subject is only folded when it is decidable.** The
+  optimiser used to select the arm whose literal pattern equalled the subject,
+  ignoring condition patterns. `match true` with `n % 15 == 0 => ...` arms was
+  therefore mis-compiled at `-O1`; it now works. The same fix applies to guard
+  clauses, which were dropped entirely by all three optimiser passes
+  (`-O0` worked, `-O1`/`-O2` did not).
+
 - **Lookup absence now uses the built-in `Maybe` type.** `get(collection, key)`, `head(array)`, and `string.char_at(s, index)` return `Maybe.Some(value)` or `Maybe.None`; use `get(collection, key, default)` when a raw default is desired. Missing hash keys and out-of-range array/tuple/ADT indices now raise runtime errors instead of returning `null`.
 - **Removed the user-visible `Null` type and null APIs.** `types.null`, `Null` type annotations, `Null?`, `types.is_null`, `assert.is_null`, and `assert.not_null` are gone. Use `Maybe`, `Maybe.None`, `assert.is_none`, and `assert.is_some` instead.
 - **External nulls map to `Maybe.None`.** JSON `null`, database `NULL`, and TOML absence now become `Maybe.None`; `json.stringify(Maybe.None)` emits `null`, and `json.stringify(Maybe.Some(v))` serializes `v`. `dbi.query_row` returns `success(Maybe.None)` when no row matches, and `dbi.quote(Maybe.None)` returns `NULL`.
@@ -31,9 +62,7 @@
   matched *any* `Number` and silently bound a variable named `0`; `Keyword("if")`
   matched any keyword. Anything that is not a name, `_`, or a literal is now a
   parse error instead of a silent binding.
-- A literal payload pattern cannot appear in the final `match` arm (the final arm
-  is the catch-all, so the comparison could never reject it). This is a compile
-  error; add an explicit `_ => ...` arm.
+- A literal payload pattern may appear in any arm, including the final one.
 
 - Added **bitwise operators**: `&`, `|`, `^` (plus prefix `^` for bitwise NOT), `<<`, and `>>`. They are integer-only and follow Go's precedence rather than C's (`<< >> &` bind like `* / %`, `| ^` like `+ -`), so `x & 0xFF == 0` reads as `(x & 0xFF) == 0`. Right shift is arithmetic; shift counts must be non-negative, and counts of 64 or more are well defined.
 - Running out of call frames (8,192) now reports a `stack overflow` error with a hint instead of crashing with a Go panic, and stack traces are truncated with a `... N frame(s) omitted ...` marker so that a maximum-depth failure stays readable.

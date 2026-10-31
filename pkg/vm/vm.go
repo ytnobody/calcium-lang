@@ -822,6 +822,15 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		}
 		return vm.push(value.Int(^operand.AsInt()))
 
+	case bytecode.OpMatchFail:
+		// Reached when no arm of a match expression matched. The subject is still
+		// on the stack; pop it only so the error message can name it.
+		subject := ""
+		if vm.sp > 0 {
+			subject = " " + vm.pop().String()
+		}
+		return fmt.Errorf("no match arm matched%s\nhint: add a catch-all arm (`_ => ...`) so the match handles every value", subject)
+
 	case bytecode.OpJump:
 		pos := int(binary.BigEndian.Uint16(ins[ip+1:]))
 		vm.currentFrame().ip = pos - 1

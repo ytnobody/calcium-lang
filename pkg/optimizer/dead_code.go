@@ -138,49 +138,9 @@ func eliminateDeadCodeHeadTailDestructuringStatement(ht *ast.HeadTailDestructuri
 func eliminateDeadCodeMatchExpression(me *ast.MatchExpression) ast.Expression {
 	subject := eliminateDeadCode(me.Subject).(ast.Expression)
 
-	// If the subject is a constant boolean, we can select the matching branch
-	if boolLit, ok := subject.(*ast.BooleanLiteral); ok {
-		for _, c := range me.Cases {
-			// Check if this case matches the boolean value
-			if patternBool, ok := c.Pattern.(*ast.BooleanLiteral); ok {
-				if patternBool.Value == boolLit.Value {
-					// Return just the body of this case
-					return eliminateDeadCode(c.Body).(ast.Expression)
-				}
-			}
-			// Check for default case
-			if c.IsDefault {
-				return eliminateDeadCode(c.Body).(ast.Expression)
-			}
-		}
-	}
-
-	// If the subject is a constant integer, we can select the matching branch
-	if intLit, ok := subject.(*ast.IntegerLiteral); ok {
-		for _, c := range me.Cases {
-			if patternInt, ok := c.Pattern.(*ast.IntegerLiteral); ok {
-				if patternInt.Value == intLit.Value {
-					return eliminateDeadCode(c.Body).(ast.Expression)
-				}
-			}
-			if c.IsDefault {
-				return eliminateDeadCode(c.Body).(ast.Expression)
-			}
-		}
-	}
-
-	// If the subject is a constant string, we can select the matching branch
-	if strLit, ok := subject.(*ast.StringLiteral); ok {
-		for _, c := range me.Cases {
-			if patternStr, ok := c.Pattern.(*ast.StringLiteral); ok {
-				if patternStr.Value == strLit.Value {
-					return eliminateDeadCode(c.Body).(ast.Expression)
-				}
-			}
-			if c.IsDefault {
-				return eliminateDeadCode(c.Body).(ast.Expression)
-			}
-		}
+	// Fold a match on a constant subject when the outcome is decidable soundly.
+	if folded := foldConstantMatch(me.Cases, subject); folded != nil {
+		return folded
 	}
 
 	// Otherwise, optimize all branches
@@ -189,6 +149,7 @@ func eliminateDeadCodeMatchExpression(me *ast.MatchExpression) ast.Expression {
 		cases[i] = &ast.MatchCase{
 			Token:     c.Token,
 			Pattern:   eliminateDeadCode(c.Pattern).(ast.Expression),
+			Guard:     eliminateDeadCodeGuard(c.Guard),
 			Body:      eliminateDeadCode(c.Body).(ast.Expression),
 			IsDefault: c.IsDefault,
 		}
@@ -393,4 +354,80 @@ func eliminateDeadCodeStayExpression(se *ast.StayExpression) *ast.StayExpression
 		StateInit: stateInit,
 		Body:      body,
 	}
+}
+
+// eliminateDeadCodeGuard folds a case guard, preserving nil. A guard is
+// optional, and dropping it would turn `x if x > 0` into `x`.
+func eliminateDeadCodeGuard(guard ast.Expression) ast.Expression {
+	if guard == nil {
+		return nil
+	}
+	return eliminateDeadCode(guard).(ast.Expression)
+}
+
+// foldConstantMatch selects the single arm a match on a constant subject must
+// take, or returns nil when the match cannot be folded soundly.
+//
+// Folding is only sound when every arm pattern is a literal of the subject's
+// kind (or a wildcard) and no arm has a guard. In particular `match true` is a
+// common idiom for condition chains:
+//
+//	match true
+//	  n % 15 == 0 => "FizzBuzz"
+//	  true        => to_string(n)
+//
+// whose patterns are boolean *expressions*, not literals. Selecting the `true`
+// arm there would be wrong, so such a match is left intact.
+//
+// Returning nil when no arm matches is also deliberate: the match must fail at
+// run time, which only the VM's no-match handler can report.
+func foldConstantMatch(cases []*ast.MatchCase, subject ast.Expression) ast.Expression {
+	var comparable func(pattern ast.Expression) (matches bool, ok bool)
+
+	switch s := subject.(type) {
+	case *ast.BooleanLiteral:
+		comparable = func(pattern ast.Expression) (bool, bool) {
+			lit, ok := pattern.(*ast.BooleanLiteral)
+			if !ok {
+				return false, false
+			}
+			return lit.Value == s.Value, true
+		}
+	case *ast.IntegerLiteral:
+		comparable = func(pattern ast.Expression) (bool, bool) {
+			lit, ok := pattern.(*ast.IntegerLiteral)
+			if !ok {
+				return false, false
+			}
+			return lit.Value == s.Value, true
+		}
+	case *ast.StringLiteral:
+		comparable = func(pattern ast.Expression) (bool, bool) {
+			lit, ok := pattern.(*ast.StringLiteral)
+			if !ok {
+				return false, false
+			}
+			return lit.Value == s.Value, true
+		}
+	default:
+		return nil
+	}
+
+	for _, c := range cases {
+		if c.Guard != nil {
+			return nil
+		}
+		if c.IsDefault {
+			return eliminateDeadCode(c.Body).(ast.Expression)
+		}
+		matches, ok := comparable(c.Pattern)
+		if !ok {
+			return nil
+		}
+		if matches {
+			return eliminateDeadCode(c.Body).(ast.Expression)
+		}
+	}
+
+	return nil
 }

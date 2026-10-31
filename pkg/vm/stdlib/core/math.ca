@@ -8,17 +8,17 @@ e = 2.718281828459045;
 // abs returns the absolute value of a number
 func abs(n) = match n < 0
     true => -n
-    true => n;
+    _ => n;
 
 // min returns the smaller of two numbers
 func min(a, b) = match a < b
     true => a
-    true => b;
+    _ => b;
 
 // max returns the larger of two numbers
 func max(a, b) = match a > b
     true => a
-    true => b;
+    _ => b;
 
 // floor returns the largest integer less than or equal to n
 func floor(n) = __floor(n);

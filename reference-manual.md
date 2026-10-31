@@ -404,6 +404,29 @@ result !? {
 
 The wildcard `_` matches anything and ensures exhaustiveness.
 
+Every arm is conditional, including the last one. If no arm matches, the match
+raises a runtime error naming the value:
+
+```calcium
+match 5
+    0 => "zero"
+    1 => "one";      // 5 matches nothing: runtime error
+
+match 5
+    0 => "zero"
+    1 => "one"
+    _ => "many";     // returns "many"
+```
+
+A chain of conditions is written with a boolean subject and a `_` arm:
+
+```calcium
+func sign(n) = match true
+    n < 0 => -1
+    n > 0 => 1
+    _ => 0;
+```
+
 #### Constructor patterns
 
 A variant value is destructured by naming its constructor. Each payload position

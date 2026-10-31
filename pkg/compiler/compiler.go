@@ -1951,17 +1951,32 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 	for i, mc := range node.Cases {
 		isLast := i == len(node.Cases)-1
 
+		// Every arm is conditional. When the final arm can reject, there is no
+		// arm left to try, so it needs a no-match handler. The handler is
+		// emitted *before* the final arm rather than after it: placed after, it
+		// would sit between the arm body and OpReturn, and tail-call detection
+		// looks for an OpCall immediately before the return.
+		failPos := -1
+		if isLast && !mc.IsDefault {
+			skipFailPos := c.emit(bytecode.OpJump, 9999)
+			failPos = len(c.currentInstructions())
+			c.emit(bytecode.OpMatchFail)
+			c.changeOperand(skipFailPos, len(c.currentInstructions()))
+		}
+
+		// rejections collects the jumps taken when this arm does not match. All
+		// of them leave the stack as [subject], which is what both the next arm
+		// and OpMatchFail expect.
+		var rejections []int
+
 		if mc.Guard != nil {
 			// Guard case: pattern if guard => body
-			// The pattern is an identifier that binds the subject value.
-			// 1. Bind subject to the pattern variable
-			// 2. Evaluate guard condition
-			// 3. If guard is false, unbind and jump to next case
+			// 1. Bind the subject to the pattern variable
+			// 2. Evaluate the guard
+			// 3. If the guard is false, reject the arm
 
-			// Duplicate subject for binding
 			c.emit(bytecode.OpDup)
 
-			// Bind the pattern identifier as a local variable
 			ident, ok := mc.Pattern.(*ast.Identifier)
 			if !ok {
 				return fmt.Errorf("guard clause requires a variable pattern (e.g., x if x > 0)")
@@ -1973,63 +1988,34 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 				c.emit(bytecode.OpSetLocal, guardSymbol.Index)
 			}
 
-			// Evaluate guard condition
-			err := c.Compile(mc.Guard)
-			if err != nil {
+			if err := c.Compile(mc.Guard); err != nil {
 				return err
 			}
+			rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 
-			var jumpToNextPos int
-			if !isLast {
-				// Jump to next case if guard fails
-				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
-			}
-
-			// Guard passed: pop subject, compile body
+			// Guard passed: pop the subject, then run the body
 			c.emit(bytecode.OpPop)
-
-			err = c.Compile(mc.Body)
-			if err != nil {
+			if err := c.Compile(mc.Body); err != nil {
 				return err
-			}
-
-			if !isLast {
-				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
-				// Patch jump to next case
-				afterPos := len(c.currentInstructions())
-				c.changeOperand(jumpToNextPos, afterPos)
 			}
 		} else if cp, ok := mc.Pattern.(*ast.ConstructorPattern); ok {
 			// Constructor pattern: Some(x) => body
-			// Duplicate subject for tag comparison
 			c.emit(bytecode.OpDup)
 
-			// Emit OpMatchADT which pops dup, checks tag, pushes true/false
+			// OpMatchADT pops the duplicate, checks the tag and pushes true/false
 			tagIdx := c.addConstant(value.String(c.constructorTag(cp)))
 			c.emit(bytecode.OpMatchADT, tagIdx, len(cp.Fields))
+			rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 
-			// Every condition that can reject this arm jumps here; all of them
-			// leave the stack as [subject], which is what the next arm expects.
-			jumpsToNext := []int{}
-			if !isLast {
-				// JumpIfFalse pops the bool
-				jumpsToNext = append(jumpsToNext, c.emit(bytecode.OpJumpIfFalse, 9999))
-			} else {
-				// Last case: pop the bool explicitly
-				c.emit(bytecode.OpPop)
-			}
-
-			// Stack now: [subject]
-			// Bind or match each field: extract the payload position, then either
-			// bind it to a variable or compare it against a literal.
+			// Stack now: [subject]. Bind or match each field: extract the payload
+			// position, then either bind it to a variable or compare it against a
+			// literal.
 			for i, field := range cp.Fields {
 				if _, isWildcard := field.(*ast.WildcardExpression); isWildcard {
 					continue
 				}
 
-				// Duplicate subject again to extract field
 				c.emit(bytecode.OpDup)
-				// Push index
 				idxConst := c.addConstant(value.Int(int64(i)))
 				c.emit(bytecode.OpConstant, idxConst)
 				c.emit(bytecode.OpIndex)
@@ -2053,80 +2039,57 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 				}
 
 				// Literal payload: compare the extracted value against it.
-				// The last arm has no successor to fall back to (it is treated as
-				// a catch-all), so a comparison there could never reject the arm.
-				if isLast {
-					return c.newCompileError(cp.Token, "a literal payload pattern cannot appear in the final match arm\nhint: add a catch-all arm (e.g. `_ => ...`) after it")
-				}
 				if err := c.Compile(field); err != nil {
 					return err
 				}
 				c.emit(bytecode.OpEqual)
-				jumpsToNext = append(jumpsToNext, c.emit(bytecode.OpJumpIfFalse, 9999))
+				rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 			}
 
-			// Pop subject
 			c.emit(bytecode.OpPop)
-
-			// Compile body
-			err = c.Compile(mc.Body)
-			if err != nil {
+			if err := c.Compile(mc.Body); err != nil {
 				return err
 			}
-
-			if !isLast {
-				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
-			}
-			afterPos := len(c.currentInstructions())
-			for _, pos := range jumpsToNext {
-				c.changeOperand(pos, afterPos)
-			}
 		} else {
-			// Standard case (no guard)
-
-			// Duplicate subject for comparison
+			// Standard case: <expression> => body
 			c.emit(bytecode.OpDup)
 
 			if mc.IsDefault {
-				// Default case: always matches, pop the duplicate
+				// `_` always matches: discard the duplicate.
 				c.emit(bytecode.OpPop)
 			} else {
-				// Compile pattern/condition
-				err := c.Compile(mc.Pattern)
-				if err != nil {
+				if err := c.Compile(mc.Pattern); err != nil {
 					return err
 				}
-
-				// Compare
 				c.emit(bytecode.OpEqual)
+				rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 			}
 
-			var jumpToNextPos int
-			if !isLast && !mc.IsDefault {
-				// Jump to next case if no match
-				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
-			}
-
-			// Pop subject (matched)
 			c.emit(bytecode.OpPop)
-
-			// Compile body
-			err = c.Compile(mc.Body)
-			if err != nil {
+			if err := c.Compile(mc.Body); err != nil {
 				return err
 			}
-
-			if !isLast {
-				// Jump to end after body
-				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
-			}
-
-			if !isLast && !mc.IsDefault {
-				// Patch jump to next case
-				afterPos := len(c.currentInstructions())
-				c.changeOperand(jumpToNextPos, afterPos)
-			}
 		}
+
+		// Non-final arms jump over the remaining arms once their body has run.
+		if !isLast {
+			jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
+		}
+
+		// Patch this arm's rejections: to the no-match handler when this is the
+		// final arm, otherwise to the start of the next arm.
+		patchTarget := failPos
+		if !isLast {
+			patchTarget = len(c.currentInstructions())
+		}
+		for _, pos := range rejections {
+			c.changeOperand(pos, patchTarget)
+		}
+	}
+
+	// A match with no arms has nothing to fall back to either.
+	if len(node.Cases) == 0 {
+		c.emit(bytecode.OpMatchFail)
 	}
 
 	// Patch all jumps to end

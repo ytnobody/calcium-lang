@@ -1909,18 +1909,57 @@ func TestADTConstructorPatternLiteralPayloads(t *testing.T) {
 	}
 }
 
-func TestADTConstructorPatternLiteralPayloadMustNotBeLast(t *testing.T) {
-	// The final arm is treated as a catch-all, so a literal payload there could
-	// never reject the arm. It must be a compile error rather than dead code.
-	program := parse(`type T = Tag(v) | Other; s = Tag(1);
-		match s Other => "other" Tag(1) => "one";`)
-	comp := compiler.New()
-	err := comp.Compile(program)
-	if err == nil {
-		t.Fatal("expected a compile error for a literal payload in the final arm")
+func TestMatchNoArmMatched(t *testing.T) {
+	// Every arm is conditional, including the final one: if nothing matches, the
+	// match raises a runtime error instead of silently running the last body.
+	tests := []string{
+		// standard pattern
+		`match 5 0 => 0 99 => 99;`,
+		// constructor pattern, final arm
+		`type T = A(v) | B(v); t = A(1); match t B(n) => n;`,
+		// constructor pattern with a literal payload in the final arm
+		`type T = A(v) | B(v); t = B(2); match t A(1) => 1 B(9) => 9;`,
+		// guard whose condition is false
+		`func f(n) = match n x if x > 10 => x; f(3);`,
 	}
-	if !strings.Contains(err.Error(), "final match arm") {
-		t.Fatalf("unexpected error: %s", err)
+
+	for _, input := range tests {
+		program := parse(input)
+		comp := compiler.New()
+		if err := comp.Compile(program); err != nil {
+			t.Fatalf("unexpected compile error for %q: %s", input, err)
+		}
+		machine := New(comp.Constants())
+		err := machine.Run(comp.Bytecode().Instructions)
+		if err == nil {
+			t.Fatalf("expected a no-match error for %q", input)
+		}
+		if !strings.Contains(err.Error(), "no match arm matched") {
+			t.Fatalf("%q: unexpected error: %s", input, err)
+		}
+	}
+}
+
+func TestMatchFinalArmStillMatches(t *testing.T) {
+	// The final arm is only an error when nothing matches; a matching final arm
+	// runs normally, including one with a literal payload.
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{`match 0 0 => 10 99 => 20;`, 10},
+		{`match 99 0 => 10 99 => 20;`, 20},
+		{`type T = A(v) | B(v); t = B(2); match t A(1) => 1 B(2) => 2;`, 2},
+		{`type T = A(v) | B(v); t = B(2); match t A(n) => 1 B(n) => n;`, 2},
+		{`func f(n) = match n x if x > 10 => 1 x if x >= 0 => 2; f(3);`, 2},
+		{`match 5 0 => 10 _ => 20;`, 20},
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_INT || result.AsInt() != tt.expected {
+			t.Errorf("%q: expected %d, got %v", tt.input, tt.expected, result)
+		}
 	}
 }
 

@@ -142,6 +142,12 @@ const (
 	OpBitNot // unary ^
 	OpShl    // <<
 	OpShr    // >>
+
+	// Control flow (continued)
+	//
+	// OpMatchFail is reached when a match expression has no arm left to try.
+	// It pops the subject and raises a runtime error.
+	OpMatchFail
 )
 
 // Definition describes an opcode
@@ -265,6 +271,8 @@ var definitions = map[OpCode]*Definition{
 	OpBitNot: {"OpBitNot", []int{}},
 	OpShl:    {"OpShl", []int{}},
 	OpShr:    {"OpShr", []int{}},
+
+	OpMatchFail: {"OpMatchFail", []int{}},
 }
 
 // Lookup returns the definition for an opcode

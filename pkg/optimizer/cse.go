@@ -228,6 +228,7 @@ func (o *CSEOptimizer) optimizeSubExprs(expr ast.Expression) ast.Expression {
 			cases[i] = &ast.MatchCase{
 				Token:     c.Token,
 				Pattern:   c.Pattern, // Don't optimize patterns
+				Guard:     optimizeGuard(o, c.Guard),
 				Body:      o.optimizeExpr(c.Body),
 				IsDefault: c.IsDefault,
 			}
@@ -546,4 +547,13 @@ func (o *CSEOptimizer) generateCSEVar() string {
 type exprGroup struct {
 	expr    ast.Expression
 	indices []int
+}
+
+// optimizeGuard optimizes a case guard, preserving nil. A guard is optional,
+// and dropping it would turn `x if x > 0` into `x`.
+func optimizeGuard(o *CSEOptimizer, guard ast.Expression) ast.Expression {
+	if guard == nil {
+		return nil
+	}
+	return o.optimizeExpr(guard)
 }

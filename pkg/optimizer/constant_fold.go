@@ -274,6 +274,7 @@ func foldMatchExpression(me *ast.MatchExpression) *ast.MatchExpression {
 		cases[i] = &ast.MatchCase{
 			Token:     c.Token,
 			Pattern:   foldNode(c.Pattern).(ast.Expression),
+			Guard:     foldGuard(c.Guard),
 			Body:      foldNode(c.Body).(ast.Expression),
 			IsDefault: c.IsDefault,
 		}
@@ -283,6 +284,15 @@ func foldMatchExpression(me *ast.MatchExpression) *ast.MatchExpression {
 		Subject: foldNode(me.Subject).(ast.Expression),
 		Cases:   cases,
 	}
+}
+
+// foldGuard folds a case guard. A guard is optional, so a nil guard must stay
+// nil: dropping it would silently turn `x if x > 0` into `x`.
+func foldGuard(guard ast.Expression) ast.Expression {
+	if guard == nil {
+		return nil
+	}
+	return foldNode(guard).(ast.Expression)
 }
 
 func foldEffectHandleExpression(eh *ast.EffectHandleExpression) *ast.EffectHandleExpression {

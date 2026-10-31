@@ -21,7 +21,9 @@ Two independent rules keep older readers usable:
 2. **Structural changes bump the minor version.** A reader accepts any file
    whose major version is `<= VersionMajor`, and interprets minor-versioned
    optional fields only when the file's minor version is high enough (see
-   §4.1). Additive revisions of this document bump `VersionMinor`.
+   §4.1). Structural changes and new optional fields bump `VersionMinor`;
+   appending an opcode does not, because opcodes are append-only by rule 1 and
+   a reader rejects an unknown one by number.
 
 Current version: **1.1**.
 
@@ -253,8 +255,9 @@ some opcodes (`OpClosure`, `OpConstructADT`, `OpMatchADT`) carry two operands.
 | 82 | `OpBitNot` | () |
 | 83 | `OpShl` | () |
 | 84 | `OpShr` | () |
+| 85 | `OpMatchFail` | () |
 
-**The next opcode is 85.** Append only.
+**The next opcode is 86.** Append only.
 
 ### 5.2 Opcode numbering history
 
@@ -262,6 +265,11 @@ Bitwise opcodes 79–84 were added after the initial release. They were appended
 rather than placed next to `OpAdd` precisely to preserve rule (1) in §1; older
 readers reject them by number, which is the intended behaviour for a file that
 uses a newer language feature.
+
+`OpMatchFail` (85) was added when match arms became fully conditional: it pops
+the subject and raises a runtime error when no arm matched. It is emitted only
+when a match expression's final arm can reject, so bytecode for a match ending
+in `_` is only affected by the removal of an implicit catch-all.
 
 ---
 

@@ -169,15 +169,25 @@ match t
   Number(n + 1) => n     // parse error: not a pattern
 ```
 
-Because the final arm of a `match` acts as the catch-all, a literal payload
-pattern cannot appear there (it could never reject the arm). Add an explicit
-catch-all:
+Every arm is conditional, including the last one. If no arm matches, the match
+raises a runtime error naming the value. End a match with `_ => ...` when the
+arms are not exhaustive:
 
 ```calcium
 match t
   Number(0) => "zero"
   Number(1) => "one"
-  _ => "other";        // required if the arms above use literal payloads
+  _ => "other";        // without this, any other Number is a runtime error
+```
+
+The idiomatic form for a chain of conditions uses a boolean subject and a `_`
+arm, which always matches:
+
+```calcium
+func sign(n) = match true
+  n < 0 => -1
+  n > 0 => 1
+  _ => 0;
 ```
 
 Variant constructors are first-class values and are exported from modules

@@ -45,9 +45,15 @@ Injected by `initModules` in `pkg/vm/vm.go`:
 | `core.async` | `spawn`, `expects`, `continue`, `leave`, `cancel`, `all`, `channel`, `timeout`, `interval` |
 
 Note that `core.io` exists twice: once as Go exports in `initModules` and once
-as `stdlib/core/io.ca` delegating to `__` primitives. The stdlib module wins
-when it is loaded; the Go exports are the fallback. A reimplementation should
-prefer the `.ca` definitions and treat only the event sources as intrinsics.
+as `stdlib/core/io.ca` delegating to `__` primitives. **The Go exports win**: a
+module already registered in the in-memory module map is never loaded from
+`.ca`, so `stdlib/core/io.ca` is unreachable. It shows up as missing exports
+(`io.read_lines` does not exist) rather than as a shadowing ambiguity.
+
+Consequence for a reimplementation: for `core.io`, provide the exports listed
+above rather than compiling the `.ca` file. Other `core.*` modules
+(`core.string`, `core.array`, `core.math`, `core.time`, `core.bytes`, ...) are
+not pre-registered and do load from `.ca`.
 
 ---
 

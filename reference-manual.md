@@ -427,6 +427,24 @@ func sign(n) = match true
     _ => 0;
 ```
 
+#### Nested matches
+
+An arm body may contain another `match`. Layout disambiguates which match a case
+belongs to: a case indented further left than the inner match's first case
+belongs to the enclosing match.
+
+```calcium
+func f(x, y) = match x
+    true => match y          // inner match starts here
+        true => 1            //   10 spaces: inner
+        false => 2           //   10 spaces: inner
+    false => 3;              //    5 spaces: outer
+```
+
+Indent nested cases deeper than their own match's cases. When that is not
+possible (for example a single line), parenthesise the nested match instead:
+`true => (match y true => 1 false => 2)`.
+
 #### Constructor patterns
 
 A variant value is destructured by naming its constructor. Each payload position

@@ -2189,3 +2189,35 @@ func TestDoBlockMultipleStatements(t *testing.T) {
 		t.Fatal("expected final expression")
 	}
 }
+
+func TestNestedMatchDisambiguatedByIndentation(t *testing.T) {
+	// A nested match in an arm body must not swallow the enclosing match's
+	// remaining cases. A case indented further left than the inner match's
+	// first case belongs to the outer match.
+	input := `func f(x, y) = match x
+    true => match y
+        true => 1
+        false => 2
+    false => 3;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	fd := program.Statements[0].(*ast.FunctionDeclaration)
+	outer, ok := fd.Body.(*ast.MatchExpression)
+	if !ok {
+		t.Fatalf("body not *ast.MatchExpression. got=%T", fd.Body)
+	}
+	if len(outer.Cases) != 2 {
+		t.Fatalf("outer match: expected 2 cases, got %d", len(outer.Cases))
+	}
+
+	inner, ok := outer.Cases[0].Body.(*ast.MatchExpression)
+	if !ok {
+		t.Fatalf("first outer case body not *ast.MatchExpression. got=%T", outer.Cases[0].Body)
+	}
+	if len(inner.Cases) != 2 {
+		t.Fatalf("inner match: expected 2 cases, got %d", len(inner.Cases))
+	}
+}

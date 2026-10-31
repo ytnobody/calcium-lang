@@ -28,6 +28,12 @@
   Tail calls are unaffected: the no-match handler is emitted before the final
   arm, so a tail call remains the last instruction before `OpReturn`.
 
+- **A nested `match` in an arm body no longer swallows the enclosing match's
+  remaining arms.** `true => match y ... false => ...` used to attach the outer
+  `false => ...` to the inner match, leaving the outer match with a single arm.
+  Indentation now decides: a case indented further left than the inner match's
+  first case belongs to the enclosing match. Parentheses also delimit a nested
+  match in contexts where layout cannot.
 - **`match` on a constant subject is only folded when it is decidable.** The
   optimiser used to select the arm whose literal pattern equalled the subject,
   ignoring condition patterns. `match true` with `n % 15 == 0 => ...` arms was

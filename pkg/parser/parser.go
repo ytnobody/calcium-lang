@@ -1780,9 +1780,22 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 
 	exp.Cases = []*ast.MatchCase{}
 
+	// Cases are terminated by ';' or EOF. A nested `match` in an arm body would
+	// otherwise swallow the enclosing match's remaining cases, because the next
+	// `pattern => body` is indistinguishable from one of its own. Indentation
+	// resolves it: a case that starts further left than this match's first case
+	// belongs to an enclosing match.
+	caseColumn := 0
+
 	// Parse cases until we hit a semicolon or EOF
 	for !p.peekTokenIs(token.SEMICOLON) && !p.peekTokenIs(token.EOF) {
+		if caseColumn > 0 && p.peekToken.Column < caseColumn {
+			break
+		}
 		p.nextToken()
+		if caseColumn == 0 {
+			caseColumn = p.curToken.Column
+		}
 		matchCase := p.parseMatchCase()
 		if matchCase != nil {
 			exp.Cases = append(exp.Cases, matchCase)

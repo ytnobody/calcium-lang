@@ -320,57 +320,55 @@ func extractLiteralValue(expr ast.Expression) (string, bool) {
 	}
 }
 
-// checkBuiltinTypeConstraint checks if a literal satisfies a built-in type constraint
-// Returns (result, isBuiltinConstraint)
+// literalKind returns the built-in type name of a statically known literal
+// expression, or "" when the expression's type cannot be determined statically.
+// Static constraint checking must only report a violation when the kind is
+// actually known; otherwise every non-literal body (e.g. `func add(a, b): Int =
+// a + b`) would be rejected.
+func literalKind(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.IntegerLiteral:
+		return "Int"
+	case *ast.FloatLiteral:
+		return "Float"
+	case *ast.StringLiteral:
+		return "String"
+	case *ast.BooleanLiteral:
+		return "Bool"
+	case *ast.ArrayLiteral:
+		return "Array"
+	case *ast.HashLiteral:
+		return "Hash"
+	case *ast.TupleLiteral:
+		return "Tuple"
+	case *ast.LambdaExpression:
+		return "Function"
+	case *ast.PrefixExpression:
+		// Negative numeric literals keep the kind of their operand.
+		if e.Operator == "-" {
+			if kind := literalKind(e.Right); kind == "Int" || kind == "Float" {
+				return kind
+			}
+		}
+	}
+	return ""
+}
+
+// checkBuiltinTypeConstraint checks if a literal satisfies a built-in type
+// constraint. Returns (result, isBuiltinConstraint). isBuiltinConstraint is
+// false when the constraint is unknown or the argument's kind is not statically
+// known, in which case no violation should be reported.
 func checkBuiltinTypeConstraint(constraintName string, arg ast.Expression) (bool, bool) {
+	kind := literalKind(arg)
+	if kind == "" {
+		return false, false
+	}
+
 	switch constraintName {
-	case "Int":
-		_, ok := arg.(*ast.IntegerLiteral)
-		if !ok {
-			// Check for negative int: PrefixExpression with "-" and IntegerLiteral
-			if prefix, ok := arg.(*ast.PrefixExpression); ok && prefix.Operator == "-" {
-				_, ok = prefix.Right.(*ast.IntegerLiteral)
-				return ok, true
-			}
-		}
-		return ok, true
-	case "Float":
-		_, ok := arg.(*ast.FloatLiteral)
-		if !ok {
-			if prefix, ok := arg.(*ast.PrefixExpression); ok && prefix.Operator == "-" {
-				_, ok = prefix.Right.(*ast.FloatLiteral)
-				return ok, true
-			}
-		}
-		return ok, true
-	case "String":
-		_, ok := arg.(*ast.StringLiteral)
-		return ok, true
-	case "Bool":
-		_, ok := arg.(*ast.BooleanLiteral)
-		return ok, true
+	case "Int", "Float", "String", "Bool", "Array", "Hash", "Tuple", "Function":
+		return kind == constraintName, true
 	case "Number":
-		_, isInt := arg.(*ast.IntegerLiteral)
-		_, isFloat := arg.(*ast.FloatLiteral)
-		if !isInt && !isFloat {
-			if prefix, ok := arg.(*ast.PrefixExpression); ok && prefix.Operator == "-" {
-				_, isInt = prefix.Right.(*ast.IntegerLiteral)
-				_, isFloat = prefix.Right.(*ast.FloatLiteral)
-			}
-		}
-		return isInt || isFloat, true
-	case "Array":
-		_, ok := arg.(*ast.ArrayLiteral)
-		return ok, true
-	case "Hash":
-		_, ok := arg.(*ast.HashLiteral)
-		return ok, true
-	case "Tuple":
-		_, ok := arg.(*ast.TupleLiteral)
-		return ok, true
-	case "Function":
-		_, ok := arg.(*ast.LambdaExpression)
-		return ok, true
+		return kind == "Int" || kind == "Float", true
 	default:
 		return false, false
 	}

@@ -1210,6 +1210,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.emit(bytecode.OpNeg)
 		case "!":
 			c.emit(bytecode.OpNot)
+		case "^":
+			c.emit(bytecode.OpBitNot)
 		default:
 			return c.newCompileError(node.Token, fmt.Sprintf("unknown prefix operator '%s'", node.Operator))
 		}
@@ -1245,6 +1247,16 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.emit(bytecode.OpDiv)
 		case "%":
 			c.emit(bytecode.OpMod)
+		case "&":
+			c.emit(bytecode.OpBitAnd)
+		case "|":
+			c.emit(bytecode.OpBitOr)
+		case "^":
+			c.emit(bytecode.OpBitXor)
+		case "<<":
+			c.emit(bytecode.OpShl)
+		case ">>":
+			c.emit(bytecode.OpShr)
 		case "**":
 			c.emit(bytecode.OpPow)
 		case "==":

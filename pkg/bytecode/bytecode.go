@@ -131,6 +131,17 @@ const (
 	OpSecretWithEnd         // Deactivate the current capability
 	OpCheckSecretCapability // Check active capability for sink name (2-byte constant index)
 	OpAllowSecretCall       // Authorize the immediately following call to receive Secrets
+
+	// Bitwise operations
+	//
+	// NOTE: new opcodes are always appended here. OpCode values are written into
+	// serialized .bone files, so inserting anywhere above would corrupt them.
+	OpBitAnd // &
+	OpBitOr  // |
+	OpBitXor // ^
+	OpBitNot // unary ^
+	OpShl    // <<
+	OpShr    // >>
 )
 
 // Definition describes an opcode
@@ -246,6 +257,14 @@ var definitions = map[OpCode]*Definition{
 	OpSecretWithEnd:         {"OpSecretWithEnd", []int{}},          // Deactivate the current capability
 	OpCheckSecretCapability: {"OpCheckSecretCapability", []int{2}}, // 2-byte sink name constant index
 	OpAllowSecretCall:       {"OpAllowSecretCall", []int{}},        // authorize the next call
+
+	// Bitwise operations
+	OpBitAnd: {"OpBitAnd", []int{}},
+	OpBitOr:  {"OpBitOr", []int{}},
+	OpBitXor: {"OpBitXor", []int{}},
+	OpBitNot: {"OpBitNot", []int{}},
+	OpShl:    {"OpShl", []int{}},
+	OpShr:    {"OpShr", []int{}},
 }
 
 // Lookup returns the definition for an opcode

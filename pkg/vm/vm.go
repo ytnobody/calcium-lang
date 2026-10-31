@@ -474,10 +474,21 @@ func (vm *VM) currentFrame() *Frame {
 	return vm.frames[vm.framesIndex-1]
 }
 
-func (vm *VM) pushFrame(f *Frame) {
+// errCallDepthExceeded reports that the fixed-size call frame stack is full.
+// This is nearly always caused by unbounded non-tail recursion, so the message
+// points the user at the usual fixes instead of exposing an internal limit alone.
+func errCallDepthExceeded(depth int) error {
+	return fmt.Errorf("stack overflow (call depth exceeded %d frames)\nhint: this is often caused by infinite or very deep non-tail recursion — restructure the recursive call into tail position, or use an accumulator parameter", depth)
+}
+
+func (vm *VM) pushFrame(f *Frame) error {
+	if vm.framesIndex >= MaxFrames {
+		return errCallDepthExceeded(MaxFrames)
+	}
 	f.secretCapBase = len(vm.secretCaps)
 	vm.frames[vm.framesIndex] = f
 	vm.framesIndex++
+	return nil
 }
 
 func (vm *VM) popFrame() *Frame {
@@ -574,38 +585,62 @@ func (vm *VM) getFrameSourceMap(frame *Frame) *bytecode.SourceMap {
 	return nil
 }
 
+// maxStackTraceFrames bounds how many call frames are rendered in a stack
+// trace. Unbounded non-tail recursion can fill the whole MaxFrames stack, and
+// printing thousands of identical frames buries the useful part of the message.
+const maxStackTraceFrames = 30
+
 // stackTrace builds a stack trace from the current call frames
 func (vm *VM) stackTrace() []string {
 	if vm.framesIndex <= 1 {
 		return nil // Only main frame, no interesting stack trace
 	}
 
-	var entries []string
-	// Walk frames from current (innermost) to outermost
+	// Walk frames from current (innermost) to outermost, skipping frames that
+	// have no resolvable function.
+	frames := make([]*Frame, 0, vm.framesIndex)
 	for i := vm.framesIndex - 1; i >= 0; i-- {
 		frame := vm.frames[i]
 		if frame == nil || frame.cl == nil || frame.cl.Fn == nil {
 			continue
 		}
+		frames = append(frames, frame)
+	}
 
-		fn := frame.cl.Fn
-		funcName := fn.Name
+	format := func(frame *Frame) string {
+		funcName := frame.cl.Fn.Name
 		if funcName == "" {
 			funcName = "<anonymous>"
 		}
-
-		sm := vm.getFrameSourceMap(frame)
-		if sm != nil {
-			pos := sm.Lookup(frame.ip)
-			if pos.IsValid() {
-				entries = append(entries, fmt.Sprintf("%s at %s", funcName, pos.String()))
-				continue
+		if sm := vm.getFrameSourceMap(frame); sm != nil {
+			if pos := sm.Lookup(frame.ip); pos.IsValid() {
+				return fmt.Sprintf("%s at %s", funcName, pos.String())
 			}
 		}
-
-		entries = append(entries, funcName)
+		return funcName
 	}
 
+	if len(frames) <= maxStackTraceFrames {
+		entries := make([]string, 0, len(frames))
+		for _, frame := range frames {
+			entries = append(entries, format(frame))
+		}
+		return entries
+	}
+
+	// Truncate the middle: the innermost frames show where execution stopped and
+	// the outermost frames show how it got there, while the middle is usually the
+	// same recursive call repeated over and over.
+	head := maxStackTraceFrames / 2
+	tail := maxStackTraceFrames - head
+	entries := make([]string, 0, maxStackTraceFrames+1)
+	for _, frame := range frames[:head] {
+		entries = append(entries, format(frame))
+	}
+	entries = append(entries, fmt.Sprintf("... %d frame(s) omitted ...", len(frames)-maxStackTraceFrames))
+	for _, frame := range frames[len(frames)-tail:] {
+		entries = append(entries, format(frame))
+	}
 	return entries
 }
 
@@ -711,7 +746,9 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 		vm.setGlobal(globalIndex, vm.pop())
 
 	case bytecode.OpAdd, bytecode.OpSub, bytecode.OpMul, bytecode.OpDiv,
-		bytecode.OpMod, bytecode.OpPow:
+		bytecode.OpMod, bytecode.OpPow,
+		bytecode.OpBitAnd, bytecode.OpBitOr, bytecode.OpBitXor,
+		bytecode.OpShl, bytecode.OpShr:
 		err := vm.executeBinaryOp(op)
 		if err != nil {
 			return err
@@ -777,6 +814,13 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 	case bytecode.OpNot:
 		operand := vm.pop()
 		vm.push(value.Bool(!operand.IsTruthy()))
+
+	case bytecode.OpBitNot:
+		operand := vm.pop()
+		if operand.Type != value.TYPE_INT {
+			return fmt.Errorf("type error: bitwise NOT requires an int operand, got %s\nhint: bitwise NOT is written '^x' and only accepts int values", operand.Type)
+		}
+		return vm.push(value.Int(^operand.AsInt()))
 
 	case bytecode.OpJump:
 		pos := int(binary.BigEndian.Uint16(ins[ip+1:]))
@@ -1548,7 +1592,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 
 func (vm *VM) push(v value.Value) error {
 	if vm.sp >= StackSize {
-		return fmt.Errorf("runtime error: stack overflow\nhint: this is often caused by infinite recursion — check your recursive function for a proper base case")
+		return fmt.Errorf("stack overflow (value stack exceeded %d slots)\nhint: this is often caused by an unbalanced expression or very deep non-tail recursion — check your recursive function for a proper base case", StackSize)
 	}
 	vm.stack[vm.sp] = v
 	vm.sp++
@@ -1571,6 +1615,15 @@ func (vm *VM) executeBinaryOp(op bytecode.OpCode) error {
 	// Handle string concatenation (auto-convert non-strings)
 	if op == bytecode.OpAdd && (leftType == value.TYPE_STRING || rightType == value.TYPE_STRING) {
 		return vm.push(value.String(left.String() + right.String()))
+	}
+
+	// Bitwise operators are integer-only; handle them before the numeric branch
+	// so that float operands get a bitwise-specific error message.
+	if isBitwiseOp(op) {
+		if leftType != value.TYPE_INT || rightType != value.TYPE_INT {
+			return fmt.Errorf("type error: bitwise operator requires int operands, got %s and %s\nhint: bitwise operators (&, |, ^, <<, >>) only accept int values", leftType, rightType)
+		}
+		return vm.executeBitwiseIntOp(op, left.AsInt(), right.AsInt())
 	}
 
 	// Numeric operations
@@ -1608,6 +1661,58 @@ func (vm *VM) executeIntegerBinaryOp(op bytecode.OpCode, left, right int64) erro
 		return fmt.Errorf("unknown integer operator: %d", op)
 	}
 	return vm.push(value.Int(result))
+}
+
+func isBitwiseOp(op bytecode.OpCode) bool {
+	switch op {
+	case bytecode.OpBitAnd, bytecode.OpBitOr, bytecode.OpBitXor, bytecode.OpShl, bytecode.OpShr:
+		return true
+	}
+	return false
+}
+
+// executeBitwiseIntOp implements the infix bitwise operators. Both operands are
+// already known to be ints.
+func (vm *VM) executeBitwiseIntOp(op bytecode.OpCode, left, right int64) error {
+	var result int64
+	switch op {
+	case bytecode.OpBitAnd:
+		result = left & right
+	case bytecode.OpBitOr:
+		result = left | right
+	case bytecode.OpBitXor:
+		result = left ^ right
+	case bytecode.OpShl:
+		shift, err := vm.checkShiftCount(right)
+		if err != nil {
+			return err
+		}
+		result = left << shift
+	case bytecode.OpShr:
+		shift, err := vm.checkShiftCount(right)
+		if err != nil {
+			return err
+		}
+		// Arithmetic shift: the sign bit is replicated, matching Go and most
+		// languages with signed integers.
+		result = left >> shift
+	default:
+		return fmt.Errorf("unknown bitwise operator: %d", op)
+	}
+	return vm.push(value.Int(result))
+}
+
+// checkShiftCount rejects negative shift counts, which would panic in Go, and
+// lets counts of 64 or more through so that Go's defined oversized-shift
+// behaviour applies (0 for <<, sign fill for >>).
+func (vm *VM) checkShiftCount(n int64) (uint, error) {
+	if n < 0 {
+		return 0, fmt.Errorf("shift count must be non-negative, got %d\nhint: shifting by a negative amount is undefined; check the shift amount before shifting", n)
+	}
+	if n > 63 {
+		return 64, nil
+	}
+	return uint(n), nil
 }
 
 func (vm *VM) executeFloatBinaryOp(op bytecode.OpCode, left, right float64) error {
@@ -1775,7 +1880,9 @@ func (vm *VM) callClosure(cl *value.Closure, numArgs int) error {
 	}
 
 	frame := NewFrame(cl, vm.sp-numArgs)
-	vm.pushFrame(frame)
+	if err := vm.pushFrame(frame); err != nil {
+		return err
+	}
 
 	// Allocate space for locals
 	vm.sp = frame.basePointer + cl.Fn.NumLocals
@@ -2243,7 +2350,9 @@ func (vm *VM) callClosureSync(cl *value.Closure, args []value.Value) (value.Valu
 
 	// Create new frame
 	frame := NewFrame(cl, vm.sp-len(args))
-	vm.pushFrame(frame)
+	if err := vm.pushFrame(frame); err != nil {
+		return value.Invalid(), err
+	}
 	vm.sp = frame.basePointer + cl.Fn.NumLocals
 
 	// The frame index for the closure we're executing

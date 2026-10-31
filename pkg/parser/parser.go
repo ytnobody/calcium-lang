@@ -21,10 +21,10 @@ const (
 	AND         // &&
 	EQUALS      // == !=
 	LESSGREATER // < > <= >=
-	SUM         // + -
-	PRODUCT     // * / %
+	SUM         // + -  | ^
+	PRODUCT     // * / %  << >> &
 	POWER       // **
-	PREFIX      // -x !x
+	PREFIX      // -x !x ^x
 	CALL        // func(x)
 	INDEX       // array[index]
 	MEMBER      // obj.prop
@@ -39,25 +39,33 @@ var precedences = map[token.TokenType]int{
 	token.EFFECT_END:  PIPE, // !? for result handling
 	token.OR:          OR,
 	token.AND:         AND,
-	token.EQ:          EQUALS,
-	token.NOT_EQ:      EQUALS,
-	token.LT:          LESSGREATER,
-	token.GT:          LESSGREATER,
-	token.LT_EQ:       LESSGREATER,
-	token.GT_EQ:       LESSGREATER,
-	token.PLUS:        SUM,
-	token.MINUS:       SUM,
-	token.ASTERISK:    PRODUCT,
-	token.SLASH:       PRODUCT,
-	token.PERCENT:     PRODUCT,
-	token.POWER:       POWER,
-	token.LPAREN:      CALL,
-	token.LBRACKET:    INDEX,
-	token.DOT:         MEMBER,
-	token.SPREAD:      SPREAD,
-	token.QUESTION:    SPREAD, // ? for constraint check (same precedence as spread)
-	token.ARROW:       LAMBDA, // => for lambda
-	token.TILDE:       EQUALS, // ~ for regex match
+	// Bitwise operators follow Go's precedence rather than C's: `<< >> &` bind
+	// like `* / %`, and `| ^` bind like `+ -`. This keeps `x & 0xFF == 0` and
+	// `1 + 2 << 3` meaning what they read as, without adding new levels.
+	token.AMPERSAND: PRODUCT, // &
+	token.SHL:       PRODUCT, // <<
+	token.SHR:       PRODUCT, // >>
+	token.PIPE_CHAR: SUM,     // |
+	token.CARET:     SUM,     // ^
+	token.EQ:        EQUALS,
+	token.NOT_EQ:    EQUALS,
+	token.LT:        LESSGREATER,
+	token.GT:        LESSGREATER,
+	token.LT_EQ:     LESSGREATER,
+	token.GT_EQ:     LESSGREATER,
+	token.PLUS:      SUM,
+	token.MINUS:     SUM,
+	token.ASTERISK:  PRODUCT,
+	token.SLASH:     PRODUCT,
+	token.PERCENT:   PRODUCT,
+	token.POWER:     POWER,
+	token.LPAREN:    CALL,
+	token.LBRACKET:  INDEX,
+	token.DOT:       MEMBER,
+	token.SPREAD:    SPREAD,
+	token.QUESTION:  SPREAD, // ? for constraint check (same precedence as spread)
+	token.ARROW:     LAMBDA, // => for lambda
+	token.TILDE:     EQUALS, // ~ for regex match
 }
 
 type (
@@ -98,6 +106,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.FALSE, p.parseBooleanLiteral)
 	p.registerPrefix(token.BANG, p.parsePrefixExpression)
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(token.CARET, p.parsePrefixExpression)
 	p.registerPrefix(token.LPAREN, p.parseGroupedOrLambda)
 	p.registerPrefix(token.LBRACKET, p.parseArrayLiteral)
 	p.registerPrefix(token.LBRACE, p.parseHashLiteral)
@@ -133,6 +142,11 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.GT_EQ, p.parseInfixExpression)
 	p.registerInfix(token.AND, p.parseInfixExpression)
 	p.registerInfix(token.OR, p.parseInfixExpression)
+	p.registerInfix(token.AMPERSAND, p.parseInfixExpression) // bitwise AND
+	p.registerInfix(token.PIPE_CHAR, p.parseInfixExpression) // bitwise OR
+	p.registerInfix(token.CARET, p.parseInfixExpression)     // bitwise XOR
+	p.registerInfix(token.SHL, p.parseInfixExpression)
+	p.registerInfix(token.SHR, p.parseInfixExpression)
 	p.registerInfix(token.LPAREN, p.parseCallExpression)
 	p.registerInfix(token.LBRACKET, p.parseIndexExpression)
 	p.registerInfix(token.DOT, p.parseMemberExpression)

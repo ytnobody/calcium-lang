@@ -1722,6 +1722,130 @@ func TestTailCallDeepRecursion(t *testing.T) {
 	testExpectedValue(t, 0, result)
 }
 
+func TestNonTailRecursionReportsStackOverflow(t *testing.T) {
+	// Non-tail recursion cannot be optimized away, so it must exhaust the frame
+	// stack. Before the bounds check in pushFrame this indexed past the end of
+	// the frame slice and crashed the whole process with a Go panic.
+	program := parse(`
+		func countdown(n) =
+			match n
+				0 => 0
+				_ => 1 + countdown(n - 1);
+		countdown(100000);
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	err := vm.Run(comp.Bytecode().Instructions)
+	if err == nil {
+		t.Fatal("expected a stack overflow error, got nil")
+	}
+	if !strings.Contains(err.Error(), "stack overflow") {
+		t.Fatalf("expected a stack overflow error, got: %s", err)
+	}
+	if !strings.Contains(err.Error(), "call depth") {
+		t.Fatalf("expected the call depth to be reported, got: %s", err)
+	}
+}
+
+func TestStackOverflowTraceIsBounded(t *testing.T) {
+	// A stack overflow happens at maximum depth, so rendering every frame would
+	// produce thousands of lines. The trace must be truncated instead.
+	program := parse(`
+		func countdown(n) =
+			match n
+				0 => 0
+				_ => 1 + countdown(n - 1);
+		countdown(100000);
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	err := vm.Run(comp.Bytecode().Instructions)
+	if err == nil {
+		t.Fatal("expected a stack overflow error, got nil")
+	}
+
+	rendered := 0
+	for _, line := range strings.Split(err.Error(), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "countdown at ") {
+			rendered++
+		}
+	}
+	if rendered == 0 {
+		t.Fatal("expected the stack trace to contain call frames")
+	}
+	if rendered > maxStackTraceFrames {
+		t.Fatalf("stack trace was not truncated: rendered %d frames (limit %d)", rendered, maxStackTraceFrames)
+	}
+	if !strings.Contains(err.Error(), "frame(s) omitted") {
+		t.Fatalf("expected an omission marker in the stack trace, got: %s", err)
+	}
+}
+
+func TestBitwiseOperators(t *testing.T) {
+	// runVmExpr compiles without the optimizer, so these exercise the VM opcodes
+	// rather than constant folding.
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{"12 & 10;", 8},
+		{"12 | 10;", 14},
+		{"12 ^ 10;", 6},
+		{"1 << 4;", 16},
+		{"256 >> 3;", 32},
+		{"^0;", -1},
+		{"^5;", -6},
+		{"-1 >> 1;", -1}, // arithmetic shift keeps the sign
+		{"5 >> 70;", 0},  // oversized shifts are defined, not a panic
+		{"1 << 70;", 0},
+		{"1 + 2 << 3;", 17}, // Go precedence: 1 + (2 << 3)
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_INT || result.AsInt() != tt.expected {
+			t.Errorf("%q: expected %d, got %v", tt.input, tt.expected, result)
+		}
+	}
+}
+
+func TestBitwiseOperandTypeErrors(t *testing.T) {
+	runVmErrorTests(t, []string{
+		`func f(x, y) = x & y; f(1, 2.0);`,
+		`func f(x, y) = x | y; f("a", 1);`,
+		`func f(x, y) = x << y; f(1, 2.0);`,
+		`func f(x) = ^x; f(1.5);`,
+	})
+}
+
+func TestNegativeShiftCountIsAnError(t *testing.T) {
+	// A negative shift count would panic in Go, so it must be rejected first.
+	program := parse(`func f(x, y) = x << y; f(1, 0 - 1);`)
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	err := vm.Run(comp.Bytecode().Instructions)
+	if err == nil {
+		t.Fatal("expected an error for a negative shift count, got nil")
+	}
+	if !strings.Contains(err.Error(), "shift count must be non-negative") {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
 func TestCachedModuleStruct(t *testing.T) {
 	mod := CachedModule{
 		Author: "testauthor",

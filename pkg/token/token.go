@@ -36,6 +36,15 @@ const (
 	POWER    TokenType = "**"
 	BANG     TokenType = "!"
 
+	// Bitwise
+	// SHL/SHR and CARET are distinct tokens. `&` and `|` reuse AMPERSAND and
+	// PIPE_CHAR, which are only consumed by the declaration/pattern parsers
+	// (composite constraints, ADT variants, [head | tail] destructuring), so
+	// registering them as infix expression operators cannot collide.
+	SHL   TokenType = "<<"
+	SHR   TokenType = ">>"
+	CARET TokenType = "^" // Bitwise XOR (infix) / bitwise NOT (prefix)
+
 	// Comparison
 	EQ     TokenType = "=="
 	NOT_EQ TokenType = "!="
@@ -47,7 +56,8 @@ const (
 	// Logical
 	AND TokenType = "&&"
 	OR  TokenType = "||"
-	// AMPERSAND is the single '&' used for AND-composite constraints (e.g. `: A & B`).
+	// AMPERSAND is the single '&': infix bitwise AND in expressions, and the
+	// AND operator of composite constraints (e.g. `: A & B`).
 	AMPERSAND TokenType = "&"
 
 	// Pipelines
@@ -71,6 +81,8 @@ const (
 	SEMICOLON TokenType = ";"
 	COLON     TokenType = ":"
 	DOT       TokenType = "."
+	// PIPE_CHAR is the single '|': infix bitwise OR in expressions, and the
+	// separator of ADT variants (`type T = A | B`) and of composite constraints.
 	PIPE_CHAR TokenType = "|"
 	QUESTION  TokenType = "?"
 

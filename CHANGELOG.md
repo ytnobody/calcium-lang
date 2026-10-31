@@ -25,6 +25,9 @@
 
 ### Language
 
+- Added **bitwise operators**: `&`, `|`, `^` (plus prefix `^` for bitwise NOT), `<<`, and `>>`. They are integer-only and follow Go's precedence rather than C's (`<< >> &` bind like `* / %`, `| ^` like `+ -`), so `x & 0xFF == 0` reads as `(x & 0xFF) == 0`. Right shift is arithmetic; shift counts must be non-negative, and counts of 64 or more are well defined.
+- Running out of call frames (8,192) now reports a `stack overflow` error with a hint instead of crashing with a Go panic, and stack traces are truncated with a `... N frame(s) omitted ...` marker so that a maximum-depth failure stays readable.
+
 - Added built-in common constraints available everywhere (as parameter annotations and `?` checks): `NonZero`, `Positive`, `NonNegative`, `Natural`, `Finite`, `NonEmpty`, `Empty`, `Digits`, `Lowercase`, `Uppercase`. Statically-detectable violations on literal call arguments are caught at compile time. User-defined constraints with the same name shadow the built-ins.
 - Added composite parameter annotations: `func f(a: Positive & NonZero)` (AND) and `func f(a: Int | String)` (UNION), which expand to synthetic constraints with static + runtime enforcement. Mixing `&` and `|` in one annotation is a parse error.
 - Static analysis now also validates **return constraints**: a function whose literal (or constant-folded) return value violates its return constraint is a compile error.

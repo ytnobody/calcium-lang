@@ -407,6 +407,36 @@ concat("Hello", " ", "World") // "Hello World"
 concat("value: ", 42)        // "value: 42"
 ```
 
+### Bitwise Operators
+
+Bitwise operators are integer-only; applying them to any other type is a runtime error.
+
+```calcium
+&   // Bitwise AND
+|   // Bitwise OR
+^   // Bitwise XOR (infix) / bitwise NOT (prefix)
+<<  // Left shift
+>>  // Right shift (arithmetic: the sign bit is replicated)
+```
+
+```calcium
+0xFF & 0x0F       // 15
+0x10 | 0x01       // 17
+0x0C ^ 0x0A       // 6
+1 << 4            // 16
+256 >> 3          // 32
+^0                // -1
+^5                // -6
+-1 >> 1           // -1 (arithmetic shift)
+```
+
+Shift counts must be non-negative; a negative count is a runtime error. Counts of 64
+or more are well defined: `x << 64` is `0`, and `x >> 64` is the sign fill (`-1` for
+negative `x`, otherwise `0`).
+
+As in Go, the bitwise operators bind tighter than comparison: `x & 0xFF == 0` means
+`(x & 0xFF) == 0`, and `1 + 2 << 3` means `1 + (2 << 3)`.
+
 ### Comparison Operators
 
 ```calcium
@@ -468,10 +498,10 @@ From highest to lowest:
 | Precedence | Operators | Description |
 |------------|-----------|-------------|
 | 1 | `f(x)`, `obj.key`, `...` | Function call, member access, spread |
-| 2 | `-`, `!` | Unary operators (negation, logical not) |
+| 2 | `-`, `!`, `^` | Unary operators (negation, logical not, bitwise not) |
 | 3 | `**` | Exponentiation |
-| 4 | `*`, `/`, `%` | Multiplication, division, modulo |
-| 5 | `+`, `-` | Addition, subtraction |
+| 4 | `*`, `/`, `%`, `<<`, `>>`, `&` | Multiplication, division, modulo, bitwise shift/AND |
+| 5 | `+`, `-`, `\|`, `^` | Addition, subtraction, bitwise OR/XOR |
 | 6 | `<`, `>`, `<=`, `>=` | Comparison |
 | 7 | `==`, `!=` | Equality, inequality |
 | 8 | `&&` | Logical AND |

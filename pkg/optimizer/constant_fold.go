@@ -459,6 +459,22 @@ func evalIntegerInfix(op string, left, right int64, tok token.Token) ast.Express
 		return &ast.IntegerLiteral{Token: tok, Value: left % right}
 	case "**":
 		return &ast.IntegerLiteral{Token: tok, Value: int64(math.Pow(float64(left), float64(right)))}
+	case "&":
+		return &ast.IntegerLiteral{Token: tok, Value: left & right}
+	case "|":
+		return &ast.IntegerLiteral{Token: tok, Value: left | right}
+	case "^":
+		return &ast.IntegerLiteral{Token: tok, Value: left ^ right}
+	case "<<":
+		if right < 0 || right > 63 {
+			return nil // Leave out-of-range shifts to the VM
+		}
+		return &ast.IntegerLiteral{Token: tok, Value: left << uint(right)}
+	case ">>":
+		if right < 0 || right > 63 {
+			return nil // Leave out-of-range shifts to the VM
+		}
+		return &ast.IntegerLiteral{Token: tok, Value: left >> uint(right)}
 	case "<":
 		return &ast.BooleanLiteral{Token: tok, Value: left < right}
 	case ">":
@@ -533,6 +549,10 @@ func evalConstantPrefix(op string, right ast.Expression, tok token.Token) ast.Ex
 	case "!":
 		if boolLit, ok := right.(*ast.BooleanLiteral); ok {
 			return &ast.BooleanLiteral{Token: tok, Value: !boolLit.Value}
+		}
+	case "^":
+		if intLit, ok := right.(*ast.IntegerLiteral); ok {
+			return &ast.IntegerLiteral{Token: tok, Value: ^intLit.Value}
 		}
 	}
 	return nil

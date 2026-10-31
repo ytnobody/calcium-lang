@@ -426,6 +426,15 @@ func TestOperatorPrecedenceParsing(t *testing.T) {
 		{"3 + 4 * 5 == 3 * 1 + 4 * 5;", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
 		{"true && false || true;", "((true && false) || true)"},
 		{"a ** b ** c;", "(a ** (b ** c))"},
+		// Bitwise operators follow Go's precedence: `<< >> &` bind like `* / %`,
+		// and `| ^` bind like `+ -`.
+		{"a << b & c;", "((a << b) & c)"},
+		{"a & b | c;", "((a & b) | c)"},
+		{"a | b ^ c;", "((a | b) ^ c)"},
+		{"a + b << c;", "(a + (b << c))"},
+		{"a * b >> c;", "((a * b) >> c)"},
+		{"a & b == c;", "((a & b) == c)"},
+		{"^a + b;", "((^a) + b)"},
 		// Chained comparisons: a <= b <= c becomes (a <= b) && (b <= c)
 		{"0 <= x <= 100;", "((0 <= x) && (x <= 100))"},
 		{"1 < x < 10;", "((1 < x) && (x < 10))"},

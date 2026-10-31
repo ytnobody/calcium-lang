@@ -273,6 +273,30 @@ x = 10;  // Error!
 
 Note: `+` is for numbers only. Use `concat()` for string concatenation.
 
+### Bitwise Operators
+
+Bitwise operators are integer-only; applying them to any other type is a runtime error.
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `&` | Bitwise AND | `0xFF & 0x0F` → `15` |
+| `\|` | Bitwise OR | `0x10 \| 0x01` → `17` |
+| `^` | Bitwise XOR | `0x0C ^ 0x0A` → `6` |
+| `<<` | Left shift | `1 << 4` → `16` |
+| `>>` | Right shift (arithmetic) | `256 >> 3` → `32` |
+| `^x` | Bitwise NOT (prefix) | `^5` → `-6` |
+
+```calcium
+-1 >> 1    // -1  (arithmetic shift replicates the sign bit)
+5 >> 70    // 0   (counts of 64 or more are well defined)
+^0         // -1
+```
+
+Shift counts must be non-negative; a negative count is a runtime error.
+
+As in Go, bitwise operators bind tighter than comparison: `x & 0xFF == 0` is
+`(x & 0xFF) == 0`, and `1 + 2 << 3` is `1 + (2 << 3)`.
+
 ### Comparison Operators
 
 | Operator | Description |
@@ -338,10 +362,10 @@ From highest to lowest:
 | Precedence | Operators |
 |------------|-----------|
 | 1 | `f(x)`, `obj.key`, `...` |
-| 2 | `-` (unary), `!` |
+| 2 | `-` (unary), `!`, `^` (unary) |
 | 3 | `**` |
-| 4 | `*`, `/`, `%` |
-| 5 | `+`, `-` |
+| 4 | `*`, `/`, `%`, `<<`, `>>`, `&` |
+| 5 | `+`, `-`, `\|`, `^` |
 | 6 | `<`, `>`, `<=`, `>=` |
 | 7 | `==`, `!=` |
 | 8 | `&&` |

@@ -1846,6 +1846,84 @@ func TestNegativeShiftCountIsAnError(t *testing.T) {
 	}
 }
 
+func TestADTConstructorPatternLiteralPayloads(t *testing.T) {
+	// A literal inside a constructor pattern must match the payload by value.
+	// Regression: every field used to be parsed as a binding, so `Tag(5)`
+	// matched any single-payload Tag and silently bound a variable named "5".
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{
+			`type T = Tag(v) | Other; s = Tag(5);
+			 match s Tag(5) => "literal" Tag(n) => "bound" Other => "other";`,
+			"literal",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag(9);
+			 match s Tag(5) => "literal" Tag(n) => "bound" Other => "other";`,
+			"bound",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag("a");
+			 match s Tag("a") => "literal" Tag(n) => "bound" Other => "other";`,
+			"literal",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag("b");
+			 match s Tag("a") => "literal" Tag(n) => "bound" Other => "other";`,
+			"bound",
+		},
+		{
+			`type T = Pair(a, b) | Other; s = Pair(1, 2);
+			 match s Pair(1, 2) => "both" Pair(x, y) => "pair" Other => "other";`,
+			"both",
+		},
+		{
+			`type T = Pair(a, b) | Other; s = Pair(1, 3);
+			 match s Pair(1, 2) => "both" Pair(x, y) => "pair" Other => "other";`,
+			"pair",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag(0 - 3);
+			 match s Tag(-3) => "neg" Tag(n) => "bound" Other => "other";`,
+			"neg",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag(true);
+			 match s Tag(false) => "f" Tag(_) => "wild" Other => "other";`,
+			"wild",
+		},
+		{
+			`type T = Tag(v) | Other; s = Other;
+			 match s Tag(1) => "one" Other => "other";`,
+			"other",
+		},
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_STRING || result.AsString() != tt.expected {
+			t.Errorf("%q: expected %q, got %v", tt.input, tt.expected, result)
+		}
+	}
+}
+
+func TestADTConstructorPatternLiteralPayloadMustNotBeLast(t *testing.T) {
+	// The final arm is treated as a catch-all, so a literal payload there could
+	// never reject the arm. It must be a compile error rather than dead code.
+	program := parse(`type T = Tag(v) | Other; s = Tag(1);
+		match s Other => "other" Tag(1) => "one";`)
+	comp := compiler.New()
+	err := comp.Compile(program)
+	if err == nil {
+		t.Fatal("expected a compile error for a literal payload in the final arm")
+	}
+	if !strings.Contains(err.Error(), "final match arm") {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
 func TestCachedModuleStruct(t *testing.T) {
 	mod := CachedModule{
 		Author: "testauthor",

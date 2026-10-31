@@ -25,6 +25,16 @@
 
 ### Language
 
+- **Constructor patterns can now match literal payloads.** A payload position may
+  be a binding name, `_`, or a literal (`5`, `"ok"`, `-2`, `3.5`, `true`).
+  Previously every payload token was parsed as a binding name, so `Number(0)`
+  matched *any* `Number` and silently bound a variable named `0`; `Keyword("if")`
+  matched any keyword. Anything that is not a name, `_`, or a literal is now a
+  parse error instead of a silent binding.
+- A literal payload pattern cannot appear in the final `match` arm (the final arm
+  is the catch-all, so the comparison could never reject it). This is a compile
+  error; add an explicit `_ => ...` arm.
+
 - Added **bitwise operators**: `&`, `|`, `^` (plus prefix `^` for bitwise NOT), `<<`, and `>>`. They are integer-only and follow Go's precedence rather than C's (`<< >> &` bind like `* / %`, `| ^` like `+ -`), so `x & 0xFF == 0` reads as `(x & 0xFF) == 0`. Right shift is arithmetic; shift counts must be non-negative, and counts of 64 or more are well defined.
 - Running out of call frames (8,192) now reports a `stack overflow` error with a hint instead of crashing with a Go panic, and stack traces are truncated with a `... N frame(s) omitted ...` marker so that a maximum-depth failure stays readable.
 

@@ -138,6 +138,48 @@ func describe(m) = match m
   None() => "Nothing";
 ```
 
+#### Payload patterns
+
+Each payload position is one of three things:
+
+| Form | Meaning |
+|---|---|
+| a name (`v`) | Binds the payload to that variable |
+| `_` | Ignores the payload |
+| a literal (`5`, `"ok"`, `-2`, `3.5`, `true`) | Matches only if the payload equals that literal |
+
+```calcium
+type Token = Ident(name) | Keyword(word) | Number(n);
+
+func classify(t) = match t
+  Keyword("if") => "conditional"      // literal: compares
+  Keyword("else") => "conditional"   // literal: compares
+  Keyword(w) => concat("keyword ", w) // name: binds
+  Number(0) => "zero"                 // literal: compares
+  Number(n) => concat("number ", to_string(n))
+  Ident(_) => "identifier"            // wildcard: ignores
+  _ => "other";
+```
+
+A payload pattern is **matched or bound, never evaluated**. Anything that is not
+a name, `_`, or a literal is a parse error:
+
+```calcium
+match t
+  Number(n + 1) => n     // parse error: not a pattern
+```
+
+Because the final arm of a `match` acts as the catch-all, a literal payload
+pattern cannot appear there (it could never reject the arm). Add an explicit
+catch-all:
+
+```calcium
+match t
+  Number(0) => "zero"
+  Number(1) => "one"
+  _ => "other";        // required if the arms above use literal payloads
+```
+
 Variant constructors are first-class values and are exported from modules
 (namespace-qualified). Because a variant is an ordinary value, it can be
 checked with constraints and the `?` operator:

@@ -2008,33 +2008,61 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 			tagIdx := c.addConstant(value.String(c.constructorTag(cp)))
 			c.emit(bytecode.OpMatchADT, tagIdx, len(cp.Fields))
 
-			var jumpToNextPos int
+			// Every condition that can reject this arm jumps here; all of them
+			// leave the stack as [subject], which is what the next arm expects.
+			jumpsToNext := []int{}
 			if !isLast {
 				// JumpIfFalse pops the bool
-				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
+				jumpsToNext = append(jumpsToNext, c.emit(bytecode.OpJumpIfFalse, 9999))
 			} else {
 				// Last case: pop the bool explicitly
 				c.emit(bytecode.OpPop)
 			}
 
 			// Stack now: [subject]
-			// Bind fields: extract values from the ADT and bind to local variables
+			// Bind or match each field: extract the payload position, then either
+			// bind it to a variable or compare it against a literal.
 			for i, field := range cp.Fields {
-				if field.Value != "_" {
-					// Duplicate subject again to extract field
-					c.emit(bytecode.OpDup)
-					// Push index
-					idxConst := c.addConstant(value.Int(int64(i)))
-					c.emit(bytecode.OpConstant, idxConst)
-					c.emit(bytecode.OpIndex)
-					// Bind to variable
-					sym := c.symbolTable.Define(field.Value)
+				if _, isWildcard := field.(*ast.WildcardExpression); isWildcard {
+					continue
+				}
+
+				// Duplicate subject again to extract field
+				c.emit(bytecode.OpDup)
+				// Push index
+				idxConst := c.addConstant(value.Int(int64(i)))
+				c.emit(bytecode.OpConstant, idxConst)
+				c.emit(bytecode.OpIndex)
+
+				ident, isBinding := field.(*ast.Identifier)
+				if isBinding && ident.Value == "_" {
+					// Tolerate Identifier{"_"} produced before wildcards were
+					// represented explicitly.
+					c.emit(bytecode.OpPop)
+					continue
+				}
+
+				if isBinding {
+					sym := c.symbolTable.Define(ident.Value)
 					if sym.Scope == GlobalScope {
 						c.emit(bytecode.OpSetGlobal, sym.Index)
 					} else {
 						c.emit(bytecode.OpSetLocal, sym.Index)
 					}
+					continue
 				}
+
+				// Literal payload: compare the extracted value against it.
+				// The last arm has no successor to fall back to (it is treated as
+				// a catch-all), so a comparison there could never reject the arm.
+				if isLast {
+					return c.newCompileError(cp.Token, "a literal payload pattern cannot appear in the final match arm\nhint: add a catch-all arm (e.g. `_ => ...`) after it")
+				}
+				if err := c.Compile(field); err != nil {
+					return err
+				}
+				c.emit(bytecode.OpEqual)
+				jumpsToNext = append(jumpsToNext, c.emit(bytecode.OpJumpIfFalse, 9999))
 			}
 
 			// Pop subject
@@ -2048,8 +2076,10 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 
 			if !isLast {
 				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
-				afterPos := len(c.currentInstructions())
-				c.changeOperand(jumpToNextPos, afterPos)
+			}
+			afterPos := len(c.currentInstructions())
+			for _, pos := range jumpsToNext {
+				c.changeOperand(pos, afterPos)
 			}
 		} else {
 			// Standard case (no guard)

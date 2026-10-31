@@ -497,7 +497,7 @@ func (f *Formatter) formatConstructorPattern(e *ast.ConstructorPattern) string {
 	}
 	fields := make([]string, len(e.Fields))
 	for i, field := range e.Fields {
-		fields[i] = field.Value
+		fields[i] = f.formatExpression(field)
 	}
 	return name + "(" + strings.Join(fields, ", ") + ")"
 }

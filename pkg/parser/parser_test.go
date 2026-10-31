@@ -1695,8 +1695,71 @@ func TestQualifiedConstructorPatternInMatch(t *testing.T) {
 	if !ok {
 		t.Fatalf("case 1 pattern not *ast.ConstructorPattern. got=%T", match.Cases[1].Pattern)
 	}
-	if some.TypeName != "Maybe" || some.Name != "Some" || len(some.Fields) != 1 || some.Fields[0].Value != "x" {
+	if some.TypeName != "Maybe" || some.Name != "Some" || len(some.Fields) != 1 {
 		t.Errorf("unexpected qualified pattern: %#v", some)
+	}
+	if ident, ok := some.Fields[0].(*ast.Identifier); !ok || ident.Value != "x" {
+		t.Errorf("expected binding field 'x', got %#v", some.Fields[0])
+	}
+}
+
+func TestConstructorPatternLiteralFields(t *testing.T) {
+	input := `match v
+		Tag("ok", 1, -2, 3.5, true, _, n) => n
+		_ => 0;`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt := program.Statements[0].(*ast.ExpressionStatement)
+	match := stmt.Expression.(*ast.MatchExpression)
+	cp, ok := match.Cases[0].Pattern.(*ast.ConstructorPattern)
+	if !ok {
+		t.Fatalf("case 0 pattern not *ast.ConstructorPattern. got=%T", match.Cases[0].Pattern)
+	}
+	if len(cp.Fields) != 7 {
+		t.Fatalf("expected 7 fields, got %d", len(cp.Fields))
+	}
+
+	if s, ok := cp.Fields[0].(*ast.StringLiteral); !ok || s.Value != "ok" {
+		t.Errorf("field 0: expected string literal \"ok\", got %#v", cp.Fields[0])
+	}
+	if i, ok := cp.Fields[1].(*ast.IntegerLiteral); !ok || i.Value != 1 {
+		t.Errorf("field 1: expected integer literal 1, got %#v", cp.Fields[1])
+	}
+	neg, ok := cp.Fields[2].(*ast.PrefixExpression)
+	if !ok || neg.Operator != "-" {
+		t.Fatalf("field 2: expected negative literal, got %#v", cp.Fields[2])
+	}
+	if i, ok := neg.Right.(*ast.IntegerLiteral); !ok || i.Value != 2 {
+		t.Errorf("field 2: expected -2, got %#v", neg.Right)
+	}
+	if f, ok := cp.Fields[3].(*ast.FloatLiteral); !ok || f.Value != 3.5 {
+		t.Errorf("field 3: expected float literal 3.5, got %#v", cp.Fields[3])
+	}
+	if b, ok := cp.Fields[4].(*ast.BooleanLiteral); !ok || !b.Value {
+		t.Errorf("field 4: expected boolean literal true, got %#v", cp.Fields[4])
+	}
+	if _, ok := cp.Fields[5].(*ast.WildcardExpression); !ok {
+		t.Errorf("field 5: expected wildcard, got %#v", cp.Fields[5])
+	}
+	if ident, ok := cp.Fields[6].(*ast.Identifier); !ok || ident.Value != "n" {
+		t.Errorf("field 6: expected binding 'n', got %#v", cp.Fields[6])
+	}
+}
+
+func TestConstructorPatternRejectsExpressions(t *testing.T) {
+	// A payload pattern is matched or bound, never evaluated; an expression must
+	// be a parse error rather than silently becoming a binding.
+	input := `match v
+		Tag(1 + 1) => 0
+		_ => 1;`
+	l := lexer.New(input)
+	p := New(l)
+	p.ParseProgram()
+	if len(p.Errors()) == 0 {
+		t.Fatal("expected a parse error for an expression in a constructor pattern")
 	}
 }
 

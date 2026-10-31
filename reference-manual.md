@@ -404,6 +404,30 @@ result !? {
 
 The wildcard `_` matches anything and ensures exhaustiveness.
 
+#### Constructor patterns
+
+A variant value is destructured by naming its constructor. Each payload position
+is a binding name, a wildcard, or a literal to match against:
+
+```calcium
+type Token = Ident(name) | Keyword(word) | Number(n);
+
+func classify(t) = match t
+    Keyword("if") => "conditional"       // literal: matches by value
+    Keyword(w) => concat("keyword ", w)  // name: binds the payload
+    Number(0) => "zero"                  // literal: matches by value
+    Number(n) => concat("number ", to_string(n))
+    Ident(_) => "identifier"             // wildcard: ignores the payload
+    _ => "other";
+```
+
+A payload pattern is matched or bound, never evaluated: `Number(n + 1)` is a
+parse error rather than an expression.
+
+The final arm of a `match` acts as the catch-all, so a literal payload pattern
+cannot be used there — it could never reject the arm. Add an explicit `_ => ...`
+after arms that use literal payloads.
+
 ---
 
 ## Functions

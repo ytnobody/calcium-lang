@@ -1839,23 +1839,80 @@ func (p *Parser) parseConstructorPattern() ast.Expression {
 	}
 
 	p.nextToken() // consume (
-	cp.Fields = []*ast.Identifier{}
-
-	if !p.peekTokenIs(token.RPAREN) {
-		p.nextToken()
-		cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
-		for p.peekTokenIs(token.COMMA) {
-			p.nextToken() // consume ,
-			p.nextToken() // move to next field
-			cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
-		}
-	}
+	cp.Fields = p.parseConstructorPatternFields()
 
 	if !p.expectPeek(token.RPAREN) {
 		return nil
 	}
 
 	return cp
+}
+
+// parseConstructorPatternFields parses the comma-separated payload patterns of
+// a constructor, up to but not including the closing ')'.
+func (p *Parser) parseConstructorPatternFields() []ast.Expression {
+	fields := []ast.Expression{}
+
+	if p.peekTokenIs(token.RPAREN) {
+		return fields
+	}
+
+	p.nextToken()
+	fields = append(fields, p.parsePatternAtom())
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken() // consume ','
+		p.nextToken() // move to next field
+		fields = append(fields, p.parsePatternAtom())
+	}
+
+	return fields
+}
+
+// parsePatternAtom parses one constructor-payload pattern. Only a binding name,
+// a wildcard, or a literal is allowed: a payload pattern is matched or bound,
+// never evaluated, so arbitrary expressions are rejected rather than silently
+// treated as bindings.
+func (p *Parser) parsePatternAtom() ast.Expression {
+	negated := false
+	negToken := p.curToken
+	if p.curTokenIs(token.MINUS) {
+		negated = true
+		p.nextToken()
+	}
+
+	var atom ast.Expression
+	switch p.curToken.Type {
+	case token.IDENT:
+		atom = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	case token.UNDERSCORE:
+		atom = &ast.WildcardExpression{Token: p.curToken}
+	case token.INT:
+		atom = p.parseIntegerLiteral()
+	case token.FLOAT:
+		atom = p.parseFloatLiteral()
+	case token.STRING:
+		atom = &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
+	case token.TRUE, token.FALSE:
+		atom = &ast.BooleanLiteral{Token: p.curToken, Value: p.curTokenIs(token.TRUE)}
+	default:
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			fmt.Sprintf("unexpected %q in constructor pattern\nhint: a payload pattern must be a name, '_', or a literal", p.curToken.Literal)))
+		return nil
+	}
+
+	if !negated {
+		return atom
+	}
+
+	if p.curTokenIs(token.IDENT) || p.curTokenIs(token.UNDERSCORE) {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			negToken.Line, negToken.Column,
+			"'-' can only negate a numeric literal in a constructor pattern"))
+		return nil
+	}
+
+	return &ast.PrefixExpression{Token: negToken, Operator: "-", Right: atom}
 }
 
 // parseQualifiedConstructorPattern parses patterns such as Maybe.None,
@@ -1872,16 +1929,7 @@ func (p *Parser) parseQualifiedConstructorPattern() ast.Expression {
 
 	if p.peekTokenIs(token.LPAREN) {
 		p.nextToken() // consume '('
-		cp.Fields = []*ast.Identifier{}
-		if !p.peekTokenIs(token.RPAREN) {
-			p.nextToken()
-			cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
-			for p.peekTokenIs(token.COMMA) {
-				p.nextToken() // consume ','
-				p.nextToken() // move to next field
-				cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
-			}
-		}
+		cp.Fields = p.parseConstructorPatternFields()
 		p.expectPeek(token.RPAREN)
 	}
 

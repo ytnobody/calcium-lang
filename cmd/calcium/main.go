@@ -181,6 +181,9 @@ func main() {
 	case "lex":
 		os.Exit(runLex(args[1:]))
 
+	case "check":
+		os.Exit(runCheck(args[1:]))
+
 	case "fmt":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: calcium fmt [--check] <file.ca> [...]")
@@ -294,6 +297,7 @@ Usage:
   calcium fmt [--check] <file.ca> [...]      Format source files
   calcium lint [--json] <file.ca> [...]      Static analysis of source files
   calcium lex <file.ca> [...]                Dump the token stream (debugging)
+  calcium check <file.ca> [...]              Dump type checker findings (debugging)
   calcium test [dir]                         Run all .test.ca files in directory
   calcium cache <file.ca>                    Pre-fetch dependencies recursively
   calcium cache --list                       List cached modules

@@ -571,6 +571,24 @@ func primitiveIntToBytes(args ...value.Value) value.Value {
 	return value.Array(out)
 }
 
+// __float_to_bytes encodes a float64 as its eight big-endian IEEE 754 bytes.
+// The .bone format stores floats that way.
+func primitiveFloatToBytes(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__float_to_bytes: expected 1 argument (float)"))
+	}
+	if args[0].Type != value.TYPE_FLOAT {
+		return value.Failure(value.String("__float_to_bytes: argument must be float"))
+	}
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, math.Float64bits(args[0].AsFloat()))
+	out := make([]value.Value, len(buf))
+	for i, c := range buf {
+		out[i] = value.Int(int64(c))
+	}
+	return value.Array(out)
+}
+
 // __str_from_bytes builds a string from an array of byte values (0-255). Bytes
 // are copied verbatim, so a run of single bytes reassembles the original UTF-8
 // text.
@@ -1695,6 +1713,7 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__str_to_bytes":    {Name: "__str_to_bytes", Fn: primitiveStrToBytes},
 		"__str_from_bytes":  {Name: "__str_from_bytes", Fn: primitiveStrFromBytes},
 		"__int_to_bytes":    {Name: "__int_to_bytes", Fn: primitiveIntToBytes},
+		"__float_to_bytes":  {Name: "__float_to_bytes", Fn: primitiveFloatToBytes},
 		"__str_replace":     {Name: "__str_replace", Fn: primitiveStrReplace},
 		"__str_substring":   {Name: "__str_substring", Fn: primitiveStrSubstring},
 		"__str_char_at":     {Name: "__str_char_at", Fn: primitiveStrCharAt},

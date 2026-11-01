@@ -412,3 +412,20 @@ func TestPrimitiveIntToBytes(t *testing.T) {
 		t.Errorf("expected failure for a non-int argument")
 	}
 }
+
+func TestPrimitiveFloatToBytes(t *testing.T) {
+	// 1.5 is 0011111111111000... in IEEE 754.
+	got := primitiveFloatToBytes(value.Float(1.5)).AsArray()
+	want := []int64{63, 248, 0, 0, 0, 0, 0, 0}
+	if len(got) != 8 {
+		t.Fatalf("expected 8 bytes, got %d", len(got))
+	}
+	for i, w := range want {
+		if got[i].AsInt() != w {
+			t.Errorf("byte %d: expected %d, got %d", i, w, got[i].AsInt())
+		}
+	}
+	if r := primitiveFloatToBytes(value.Int(1)); !r.IsFailure() {
+		t.Errorf("expected failure for a non-float argument")
+	}
+}

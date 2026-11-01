@@ -23,3 +23,7 @@ func byte_len(s) = len(__str_to_bytes(s));
 
 // char_count returns the length of a string in Unicode code points.
 func char_count(s) = __str_len(s);
+
+// from_int encodes a signed integer as its eight big-endian two's-complement
+// bytes, which is how the .bone format stores integer constants.
+func from_int(v) = __int_to_bytes(v);

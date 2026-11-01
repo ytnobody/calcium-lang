@@ -1586,6 +1586,7 @@ bytes.to_bytes(s)        // UTF-8 bytes as an array of ints 0-255
 bytes.from_bytes(bs)     // Array of bytes -> string (bytes copied verbatim)
 bytes.byte_len(s)        // Length in bytes
 bytes.char_count(s)      // Length in Unicode code points
+bytes.from_int(v)        // Int -> eight big-endian bytes (two's complement)
 ```
 
 `bytes.from_bytes` copies bytes verbatim, so a run of single bytes reassembles

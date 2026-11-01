@@ -384,3 +384,31 @@ func TestPrimitiveStrFromBytes(t *testing.T) {
 		t.Errorf("expected failure for a non-array argument")
 	}
 }
+
+func TestPrimitiveIntToBytes(t *testing.T) {
+	// Eight big-endian two's-complement bytes, which is how .bone stores ints.
+	cases := []struct {
+		in   int64
+		want []int64
+	}{
+		{0, []int64{0, 0, 0, 0, 0, 0, 0, 0}},
+		{1, []int64{0, 0, 0, 0, 0, 0, 0, 1}},
+		{0x1234, []int64{0, 0, 0, 0, 0, 0, 0x12, 0x34}},
+		{-1, []int64{255, 255, 255, 255, 255, 255, 255, 255}},
+		{-2, []int64{255, 255, 255, 255, 255, 255, 255, 254}},
+	}
+	for _, c := range cases {
+		got := primitiveIntToBytes(value.Int(c.in)).AsArray()
+		if len(got) != 8 {
+			t.Fatalf("%d: expected 8 bytes, got %d", c.in, len(got))
+		}
+		for i, w := range c.want {
+			if got[i].AsInt() != w {
+				t.Errorf("%d: byte %d expected %d, got %d", c.in, i, w, got[i].AsInt())
+			}
+		}
+	}
+	if r := primitiveIntToBytes(value.String("x")); !r.IsFailure() {
+		t.Errorf("expected failure for a non-int argument")
+	}
+}

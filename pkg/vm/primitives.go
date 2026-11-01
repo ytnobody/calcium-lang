@@ -2,6 +2,7 @@ package vm
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -545,6 +546,26 @@ func primitiveStrToBytes(args ...value.Value) value.Value {
 	b := []byte(args[0].AsString())
 	out := make([]value.Value, len(b))
 	for i, c := range b {
+		out[i] = value.Int(int64(c))
+	}
+	return value.Array(out)
+}
+
+// __int_to_bytes encodes a signed 64-bit integer as its eight big-endian
+// two's-complement bytes. The .bone format stores integers that way, and doing
+// the two's-complement conversion in Calcium would mean exact arithmetic on
+// values that do not fit an int64.
+func primitiveIntToBytes(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__int_to_bytes: expected 1 argument (int)"))
+	}
+	if args[0].Type != value.TYPE_INT {
+		return value.Failure(value.String("__int_to_bytes: argument must be int"))
+	}
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(args[0].AsInt()))
+	out := make([]value.Value, len(buf))
+	for i, c := range buf {
 		out[i] = value.Int(int64(c))
 	}
 	return value.Array(out)
@@ -1673,6 +1694,7 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__str_lower":       {Name: "__str_lower", Fn: primitiveStrLower},
 		"__str_to_bytes":    {Name: "__str_to_bytes", Fn: primitiveStrToBytes},
 		"__str_from_bytes":  {Name: "__str_from_bytes", Fn: primitiveStrFromBytes},
+		"__int_to_bytes":    {Name: "__int_to_bytes", Fn: primitiveIntToBytes},
 		"__str_replace":     {Name: "__str_replace", Fn: primitiveStrReplace},
 		"__str_substring":   {Name: "__str_substring", Fn: primitiveStrSubstring},
 		"__str_char_at":     {Name: "__str_char_at", Fn: primitiveStrCharAt},

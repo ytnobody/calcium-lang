@@ -17,7 +17,7 @@ source of confusion when reimplementing the runtime.
 | Layer | What it is | Self-hostable? | Count |
 |---|---|---|---|
 | **A. VM builtins** | Names the *compiler* treats as builtins: `len`, `concat`, `map`, ... | No — part of the VM core | 16 |
-| **B. `__` primitives** | Low-level functions wrapping OS/library facilities. Called by the Calcium standard library. | No — permanent native boundary | 76 |
+| **B. `__` primitives** | Low-level functions wrapping OS/library facilities. Called by the Calcium standard library. | No — permanent native boundary | 77 |
 | **C. Module intrinsics** | Values the VM injects into modules: event sources (`stdin`, `eof`), async operations, and the Go-side `core.io` exports. | No — part of the VM core | ~30 |
 
 Everything else — `pkg/vm/stdlib/core/*.ca`, 893 lines — is Calcium source and
@@ -159,6 +159,7 @@ return `R(Float)`.
 | `__str_contains` | 2 | String, substring | `R(Bool)` |
 | `__str_to_bytes` | 1 | String | `R(Array<Int>)` — UTF-8 bytes, each 0-255 |
 | `__str_from_bytes` | 1 | Array of Int (0-255) | `R(String)` — bytes copied verbatim; `failure` for a non-int element or a byte outside 0-255 |
+| `__int_to_bytes` | 1 | Int | `R(Array<Int>)` — eight big-endian two's-complement bytes; `failure` for a non-int |
 
 ### 3.4 Regex
 

@@ -2370,17 +2370,15 @@ func (c *Compiler) replaceLastPopWithReturn() {
 	c.emit(bytecode.OpReturn)
 }
 
-// replaceLastCallWithTailCall replaces the last OpCall with OpTailCall
-// for tail call optimization. This is called when the call is in tail position
-// (i.e., the last expression in a function body, right before OpReturn).
+// replaceLastCallWithTailCall replaces the last OpCall with OpTailCall for tail
+// call optimization, for a call that is the last expression in a function body.
 //
-// A tail call inside a non-final match arm is followed by the arm's
-// jump-to-end instruction, so "the last instruction before OpReturn" is that
-// jump rather than the call. The call is still in tail position: the jump is
-// only there to skip the remaining arms, and a tail call never returns to
-// execute it. That shape is the common one for recursive descent
-// (`Cons(h, t) => parse(t, ...)` with `Nil => ...` after it), so it must be
-// optimized too.
+// Calls in a match arm or a `do` block are already marked where they are compiled:
+// `Compile` turns the last instruction of a node in tail position into OpTailCall,
+// and `compileMatch`/`do` re-enable tail position for the subtree that produces the
+// value. This pass therefore only covers what that mechanism cannot see, and it
+// looks no further than the final instruction: a call followed by an arm's
+// jump-to-end is already an OpTailCall by then.
 func (c *Compiler) replaceLastCallWithTailCall() {
 	// Only optimize if we're inside a function scope (not global)
 	if c.scopeIndex == 0 {
@@ -2392,11 +2390,6 @@ func (c *Compiler) replaceLastCallWithTailCall() {
 
 	if last.Opcode == bytecode.OpCall {
 		c.markTailCall(last.Position)
-		return
-	}
-
-	if last.Opcode == bytecode.OpJump && scope.previousInstruction.Opcode == bytecode.OpCall {
-		c.markTailCall(scope.previousInstruction.Position)
 	}
 }
 

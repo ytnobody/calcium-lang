@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 	"github.com/ytnobody/calcium-lang/pkg/compiler"
 	"github.com/ytnobody/calcium-lang/pkg/lexer"
 	"github.com/ytnobody/calcium-lang/pkg/parser"
@@ -1963,21 +1964,56 @@ func TestMatchFinalArmStillMatches(t *testing.T) {
 	}
 }
 
+// countOpcodeInFunctions counts `want` across the bodies of every compiled function
+// in the pool - a tail call lives inside a function record, not in main.
+func countOpcodeInFunctions(comp *compiler.Compiler, want bytecode.OpCode) int {
+	n := 0
+	for _, k := range comp.Constants() {
+		if k.Type != value.TYPE_FUNCTION {
+			continue
+		}
+		fn, ok := k.Data.(*value.Function)
+		if !ok {
+			continue
+		}
+		for ip := 0; ip < len(fn.Body); {
+			op := bytecode.OpCode(fn.Body[ip])
+			def, err := bytecode.Lookup(op)
+			if err != nil {
+				break
+			}
+			if op == want {
+				n++
+			}
+			_, width := bytecode.ReadOperands(def, fn.Body[ip+1:])
+			ip += 1 + width
+		}
+	}
+	return n
+}
+
+// The recursive call is in the *first* of two arms, so an arm's jump-to-end
+// instruction follows it. The call is still in tail position - the jump only skips
+// the remaining arms and a tail call never returns to run it - so it must be
+// optimized, or the recursion grows the stack and hits the frame limit.
+//
+// Both the bytecode and the depth-100000 run are asserted: the bytecode check is
+// what makes this a test of *this* shape, since a call in the final arm would be
+// optimized by the general mechanism and pass the run alone.
 func TestTailCallInNonFinalMatchArm(t *testing.T) {
-	// A recursive call in a non-final arm is still in tail position, but the
-	// arm's jump-to-end instruction follows it, so a peephole that only looks at
-	// the last instruction misses it. That shape is the common one for
-	// recursive descent (`Cons(h, t) => parse(t, ...)` with `Nil => ...` after).
 	program := parse(`
 		func loop(n, acc) = match n <= 0
-			true => acc
-			false => loop(n - 1, acc + 1);
+			false => loop(n - 1, acc + 1)
+			true => acc;
 		loop(100000, 0);
 	`)
 
 	comp := compiler.New()
 	if err := comp.Compile(program); err != nil {
 		t.Fatalf("compiler error: %s", err)
+	}
+	if got := countOpcodeInFunctions(comp, bytecode.OpTailCall); got == 0 {
+		t.Fatalf("no OpTailCall in the compiled function: the call in a non-final arm was not optimized")
 	}
 
 	vm := New(comp.Constants())
@@ -1987,13 +2023,14 @@ func TestTailCallInNonFinalMatchArm(t *testing.T) {
 	testExpectedValue(t, 100000, vm.LastPoppedStackElem())
 }
 
-func TestTailCallInsideDoBlockInMatchArm(t *testing.T) {
+// The same, with the match inside a `do` block in the first of two arms.
+func TestTailCallInsideDoBlockInNonFinalMatchArm(t *testing.T) {
 	program := parse(`
 		func loop(n, acc) = do
 			m = n - 1
 			match m < 0
-				true => acc
 				false => loop(m, acc + 1)
+				true => acc
 		end;
 		loop(100000, 0);
 	`)
@@ -2001,6 +2038,9 @@ func TestTailCallInsideDoBlockInMatchArm(t *testing.T) {
 	comp := compiler.New()
 	if err := comp.Compile(program); err != nil {
 		t.Fatalf("compiler error: %s", err)
+	}
+	if got := countOpcodeInFunctions(comp, bytecode.OpTailCall); got == 0 {
+		t.Fatalf("no OpTailCall in the compiled function: the call in a non-final arm was not optimized")
 	}
 
 	vm := New(comp.Constants())

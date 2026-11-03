@@ -1783,8 +1783,14 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	// Cases are terminated by ';' or EOF. A nested `match` in an arm body would
 	// otherwise swallow the enclosing match's remaining cases, because the next
 	// `pattern => body` is indistinguishable from one of its own. Indentation
-	// resolves it: a case that starts further left than this match's first case
-	// belongs to an enclosing match.
+	// resolves it: a case that starts strictly further left than this match's first
+	// case belongs to an enclosing match.
+	//
+	// Strictly left is all the information there is. A nested match whose cases sit at
+	// the *same* column cannot be resolved by the parser - both readings are valid -
+	// and such cases are attributed to the inner match, which is the pre-existing
+	// behaviour (see TestNestedMatchAtSameColumnIsAmbiguous). Indent the inner match
+	// further, or wrap it in `do ... end`, to get the other reading.
 	caseColumn := 0
 
 	// Parse cases until the match ends. Besides ';' and EOF, a closing
@@ -1925,7 +1931,9 @@ func (p *Parser) parsePatternAtom() ast.Expression {
 		return atom
 	}
 
-	if p.curTokenIs(token.IDENT) || p.curTokenIs(token.UNDERSCORE) {
+	// Only a numeric literal can be negated. Testing `!INT && !FLOAT` rather than
+	// listing IDENT and UNDERSCORE is what rejects `-"a"`, `-true` and `-false` too.
+	if !p.curTokenIs(token.INT) && !p.curTokenIs(token.FLOAT) {
 		p.errors = append(p.errors, p.formatErrorWithContext(
 			negToken.Line, negToken.Column,
 			"'-' can only negate a numeric literal in a constructor pattern"))

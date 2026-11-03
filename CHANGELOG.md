@@ -32,9 +32,12 @@
 - **A nested `match` in an arm body no longer swallows the enclosing match's
   remaining arms.** `true => match y ... false => ...` used to attach the outer
   `false => ...` to the inner match, leaving the outer match with a single arm.
-  Indentation now decides: a case indented further left than the inner match's
-  first case belongs to the enclosing match. Parentheses also delimit a nested
-  match in contexts where layout cannot.
+  Indentation now decides: a case indented *strictly* further left than the inner
+  match's first case belongs to the enclosing match. Parentheses also delimit a
+  nested match in contexts where layout cannot. A nested match whose cases sit at the
+  same column as the enclosing match's cases is genuinely ambiguous - both readings
+  parse - and is attributed to the inner match, as before; indent the inner match
+  further, or wrap it in `do ... end`, to get the other reading.
 - **`match` on a constant subject is only folded when it is decidable.** The
   optimiser used to select the arm whose literal pattern equalled the subject,
   ignoring condition patterns. `match true` with `n % 15 == 0 => ...` arms was

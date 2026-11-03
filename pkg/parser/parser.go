@@ -1268,6 +1268,10 @@ func (p *Parser) isComparisonOperator(t token.TokenType) bool {
 }
 
 func (p *Parser) parseGroupedOrLambda() ast.Expression {
+	return p.withSuspendedArms(func() ast.Expression { return p.parseGroupedOrLambdaInner() })
+}
+
+func (p *Parser) parseGroupedOrLambdaInner() ast.Expression {
 	// Could be grouped expression (expr) or lambda (params) => expr
 	tok := p.curToken
 
@@ -1786,39 +1790,46 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 
 	exp.Cases = []*ast.MatchCase{}
 
-	// Cases are terminated by ';' or EOF. A nested `match` in an arm body would
-	// otherwise swallow the enclosing match's remaining cases, because the next
-	// `pattern => body` is indistinguishable from one of its own. Indentation
-	// resolves it: a case that starts strictly further left than this match's first
-	// case belongs to an enclosing match.
+	// A match has no explicit terminator, so its cases end in one of two ways: an
+	// explicit delimiter (';', EOF, a closing bracket, a comma, `end`), or a token
+	// sequence that cannot be a case at all.
 	//
-	// Strictly left is all the information there is. A nested match whose cases sit at
-	// the *same* column cannot be resolved by the parser - both readings are valid -
-	// and such cases are attributed to the inner match, which is the pre-existing
-	// behaviour (see TestNestedMatchAtSameColumnIsAmbiguous). Indent the inner match
-	// further, or wrap it in `do ... end`, to get the other reading.
+	// Indentation is *not* the test. A case is `pattern => body` with the arrow on the
+	// pattern's line, while the statement that follows a match (`m = match ...` in a
+	// `do` block, say) has none - so looking for the arrow is both what ends a match
+	// before the next statement and what keeps arms that are indented inconsistently
+	// inside the match. Trusting the first arm's column instead rejected both.
 	caseColumn := 0
 
 	outerColumns := p.armColumns
 	p.armColumns = append(p.armColumns, 0)
 	defer func() { p.armColumns = outerColumns }()
 
-	// Parse cases until the match ends. Besides ';' and EOF, a closing
-	// delimiter or a comma cannot start a case, which is what lets a match be
-	// used inside a call, an array, a hash or a parenthesised expression:
-	//   f(match x a => 1 _ => 2)
 	for !p.peekTokenIs(token.SEMICOLON) && !p.peekTokenIs(token.EOF) &&
 		!p.peekTokenIs(token.RPAREN) && !p.peekTokenIs(token.RBRACKET) &&
-		!p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.COMMA) {
-		if caseColumn > 0 && p.peekToken.Column < caseColumn {
+		!p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.COMMA) &&
+		!p.isEndToken(p.peekToken) {
+		// Once this match has an arm, a case at an enclosing match's column is that
+		// match's and this one is finished with it. Before the first arm it can only
+		// be this match's own - which is the ambiguity reported below when its column
+		// happens to coincide.
+		if caseColumn > 0 && p.atEnclosingCaseColumn(p.peekToken.Column, outerColumns) {
+			break
+		}
+		if !p.looksLikeMatchCase() {
 			break
 		}
 		p.nextToken()
 		if caseColumn == 0 {
 			caseColumn = p.curToken.Column
 			p.armColumns[len(p.armColumns)-1] = caseColumn
+			// The ambiguity is this match's *own* column coinciding with an
+			// enclosing match's: its cases and that match's arms are then
+			// indistinguishable, and before this check the inner match took them all.
+			if p.atEnclosingCaseColumn(caseColumn, outerColumns) {
+				p.errorAmbiguousCaseColumn(p.curToken)
+			}
 		}
-		p.checkAmbiguousCaseColumn(p.curToken.Column, outerColumns)
 		matchCase := p.parseMatchCase()
 		if matchCase != nil {
 			exp.Cases = append(exp.Cases, matchCase)
@@ -1828,26 +1839,78 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	return exp
 }
 
-// checkAmbiguousCaseColumn reports a case that sits at the same column as an
-// enclosing match's cases. Both readings parse - the case could be this match's or
-// the enclosing one's - and before this check the inner match silently took it,
-// leaving the enclosing match without the arm its author wrote.
-//
-// Only the nesting shape is rejected; `do ... end`, parentheses or indenting the
-// inner match further all say which reading is meant.
-func (p *Parser) checkAmbiguousCaseColumn(column int, outerColumns []int) {
+// looksLikeMatchCase reports whether the upcoming tokens begin a case - `pattern =>`
+// with the arrow before the line ends - rather than something that merely follows the
+// match. Nesting is tracked so that an arrow inside an argument list (`map(x, x => ...)`)
+// does not count as this case's arrow.
+func (p *Parser) looksLikeMatchCase() bool {
+	startLine := p.peekToken.Line
+	depth := 0
+	for n := 1; n <= 64; n++ {
+		tok := p.peekN(n)
+		if tok.Type == token.EOF || p.isEndToken(tok) || tok.Line != startLine {
+			return false
+		}
+		switch tok.Type {
+		case token.LPAREN, token.LBRACKET, token.LBRACE:
+			depth++
+		case token.RPAREN, token.RBRACKET, token.RBRACE:
+			if depth == 0 {
+				return false
+			}
+			depth--
+		case token.SEMICOLON:
+			if depth == 0 {
+				return false
+			}
+		case token.ARROW:
+			if depth == 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// withSuspendedArms clears the enclosing-arm stack while parsing a construct that
+// terminates itself - `( ... )` and `do ... end`. A match inside one is bounded by
+// the delimiter, so an enclosing match's columns cannot steal its cases and the
+// ambiguity check there could only produce a false positive. This is what makes the
+// hint ("wrap it in parentheses or `do ... end`") true.
+func (p *Parser) withSuspendedArms(parse func() ast.Expression) ast.Expression {
+	saved := p.armColumns
+	p.armColumns = nil
+	defer func() { p.armColumns = saved }()
+	return parse()
+}
+
+// atEnclosingCaseColumn reports whether a case at `column` would sit at the column of
+// an enclosing match's cases, where the two readings cannot be told apart.
+func (p *Parser) atEnclosingCaseColumn(column int, outerColumns []int) bool {
 	if column == 0 {
-		return
+		return false
 	}
 	for _, outer := range outerColumns {
 		if outer != 0 && outer == column {
-			p.errors = append(p.errors, p.formatErrorWithContext(
-				p.curToken.Line, p.curToken.Column,
-				"ambiguous nested match: this case is at the same column as an enclosing match's cases\n"+
-					"hint: indent the inner match further, or wrap it in parentheses or `do ... end`"))
-			return
+			return true
 		}
 	}
+	return false
+}
+
+// errorAmbiguousCaseColumn reports a case that cannot be attributed to either match.
+// Both readings parse - the case could be this match's or the enclosing one's - and
+// before this check the inner match silently took it, leaving the enclosing match
+// without the arm its author wrote.
+//
+// Only the nesting shape is rejected; indenting the inner match further, wrapping it
+// in parentheses or putting it in a `do ... end` block all say which reading is meant
+// (the last two suspend the check, since `)` and `end` terminate the match).
+func (p *Parser) errorAmbiguousCaseColumn(tok token.Token) {
+	p.errors = append(p.errors, p.formatErrorWithContext(
+		tok.Line, tok.Column,
+		"ambiguous nested match: this case is at the same column as an enclosing match's cases\n"+
+			"hint: indent the inner match further, or wrap it in parentheses or `do ... end`"))
 }
 
 func (p *Parser) parseMatchCase() *ast.MatchCase {
@@ -2107,6 +2170,10 @@ func (p *Parser) parseReturnExpression() ast.Expression {
 // Syntax: do <stmt1>; <stmt2>; ... <finalExpr> end
 // The block evaluates each statement in sequence and returns the value of the final expression.
 func (p *Parser) parseDoExpression() ast.Expression {
+	return p.withSuspendedArms(func() ast.Expression { return p.parseDoExpressionInner() })
+}
+
+func (p *Parser) parseDoExpressionInner() ast.Expression {
 	expr := &ast.DoExpression{Token: p.curToken}
 	expr.Statements = []ast.Statement{}
 

@@ -656,6 +656,22 @@ func (vm *VM) getSourceLine(lineNum int) string {
 	return strings.TrimRight(lines[lineNum-1], "\r")
 }
 
+// adtTagMatches reports whether a pattern's tag names the variant, unqualified
+// ("Circle") or qualified with its type ("Shape.Circle"). Only the short tag is
+// stored, so the qualified spelling is compared by its parts: building
+// TypeName+"."+Tag on every comparison allocated once per failed arm.
+func adtTagMatches(adt *value.ADT, expected string) bool {
+	if adt.Tag == expected {
+		return true
+	}
+	if len(expected) != len(adt.TypeName)+1+len(adt.Tag) {
+		return false
+	}
+	return strings.HasPrefix(expected, adt.TypeName) &&
+		expected[len(adt.TypeName)] == '.' &&
+		strings.HasSuffix(expected, adt.Tag)
+}
+
 // getConstant returns the constant at the given index, using the frame's constants if available
 func (vm *VM) getConstant(index uint16) value.Value {
 	frame := vm.currentFrame()
@@ -910,7 +926,7 @@ func (vm *VM) executeOpcode(op bytecode.OpCode) error {
 			// its type (`Shape.Circle`). Variants store their short tag, so accept
 			// both spellings. Qualified patterns are how a variant is matched from
 			// another module, where the unqualified name may not be in scope.
-			matched = adt.Tag == expectedTag || adt.TypeName+"."+adt.Tag == expectedTag
+			matched = adtTagMatches(adt, expectedTag)
 		}
 		vm.push(value.Bool(matched))
 

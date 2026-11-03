@@ -554,6 +554,13 @@ func staticEval(expr ast.Expression, env map[string]ast.Expression, sc *staticCo
 		// Look up variable in environment
 		if env != nil {
 			if val, ok := env[e.Value]; ok {
+				// The bound value may itself be an expression (`2 << 1 | 1`), so fold it
+				// before substituting. Normalising alone leaves a non-literal operand
+				// behind, which the operator table then cannot evaluate - so a violated
+				// constraint on a computed literal was silently skipped.
+				if folded := staticEval(val, nil, sc); folded != nil {
+					return folded
+				}
 				// Normalize the value (e.g., PrefixExpression "-" IntegerLiteral → IntegerLiteral with negative value)
 				return normalizeExpr(val)
 			}
@@ -693,6 +700,10 @@ func evalStaticPrefix(op string, right ast.Expression, tok token.Token) ast.Expr
 		if boolLit, ok := right.(*ast.BooleanLiteral); ok {
 			return &ast.BooleanLiteral{Token: tok, Value: !boolLit.Value}
 		}
+	case "^":
+		if intLit, ok := right.(*ast.IntegerLiteral); ok {
+			return &ast.IntegerLiteral{Token: tok, Value: ^intLit.Value}
+		}
 	}
 	return nil
 }
@@ -793,6 +804,24 @@ func evalStaticIntegerInfix(op string, left, right int64, tok token.Token) ast.E
 		return &ast.BooleanLiteral{Token: tok, Value: left == right}
 	case "!=":
 		return &ast.BooleanLiteral{Token: tok, Value: left != right}
+	case "&":
+		return &ast.IntegerLiteral{Token: tok, Value: left & right}
+	case "|":
+		return &ast.IntegerLiteral{Token: tok, Value: left | right}
+	case "^":
+		return &ast.IntegerLiteral{Token: tok, Value: left ^ right}
+	case "<<", ">>":
+		// Mirror the VM: a negative count is an error and anything above 63 shifts
+		// out entirely. Here both are simply "not statically known", so the check is
+		// skipped instead of guessing.
+		if right < 0 || right > 63 {
+			return nil
+		}
+		if op == "<<" {
+			return &ast.IntegerLiteral{Token: tok, Value: left << uint(right)}
+		}
+		// Arithmetic shift, as in Go and in the VM.
+		return &ast.IntegerLiteral{Token: tok, Value: left >> uint(right)}
 	}
 	return nil
 }

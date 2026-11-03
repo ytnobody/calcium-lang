@@ -492,10 +492,24 @@ func readUint32(r *bytes.Reader) (uint32, error) {
 	return binary.BigEndian.Uint32(buf), nil
 }
 
-func writeInt64(w *bytes.Buffer, v int64) error {
+// EncodeInt64 returns the eight big-endian bytes of v, two's complement. The .bone
+// format and the `__int_to_bytes` primitive share this encoding, so it is defined once:
+// a change to one that silently desynced the other would be very hard to find.
+func EncodeInt64(v int64) []byte {
 	buf := make([]byte, 8)
 	binary.BigEndian.PutUint64(buf, uint64(v))
-	_, err := w.Write(buf)
+	return buf
+}
+
+// EncodeFloat64 is EncodeInt64 for a float's IEEE-754 bits.
+func EncodeFloat64(v float64) []byte {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64ToFloat64Bits(v))
+	return buf
+}
+
+func writeInt64(w *bytes.Buffer, v int64) error {
+	_, err := w.Write(EncodeInt64(v))
 	return err
 }
 
@@ -508,9 +522,7 @@ func readInt64(r *bytes.Reader) (int64, error) {
 }
 
 func writeFloat64(w *bytes.Buffer, v float64) error {
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64ToFloat64Bits(v))
-	_, err := w.Write(buf)
+	_, err := w.Write(EncodeFloat64(v))
 	return err
 }
 

@@ -2,7 +2,6 @@ package vm
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
@@ -562,8 +562,7 @@ func primitiveIntToBytes(args ...value.Value) value.Value {
 	if args[0].Type != value.TYPE_INT {
 		return value.Failure(value.String("__int_to_bytes: argument must be int"))
 	}
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(args[0].AsInt()))
+	buf := bytecode.EncodeInt64(args[0].AsInt())
 	out := make([]value.Value, len(buf))
 	for i, c := range buf {
 		out[i] = value.Int(int64(c))
@@ -580,8 +579,7 @@ func primitiveFloatToBytes(args ...value.Value) value.Value {
 	if args[0].Type != value.TYPE_FLOAT {
 		return value.Failure(value.String("__float_to_bytes: argument must be float"))
 	}
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, math.Float64bits(args[0].AsFloat()))
+	buf := bytecode.EncodeFloat64(args[0].AsFloat())
 	out := make([]value.Value, len(buf))
 	for i, c := range buf {
 		out[i] = value.Int(int64(c))

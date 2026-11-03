@@ -2731,3 +2731,31 @@ func TestMatchInsideCallOrGroup(t *testing.T) {
 		}
 	}
 }
+
+// A call that cannot start because the frame stack is full must leave the VM as it
+// found it. The closure and its arguments are pushed before the frame is created, so
+// a failure that does not unwind leaves vm.sp permanently elevated and every later
+// push and pop addresses the wrong slot - a corrupted VM instead of a clean error.
+func TestCallClosureSyncRestoresStackOnDepthLimit(t *testing.T) {
+	fn := &value.Function{
+		Name:       "f",
+		Parameters: []string{"x"},
+		NumLocals:  1,
+		Body:       []byte{byte(bytecode.OpReturn)},
+	}
+	cl := &value.Closure{Fn: fn}
+
+	vm := New(nil)
+	vm.framesIndex = MaxFrames
+	spBefore, framesBefore := vm.sp, vm.framesIndex
+
+	if _, err := vm.callClosureSync(cl, []value.Value{value.Int(1)}); err == nil {
+		t.Fatal("expected a call-depth error")
+	}
+	if vm.sp != spBefore {
+		t.Errorf("stack pointer not restored: before=%d after=%d", spBefore, vm.sp)
+	}
+	if vm.framesIndex != framesBefore {
+		t.Errorf("frame index not restored: before=%d after=%d", framesBefore, vm.framesIndex)
+	}
+}

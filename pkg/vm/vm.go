@@ -1648,8 +1648,10 @@ func (vm *VM) executeBinaryOp(op bytecode.OpCode) error {
 	}
 
 	// Bitwise operators are integer-only; handle them before the numeric branch
-	// so that float operands get a bitwise-specific error message.
-	if isBitwiseOp(op) {
+	// so that float operands get a bitwise-specific error message. Their opcodes are
+	// contiguous (OpBitAnd..OpShr), so a range check keeps the dominant `+ - * /`
+	// path from paying for a helper call.
+	if op >= bytecode.OpBitAnd && op <= bytecode.OpShr {
 		if leftType != value.TYPE_INT || rightType != value.TYPE_INT {
 			return fmt.Errorf("type error: bitwise operator requires int operands, got %s and %s\nhint: bitwise operators (&, |, ^, <<, >>) only accept int values", leftType, rightType)
 		}
@@ -1691,14 +1693,6 @@ func (vm *VM) executeIntegerBinaryOp(op bytecode.OpCode, left, right int64) erro
 		return fmt.Errorf("unknown integer operator: %d", op)
 	}
 	return vm.push(value.Int(result))
-}
-
-func isBitwiseOp(op bytecode.OpCode) bool {
-	switch op {
-	case bytecode.OpBitAnd, bytecode.OpBitOr, bytecode.OpBitXor, bytecode.OpShl, bytecode.OpShr:
-		return true
-	}
-	return false
 }
 
 // executeBitwiseIntOp implements the infix bitwise operators. Both operands are
@@ -2378,9 +2372,14 @@ func (vm *VM) callClosureSync(cl *value.Closure, args []value.Value) (value.Valu
 		vm.push(arg)
 	}
 
-	// Create new frame
+	// Create new frame. If that fails (the call-depth limit), the closure and its
+	// arguments are already on the stack: put the stack pointer and frame index back
+	// where they were, or the caller unwinds only its own slots and every later push
+	// and pop addresses the wrong place - a corrupted VM rather than a clean error.
 	frame := NewFrame(cl, vm.sp-len(args))
 	if err := vm.pushFrame(frame); err != nil {
+		vm.sp = savedSP
+		vm.framesIndex = savedFramesIndex
 		return value.Invalid(), err
 	}
 	vm.sp = frame.basePointer + cl.Fn.NumLocals

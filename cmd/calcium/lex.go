@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/ytnobody/calcium-lang/pkg/formatter"
 	"github.com/ytnobody/calcium-lang/pkg/lexer"
 	"github.com/ytnobody/calcium-lang/pkg/token"
 )
@@ -46,7 +47,7 @@ func runLex(args []string) int {
 		count := 0
 		for {
 			tok := lex.NextToken()
-			fmt.Printf("%d:%d\t%s\t%s\n", tok.Line, tok.Column, tok.Type, lexEscape(tok.Literal))
+			fmt.Printf("%d:%d\t%s\t%s\n", tok.Line, tok.Column, tok.Type, formatter.EscapeControl(tok.Literal))
 			count++
 			if tok.Type == token.EOF {
 				break
@@ -55,25 +56,4 @@ func runLex(args []string) int {
 		fmt.Printf("# tokens: %d\n", count)
 	}
 	return 0
-}
-
-// lexEscape makes a token literal safe to print on one line.
-func lexEscape(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '\\':
-			b.WriteString(`\\`)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\t':
-			b.WriteString(`\t`)
-		case '\r':
-			b.WriteString(`\r`)
-		default:
-			b.WriteByte(s[i])
-		}
-	}
-	return b.String()
 }

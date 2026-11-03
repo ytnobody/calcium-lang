@@ -542,12 +542,38 @@ func (f *Formatter) formatStayExpression(e *ast.StayExpression) string {
 
 // escapeString escapes special characters in a string value for output.
 func escapeString(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\t", `\t`)
-	s = strings.ReplaceAll(s, "\r", `\r`)
-	return s
+	return EscapeStringLiteral(s)
+}
+
+// EscapeControl escapes the characters a single-line rendering cannot show:
+// backslash, newline, tab and carriage return. Quotes are left alone, because a
+// token's literal is the text *between* the quotes rather than a quoted literal.
+// `calcium lex` and the formatter both need this, so it lives here once instead of
+// in each of them, where the two could drift apart.
+func EscapeControl(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\r':
+			b.WriteString(`\r`)
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
+}
+
+// EscapeStringLiteral renders a string the way it would be written in source:
+// EscapeControl plus the quotes themselves.
+func EscapeStringLiteral(s string) string {
+	return strings.ReplaceAll(EscapeControl(s), `"`, `\"`)
 }
 
 // escapeStringRaw escapes a raw string segment (already unescaped by parser).

@@ -465,9 +465,10 @@ func classify(t) = match t
 A payload pattern is matched or bound, never evaluated: `Number(n + 1)` is a
 parse error rather than an expression.
 
-The final arm of a `match` acts as the catch-all, so a literal payload pattern
-cannot be used there — it could never reject the arm. Add an explicit `_ => ...`
-after arms that use literal payloads.
+The final arm is conditional like every other one (see Matching above), so a literal
+payload pattern there still has to match: a value that reaches it without matching ends
+the program instead of silently taking that arm. Follow arms that use literal payloads
+with an explicit `_ => ...` when the match is meant to be exhaustive.
 
 ---
 

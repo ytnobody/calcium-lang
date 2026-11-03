@@ -2364,33 +2364,7 @@ func (c *Compiler) replaceLastPopWithReturn() {
 	if c.lastInstructionIs(bytecode.OpPop) {
 		c.removeLastPop()
 	}
-	// Check if the last instruction (before Return) is OpCall
-	// If so, replace it with OpTailCall for tail call optimization
-	c.replaceLastCallWithTailCall()
 	c.emit(bytecode.OpReturn)
-}
-
-// replaceLastCallWithTailCall replaces the last OpCall with OpTailCall for tail
-// call optimization, for a call that is the last expression in a function body.
-//
-// Calls in a match arm or a `do` block are already marked where they are compiled:
-// `Compile` turns the last instruction of a node in tail position into OpTailCall,
-// and `compileMatch`/`do` re-enable tail position for the subtree that produces the
-// value. This pass therefore only covers what that mechanism cannot see, and it
-// looks no further than the final instruction: a call followed by an arm's
-// jump-to-end is already an OpTailCall by then.
-func (c *Compiler) replaceLastCallWithTailCall() {
-	// Only optimize if we're inside a function scope (not global)
-	if c.scopeIndex == 0 {
-		return
-	}
-
-	scope := c.scopes[c.scopeIndex]
-	last := scope.lastInstruction
-
-	if last.Opcode == bytecode.OpCall {
-		c.markTailCall(last.Position)
-	}
 }
 
 // markTailCall rewrites the OpCall at pos into an OpTailCall.

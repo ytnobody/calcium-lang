@@ -86,6 +86,12 @@ type Parser struct {
 	infixParseFns  map[token.TokenType]infixParseFn
 
 	lookahead []token.Token // Buffer for lookahead tokens (used in destructuring detection)
+
+	// armColumns is the stack of case columns of the matches currently being
+	// parsed. A nested match whose cases sit at the same column as an enclosing
+	// match's cases cannot be told apart from that match's arms, so the parser
+	// reports it instead of silently attributing them to the inner match.
+	armColumns []int
 }
 
 // New creates a new Parser
@@ -1793,6 +1799,10 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	// further, or wrap it in `do ... end`, to get the other reading.
 	caseColumn := 0
 
+	outerColumns := p.armColumns
+	p.armColumns = append(p.armColumns, 0)
+	defer func() { p.armColumns = outerColumns }()
+
 	// Parse cases until the match ends. Besides ';' and EOF, a closing
 	// delimiter or a comma cannot start a case, which is what lets a match be
 	// used inside a call, an array, a hash or a parenthesised expression:
@@ -1806,7 +1816,9 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 		p.nextToken()
 		if caseColumn == 0 {
 			caseColumn = p.curToken.Column
+			p.armColumns[len(p.armColumns)-1] = caseColumn
 		}
+		p.checkAmbiguousCaseColumn(p.curToken.Column, outerColumns)
 		matchCase := p.parseMatchCase()
 		if matchCase != nil {
 			exp.Cases = append(exp.Cases, matchCase)
@@ -1814,6 +1826,28 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	}
 
 	return exp
+}
+
+// checkAmbiguousCaseColumn reports a case that sits at the same column as an
+// enclosing match's cases. Both readings parse - the case could be this match's or
+// the enclosing one's - and before this check the inner match silently took it,
+// leaving the enclosing match without the arm its author wrote.
+//
+// Only the nesting shape is rejected; `do ... end`, parentheses or indenting the
+// inner match further all say which reading is meant.
+func (p *Parser) checkAmbiguousCaseColumn(column int, outerColumns []int) {
+	if column == 0 {
+		return
+	}
+	for _, outer := range outerColumns {
+		if outer != 0 && outer == column {
+			p.errors = append(p.errors, p.formatErrorWithContext(
+				p.curToken.Line, p.curToken.Column,
+				"ambiguous nested match: this case is at the same column as an enclosing match's cases\n"+
+					"hint: indent the inner match further, or wrap it in parentheses or `do ... end`"))
+			return
+		}
+	}
 }
 
 func (p *Parser) parseMatchCase() *ast.MatchCase {

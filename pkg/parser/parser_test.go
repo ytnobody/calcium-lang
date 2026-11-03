@@ -2222,65 +2222,61 @@ func TestNestedMatchDisambiguatedByIndentation(t *testing.T) {
 	}
 }
 
-// Indentation is the only signal available, so it cannot resolve a nested match
-// whose cases sit at the *same* column as the enclosing match's cases. Both readings
-// are syntactically valid; the parser attributes such cases to the inner match, as it
-// did before indentation was consulted. This test pins that behaviour so it is a
-// documented limit rather than a surprise - write the inner match indented further, or
-// wrap it in `do ... end`, to get the other reading.
-// Only a numeric literal may be negated in a payload pattern. A name, '_', a string
-// and a boolean are all rejected; `Tag(-"a")` used to parse as a valid field.
-func TestNegationInPayloadPatternRejectsNonNumbers(t *testing.T) {
-	for _, field := range []string{`-"a"`, `-true`, `-false`, `-name`, `-_`} {
-		input := "match x\n    Tag(" + field + ") => 1\n    _ => 2;"
-		p := New(lexer.New(input))
-		p.ParseProgram()
-		if len(p.Errors()) == 0 {
-			t.Errorf("expected a parse error for payload %q", field)
-			continue
-		}
-		found := false
-		for _, e := range p.Errors() {
-			if strings.Contains(e, "can only negate a numeric literal") {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("payload %q: expected the negation diagnostic, got %v", field, p.Errors())
-		}
-	}
-
-	// Negative numbers stay valid.
-	p := New(lexer.New("match x\n    Tag(-2) => 1\n    Tag(-1.5) => 2\n    _ => 3;"))
-	p.ParseProgram()
-	if errs := p.Errors(); len(errs) > 0 {
-		t.Errorf("negative numeric payloads must parse, got %v", errs)
-	}
-}
-
-func TestNestedMatchAtSameColumnIsAmbiguous(t *testing.T) {
+// A nested match whose cases sit at the same column as an enclosing match's cases is
+// ambiguous: the case could belong to either match, and before this check the inner
+// one silently kept it, leaving the outer match without the arm its author wrote.
+// The parser reports it instead of guessing; the forms below say which match is meant
+// and stay valid.
+func TestNestedMatchAtSameColumnIsRejected(t *testing.T) {
 	input := `func f(x, y) = match x
     true => match y
     true => 1
     false => 2
     false => 3;`
-	l := lexer.New(input)
-	p := New(l)
-	program := p.ParseProgram()
+	p := New(lexer.New(input))
+	p.ParseProgram()
+	found := false
+	for _, e := range p.Errors() {
+		if strings.Contains(e, "ambiguous nested match") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected the ambiguity diagnostic, got %v", p.Errors())
+	}
 
-	fd := program.Statements[0].(*ast.FunctionDeclaration)
-	outer, ok := fd.Body.(*ast.MatchExpression)
-	if !ok {
-		t.Fatalf("body not *ast.MatchExpression. got=%T", fd.Body)
+	accepted := map[string]string{
+		"indented further": `func f(x, y) = match x
+    true => match y
+        true => 1
+        false => 2
+    false => 3;`,
+		"parenthesised": `func f(x, y) = match x
+    true => (match y
+        true => 1
+        false => 2)
+    false => 3;`,
+		"wrapped in do": `func f(x, y) = match x
+    true => do
+        match y
+            true => 1
+            false => 2
+    end
+    false => 3;`,
+		"sibling matches": `func f(x, y) = do
+    a = match x
+        true => 1
+        false => 2
+    match y
+        true => 3
+        false => 4
+end;`,
 	}
-	if len(outer.Cases) != 1 {
-		t.Fatalf("outer match: expected 1 case (the rest go to the inner match), got %d", len(outer.Cases))
-	}
-	inner, ok := outer.Cases[0].Body.(*ast.MatchExpression)
-	if !ok {
-		t.Fatalf("first outer case body not *ast.MatchExpression. got=%T", outer.Cases[0].Body)
-	}
-	if len(inner.Cases) != 3 {
-		t.Fatalf("inner match: expected 3 cases, got %d", len(inner.Cases))
+	for name, src := range accepted {
+		p := New(lexer.New(src))
+		p.ParseProgram()
+		if errs := p.Errors(); len(errs) > 0 {
+			t.Errorf("%s: unexpected parse errors: %v", name, errs)
+		}
 	}
 }

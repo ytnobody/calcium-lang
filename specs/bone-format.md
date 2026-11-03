@@ -84,6 +84,29 @@ For every count and length, the value must also be `<=` the number of bytes
 remaining in the input. This is what stops a 4-byte length from triggering a
 huge allocation.
 
+### 3.2 Module resolution is not recorded
+
+A file names modules only where they are used: `OpLoadModule` (§5.1, opcode 47)
+carries a constant index holding the module's path string. There is deliberately
+**no list of a program's modules** in the header.
+
+Resolution therefore happens at load time, through the implementation's module
+search path. The consequence is that a compiled program which needs a *local* module
+(`use test;`) can only be run where that module is reachable — the reference resolves
+module paths from the working directory when it runs a `.bone`, and relative to the
+source file when it runs source.
+
+Recording the list was considered and rejected:
+
+- implementations resolve modules differently (search path, cache, registry), so a
+  recorded list would not make the file portable;
+- a stale list would silently shadow a module that changed after compilation;
+- the format is shared contract between implementations, and this is not a property
+  of the bytecode.
+
+A reader that cannot resolve a path must report it as a module error rather than
+treating the module as empty.
+
 ---
 
 ## 4. Constants

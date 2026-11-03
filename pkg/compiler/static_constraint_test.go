@@ -438,6 +438,11 @@ func TestStaticConstraintCheck_Return(t *testing.T) {
 		`func f(): Array = 1;`,
 		`func f(): Int = true;`,
 		`constraint Pos(n) = n > 0; func f(): Pos = 0;`,
+		// A negated literal keeps its operand's kind, so a non-numeric operand is a
+		// violation rather than "statically unknown". Regression: these were accepted.
+		`func f(): Int = -"hi";`,
+		`func f(): Int = -true;`,
+		`func f(): Float = -"hi";`,
 	}
 	for _, input := range violations {
 		if _, err := compileSource(input); err == nil {
@@ -450,6 +455,7 @@ func TestStaticConstraintCheck_Return(t *testing.T) {
 		`func f(): Positive = 5;`,
 		`func f(): Int = 7;`,
 		`func f(): Int = -7;`,
+		`func f(): Float = -2.5;`,
 		`func f(): String = "hi";`,
 		`func f(): Array = [1, 2];`,
 		`func f(x): Positive = x;`, // non-literal return: skipped statically

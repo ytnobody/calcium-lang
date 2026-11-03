@@ -344,11 +344,11 @@ func literalKind(expr ast.Expression) string {
 	case *ast.LambdaExpression:
 		return "Function"
 	case *ast.PrefixExpression:
-		// Negative numeric literals keep the kind of their operand.
+		// A negated literal keeps the kind of its operand. That includes a
+		// non-numeric operand: `-"hi"` is a String, so a constraint expecting an Int
+		// must reject it here rather than treat it as statically unknown.
 		if e.Operator == "-" {
-			if kind := literalKind(e.Right); kind == "Int" || kind == "Float" {
-				return kind
-			}
+			return literalKind(e.Right)
 		}
 	}
 	return ""

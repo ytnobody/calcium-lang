@@ -149,7 +149,7 @@ func eliminateDeadCodeMatchExpression(me *ast.MatchExpression) ast.Expression {
 		cases[i] = &ast.MatchCase{
 			Token:     c.Token,
 			Pattern:   eliminateDeadCode(c.Pattern).(ast.Expression),
-			Guard:     eliminateDeadCodeGuard(c.Guard),
+			Guard:     withGuard(eliminateDeadCode, c.Guard),
 			Body:      eliminateDeadCode(c.Body).(ast.Expression),
 			IsDefault: c.IsDefault,
 		}
@@ -354,15 +354,6 @@ func eliminateDeadCodeStayExpression(se *ast.StayExpression) *ast.StayExpression
 		StateInit: stateInit,
 		Body:      body,
 	}
-}
-
-// eliminateDeadCodeGuard folds a case guard, preserving nil. A guard is
-// optional, and dropping it would turn `x if x > 0` into `x`.
-func eliminateDeadCodeGuard(guard ast.Expression) ast.Expression {
-	if guard == nil {
-		return nil
-	}
-	return eliminateDeadCode(guard).(ast.Expression)
 }
 
 // foldConstantMatch selects the single arm a match on a constant subject must

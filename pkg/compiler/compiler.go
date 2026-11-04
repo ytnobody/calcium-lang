@@ -636,6 +636,22 @@ func (c *Compiler) Compile(node ast.Node) error {
 	return nil
 }
 
+// returnConstraintFor resolves the constraint a function's return value must satisfy:
+// an explicit `: Positive` wins, otherwise a return *type* that names a constraint
+// (`: Int` where `Int` is the built-in checker). Both the decision to keep the body in
+// tail position and the check itself need this, so it is resolved once.
+func (c *Compiler) returnConstraintFor(node *ast.FunctionDeclaration) (string, token.Token) {
+	if node.ReturnConstraint != nil {
+		return node.ReturnConstraint.Value, node.ReturnConstraint.Token
+	}
+	if node.ReturnType != nil {
+		if _, ok := c.symbolTable.Resolve(node.ReturnType.Name); ok {
+			return node.ReturnType.Name, node.ReturnType.Token
+		}
+	}
+	return "", token.Token{}
+}
+
 func (c *Compiler) compileNode(node ast.Node, inTail bool) error {
 	switch node := node.(type) {
 	case *ast.Program:
@@ -919,8 +935,13 @@ func (c *Compiler) compileNode(node ast.Node, inTail bool) error {
 			}
 		}
 
-		// Compile function body (in tail position)
-		c.tail = true
+		// Compile function body. It is in tail position only when nothing follows it:
+		// a return-constraint check and the success wrapping of an effect function are
+		// emitted *after* the body, and a tail call replaces the frame, so those
+		// instructions would never run. `helper(n)` in `func f(n): Positive = helper(n)`
+		// used to bypass the constraint check that way.
+		returnConstraint, returnToken := c.returnConstraintFor(node)
+		c.tail = !node.IsEffect && !hasConstraints && returnConstraint == ""
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
@@ -930,18 +951,7 @@ func (c *Compiler) compileNode(node ast.Node, inTail bool) error {
 		// Determine the effective return constraint name:
 		// 1. Explicit ReturnConstraint (e.g., func add(a, b): Positive = ...)
 		// 2. ReturnType annotation with a resolvable constraint (e.g., func add(a, b): Int = ...)
-		var returnConstraintName string
-		var returnConstraintToken token.Token
-		if node.ReturnConstraint != nil {
-			returnConstraintName = node.ReturnConstraint.Value
-			returnConstraintToken = node.ReturnConstraint.Token
-		} else if node.ReturnType != nil {
-			// Check if the return type name resolves to a constraint function
-			if _, ok := c.symbolTable.Resolve(node.ReturnType.Name); ok {
-				returnConstraintName = node.ReturnType.Name
-				returnConstraintToken = node.ReturnType.Token
-			}
-		}
+		returnConstraintName, returnConstraintToken := returnConstraint, returnToken
 
 		hasReturnConstraint := returnConstraintName != ""
 		if hasReturnConstraint {
@@ -1798,7 +1808,7 @@ func (c *Compiler) compileNode(node ast.Node, inTail bool) error {
 		c.emit(bytecode.OpWrapFailure)
 
 	case *ast.EffectHandleExpression:
-		err := c.compileEffectHandle(node)
+		err := c.compileEffectHandle(node, inTail)
 		if err != nil {
 			return err
 		}
@@ -2139,7 +2149,11 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression, inTail bool) error {
 	return nil
 }
 
-func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression) error {
+// compileEffectHandle compiles `subject !? { success(v) => ... failure(e) => ... }`.
+// Both handler bodies inherit the construct's tail position, like a match's arms: a
+// call in either is the handler's value, so without this a recursive `!?` loop grew the
+// stack until the frame limit.
+func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression, inTail bool) error {
 	// Compile subject
 	err := c.Compile(node.Subject)
 	if err != nil {
@@ -2169,6 +2183,7 @@ func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression) error {
 	// Compile success body
 	if node.SuccessBody != nil {
 		c.emit(bytecode.OpPop)
+		c.tail = inTail
 		err = c.Compile(node.SuccessBody)
 		if err != nil {
 			return err
@@ -2199,6 +2214,7 @@ func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression) error {
 	// Compile failure body
 	if node.FailureBody != nil {
 		c.emit(bytecode.OpPop)
+		c.tail = inTail
 		err = c.Compile(node.FailureBody)
 		if err != nil {
 			return err

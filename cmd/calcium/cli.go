@@ -3,14 +3,21 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 )
 
-// splitArgs separates options from input files. Every subcommand that takes a list
-// of files does this, so it is spelled out once here rather than in each of them.
-func splitArgs(args []string) (flags, files []string) {
+// splitArgs separates the options a subcommand knows from its input files. An
+// argument is an option only if it is one of `known`; anything else is a file name,
+// including one that happens to start with `-` (`calcium lint ./-weird.ca`).
+func splitArgs(args []string, known ...string) (flags, files []string) {
 	for _, a := range args {
-		if strings.HasPrefix(a, "-") {
+		isFlag := false
+		for _, k := range known {
+			if a == k {
+				isFlag = true
+				break
+			}
+		}
+		if isFlag {
 			flags = append(flags, a)
 			continue
 		}
@@ -28,24 +35,4 @@ func readInput(command, path string) ([]byte, bool) {
 		return nil, false
 	}
 	return content, true
-}
-
-// unknownFlags reports options a subcommand does not understand. Silently ignoring
-// them would make a typo look like a file that produced no output.
-func unknownFlags(command string, flags []string, known ...string) bool {
-	ok := true
-	for _, f := range flags {
-		recognised := false
-		for _, k := range known {
-			if f == k {
-				recognised = true
-				break
-			}
-		}
-		if !recognised {
-			fmt.Fprintf(os.Stderr, "%s: unknown option %s\n", command, f)
-			ok = false
-		}
-	}
-	return ok
 }

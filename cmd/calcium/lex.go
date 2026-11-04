@@ -25,8 +25,8 @@ import (
 // key order and escaping rules would make byte comparison unnecessarily
 // fragile.
 func runLex(args []string) int {
-	flags, files := splitArgs(args)
-	if !unknownFlags("calcium lex", flags) || len(files) == 0 {
+	_, files := splitArgs(args)
+	if len(files) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: calcium lex <file.ca> [...]")
 		return 1
 	}

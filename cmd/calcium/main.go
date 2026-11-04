@@ -100,6 +100,7 @@ const version = "0.2.0"
 const packMagic = "BONEPACK"
 
 func main() {
+
 	// Check if this binary has embedded .bone data
 	if tryRunEmbedded() {
 		return
@@ -228,14 +229,14 @@ func main() {
 // With --check flag, it reports whether any file would be changed.
 // Without --check flag, it formats files in-place.
 func runFmt(args []string) {
-	flags, files := splitArgs(args)
+	flags, files := splitArgs(args, "--check")
 	checkOnly := false
 	for _, f := range flags {
 		if f == "--check" {
 			checkOnly = true
 		}
 	}
-	if !unknownFlags("calcium fmt", flags, "--check") || len(files) == 0 {
+	if len(files) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: calcium fmt [--check] <file.ca> [...]")
 		os.Exit(1)
 	}

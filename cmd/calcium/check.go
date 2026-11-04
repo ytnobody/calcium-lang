@@ -17,8 +17,8 @@ import (
 // message text is deliberately absent: diagnostics are not part of the
 // compatibility contract, positions and rules are.
 func runCheck(args []string) int {
-	flags, files := splitArgs(args)
-	if !unknownFlags("calcium check", flags) || len(files) == 0 {
+	_, files := splitArgs(args)
+	if len(files) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: calcium check <file.ca> [...]")
 		return 1
 	}

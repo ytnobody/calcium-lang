@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/ops"
 	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
@@ -222,6 +223,14 @@ func (sc *staticConstraintChecker) checkCallExpression(funcName string, args []a
 
 		// Resolve identifier arguments through known constants before checking.
 		arg = sc.resolveArg(arg)
+
+		// A computed argument (`2 << 1 | 1`) is folded first: `extractLiteralValue`
+		// only recognises literal nodes, so gating on it let a call whose argument is a
+		// constant *expression* skip the check entirely, even though it has the same
+		// runtime value as the literal it computes.
+		if folded := staticEval(arg, nil, sc); folded != nil {
+			arg = folded
+		}
 
 		// Check if the argument is a literal value
 		litValue, isLiteral := extractLiteralValue(arg)
@@ -572,7 +581,7 @@ func staticEval(expr ast.Expression, env map[string]ast.Expression, sc *staticCo
 		if right == nil {
 			return nil
 		}
-		return evalStaticPrefix(e.Operator, right, e.Token)
+		return ops.Prefix(e.Operator, right, e.Token)
 
 	case *ast.InfixExpression:
 		// Short-circuit for && and ||
@@ -686,28 +695,6 @@ func normalizeExpr(expr ast.Expression) ast.Expression {
 	}
 }
 
-// evalStaticPrefix evaluates a prefix operation on a static value
-func evalStaticPrefix(op string, right ast.Expression, tok token.Token) ast.Expression {
-	switch op {
-	case "-":
-		if intLit, ok := right.(*ast.IntegerLiteral); ok {
-			return &ast.IntegerLiteral{Token: tok, Value: -intLit.Value}
-		}
-		if floatLit, ok := right.(*ast.FloatLiteral); ok {
-			return &ast.FloatLiteral{Token: tok, Value: -floatLit.Value}
-		}
-	case "!":
-		if boolLit, ok := right.(*ast.BooleanLiteral); ok {
-			return &ast.BooleanLiteral{Token: tok, Value: !boolLit.Value}
-		}
-	case "^":
-		if intLit, ok := right.(*ast.IntegerLiteral); ok {
-			return &ast.IntegerLiteral{Token: tok, Value: ^intLit.Value}
-		}
-	}
-	return nil
-}
-
 // evalStaticInfix evaluates a binary operation on two static values
 func evalStaticInfix(op string, left, right ast.Expression, tok token.Token) ast.Expression {
 	// Integer operations
@@ -715,7 +702,7 @@ func evalStaticInfix(op string, left, right ast.Expression, tok token.Token) ast
 	rightInt, rightIsInt := right.(*ast.IntegerLiteral)
 
 	if leftIsInt && rightIsInt {
-		return evalStaticIntegerInfix(op, leftInt.Value, rightInt.Value, tok)
+		return ops.IntInfix(op, leftInt.Value, rightInt.Value, tok)
 	}
 
 	// Float / mixed operations
@@ -740,7 +727,7 @@ func evalStaticInfix(op string, left, right ast.Expression, tok token.Token) ast
 	}
 
 	if hasFloat && (leftIsInt || leftIsFloat) && (rightIsInt || rightIsFloat) {
-		return evalStaticFloatInfix(op, leftNum, rightNum, tok)
+		return ops.FloatInfix(op, leftNum, rightNum, tok)
 	}
 
 	// String comparison
@@ -771,86 +758,5 @@ func evalStaticInfix(op string, left, right ast.Expression, tok token.Token) ast
 		}
 	}
 
-	return nil
-}
-
-func evalStaticIntegerInfix(op string, left, right int64, tok token.Token) ast.Expression {
-	switch op {
-	case "+":
-		return &ast.IntegerLiteral{Token: tok, Value: left + right}
-	case "-":
-		return &ast.IntegerLiteral{Token: tok, Value: left - right}
-	case "*":
-		return &ast.IntegerLiteral{Token: tok, Value: left * right}
-	case "/":
-		if right == 0 {
-			return nil
-		}
-		return &ast.IntegerLiteral{Token: tok, Value: left / right}
-	case "%":
-		if right == 0 {
-			return nil
-		}
-		return &ast.IntegerLiteral{Token: tok, Value: left % right}
-	case "<":
-		return &ast.BooleanLiteral{Token: tok, Value: left < right}
-	case ">":
-		return &ast.BooleanLiteral{Token: tok, Value: left > right}
-	case "<=":
-		return &ast.BooleanLiteral{Token: tok, Value: left <= right}
-	case ">=":
-		return &ast.BooleanLiteral{Token: tok, Value: left >= right}
-	case "==":
-		return &ast.BooleanLiteral{Token: tok, Value: left == right}
-	case "!=":
-		return &ast.BooleanLiteral{Token: tok, Value: left != right}
-	case "&":
-		return &ast.IntegerLiteral{Token: tok, Value: left & right}
-	case "|":
-		return &ast.IntegerLiteral{Token: tok, Value: left | right}
-	case "^":
-		return &ast.IntegerLiteral{Token: tok, Value: left ^ right}
-	case "<<", ">>":
-		// Mirror the VM: a negative count is an error and anything above 63 shifts
-		// out entirely. Here both are simply "not statically known", so the check is
-		// skipped instead of guessing.
-		if right < 0 || right > 63 {
-			return nil
-		}
-		if op == "<<" {
-			return &ast.IntegerLiteral{Token: tok, Value: left << uint(right)}
-		}
-		// Arithmetic shift, as in Go and in the VM.
-		return &ast.IntegerLiteral{Token: tok, Value: left >> uint(right)}
-	}
-	return nil
-}
-
-func evalStaticFloatInfix(op string, left, right float64, tok token.Token) ast.Expression {
-	switch op {
-	case "+":
-		return &ast.FloatLiteral{Token: tok, Value: left + right}
-	case "-":
-		return &ast.FloatLiteral{Token: tok, Value: left - right}
-	case "*":
-		return &ast.FloatLiteral{Token: tok, Value: left * right}
-	case "/":
-		if right == 0 {
-			return nil
-		}
-		return &ast.FloatLiteral{Token: tok, Value: left / right}
-	case "<":
-		return &ast.BooleanLiteral{Token: tok, Value: left < right}
-	case ">":
-		return &ast.BooleanLiteral{Token: tok, Value: left > right}
-	case "<=":
-		return &ast.BooleanLiteral{Token: tok, Value: left <= right}
-	case ">=":
-		return &ast.BooleanLiteral{Token: tok, Value: left >= right}
-	case "==":
-		return &ast.BooleanLiteral{Token: tok, Value: left == right}
-	case "!=":
-		return &ast.BooleanLiteral{Token: tok, Value: left != right}
-	}
 	return nil
 }

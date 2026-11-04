@@ -93,6 +93,12 @@ type Parser struct {
 	// reports it instead of silently attributing them to the inner match.
 	armColumns []int
 
+	// paramsSaved holds armColumns from before a parenthesised construct, so a lambda
+	// body can put it back: the `)` bounds the *parameter list*, and the body after
+	// `=>` is ordinary expression territory where an enclosing match's columns apply
+	// again.
+	paramsSaved []int
+
 	// noArrowLines remembers lines that cannot contain a case arrow. The statement loop
 	// retries a malformed line token by token, and without this each retry rescanned the
 	// line - quadratic in its length on input like `match x x x ...`.
@@ -1357,6 +1363,7 @@ func (p *Parser) parseGroupedOrLambdaInner() ast.Expression {
 }
 
 func (p *Parser) parseLambdaBody(tok token.Token, params []*ast.Identifier) ast.Expression {
+	p.resumeArmsForBody()
 	lambda := &ast.LambdaExpression{
 		Token:      tok,
 		Parameters: params,
@@ -1745,7 +1752,15 @@ func (p *Parser) parseExpressionList(end token.TokenType) []ast.Expression {
 	return list
 }
 
+// An index expression is bounded by `]`, so a match inside it suspends the enclosing
+// columns like an array literal does.
 func (p *Parser) parseIndexExpression(left ast.Expression) ast.Expression {
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+	return p.parseIndexExpressionInner(left)
+}
+
+func (p *Parser) parseIndexExpressionInner(left ast.Expression) ast.Expression {
 	exp := &ast.IndexExpression{Token: p.curToken, Left: left}
 
 	p.nextToken()
@@ -1835,7 +1850,10 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	for !p.peekTokenIs(token.SEMICOLON) && !p.peekTokenIs(token.EOF) &&
 		!p.peekTokenIs(token.RPAREN) && !p.peekTokenIs(token.RBRACKET) &&
 		!p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.COMMA) &&
-		!p.isEndToken(p.peekToken) {
+		!p.isEndToken(p.peekToken) &&
+		// An interpolation's closing brace is its own token, and it ends a match the
+		// same way `}` does.
+		!p.peekTokenIs(token.STRING_TEMPLATE_MIDDLE) && !p.peekTokenIs(token.STRING_TEMPLATE_END) {
 		// Once this match has an arm, a case at an enclosing match's column is that
 		// match's and this one is finished with it. Before the first arm it can only
 		// be this match's own - which is the ambiguity reported below when its column
@@ -1883,7 +1901,8 @@ func (p *Parser) looksLikeMatchCase() bool {
 	const maxCaseLookaheadTokens = 256
 	for n := 1; n <= maxCaseLookaheadTokens; n++ {
 		tok := p.peekN(n)
-		if tok.Type == token.EOF || p.isEndToken(tok) {
+		if tok.Type == token.EOF || p.isEndToken(tok) ||
+			tok.Type == token.STRING_TEMPLATE_MIDDLE || tok.Type == token.STRING_TEMPLATE_END {
 			return false
 		}
 		// At depth 0 the arrow must be on the same line as the pattern's last token, so
@@ -1939,8 +1958,21 @@ func (p *Parser) resumeArms(saved []int) {
 func (p *Parser) withSuspendedArms(parse func() ast.Expression) ast.Expression {
 	saved := p.armColumns
 	p.armColumns = nil
-	defer func() { p.armColumns = saved }()
+	p.paramsSaved = saved
+	defer func() {
+		p.armColumns = saved
+		p.paramsSaved = nil
+	}()
 	return parse()
+}
+
+// resumeArmsForBody restores the enclosing columns when a lambda body starts. Without
+// it, `match x / true => (p) => match y ... / false => 3` silently gave the enclosing
+// match's `false` arm to the inner match: the suspension covered the body too.
+func (p *Parser) resumeArmsForBody() {
+	if p.paramsSaved != nil {
+		p.armColumns = p.paramsSaved
+	}
 }
 
 // atEnclosingCaseColumn reports whether a case at `column` would sit at the column of

@@ -361,13 +361,19 @@ func deserializeFunction(r *bytes.Reader, versionMinor byte) (*value.Function, e
 	}
 	fn.Name = name
 
-	// Module identity (bytecode format 1.1+)
+	// Module identity (bytecode format 1.1+). A 1.0 file has no such field, and the
+	// format says its default is "entry", not "": the empty string is what the VM maps
+	// to "<unknown>", and "entry" is the identity `Secret.capability` checks. A reader
+	// that followed the spec literally would then accept capability creation for a 1.0
+	// file that the Go VM rejects.
 	if versionMinor >= 1 {
 		moduleID, err := readString(r)
 		if err != nil {
 			return nil, err
 		}
 		fn.ModuleID = moduleID
+	} else {
+		fn.ModuleID = "entry"
 	}
 
 	// Parameters

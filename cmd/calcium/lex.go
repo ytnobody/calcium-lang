@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/ytnobody/calcium-lang/pkg/formatter"
 	"github.com/ytnobody/calcium-lang/pkg/lexer"
@@ -26,21 +25,15 @@ import (
 // key order and escaping rules would make byte comparison unnecessarily
 // fragile.
 func runLex(args []string) int {
-	var files []string
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") {
-			files = append(files, a)
-		}
-	}
-	if len(files) == 0 {
+	flags, files := splitArgs(args)
+	if !unknownFlags("calcium lex", flags) || len(files) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: calcium lex <file.ca> [...]")
 		return 1
 	}
 
 	for _, file := range files {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "calcium lex: %v\n", err)
+		content, ok := readInput("calcium lex", file)
+		if !ok {
 			return 1
 		}
 		lex := lexer.New(string(content))

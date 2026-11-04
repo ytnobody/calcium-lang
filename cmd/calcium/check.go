@@ -17,22 +17,16 @@ import (
 // message text is deliberately absent: diagnostics are not part of the
 // compatibility contract, positions and rules are.
 func runCheck(args []string) int {
-	var files []string
-	for _, a := range args {
-		if len(a) == 0 || a[0] != '-' {
-			files = append(files, a)
-		}
-	}
-	if len(files) == 0 {
+	flags, files := splitArgs(args)
+	if !unknownFlags("calcium check", flags) || len(files) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: calcium check <file.ca> [...]")
 		return 1
 	}
 
 	status := 0
 	for _, file := range files {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "calcium check: %v\n", err)
+		content, ok := readInput("calcium check", file)
+		if !ok {
 			status = 1
 			continue
 		}

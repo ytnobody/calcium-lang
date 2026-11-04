@@ -228,18 +228,14 @@ func main() {
 // With --check flag, it reports whether any file would be changed.
 // Without --check flag, it formats files in-place.
 func runFmt(args []string) {
+	flags, files := splitArgs(args)
 	checkOnly := false
-	var files []string
-
-	for _, arg := range args {
-		if arg == "--check" {
+	for _, f := range flags {
+		if f == "--check" {
 			checkOnly = true
-		} else {
-			files = append(files, arg)
 		}
 	}
-
-	if len(files) == 0 {
+	if !unknownFlags("calcium fmt", flags, "--check") || len(files) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: calcium fmt [--check] <file.ca> [...]")
 		os.Exit(1)
 	}

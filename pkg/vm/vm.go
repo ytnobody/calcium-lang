@@ -596,17 +596,6 @@ func (vm *VM) stackTrace() []string {
 		return nil // Only main frame, no interesting stack trace
 	}
 
-	// Walk frames from current (innermost) to outermost, skipping frames that
-	// have no resolvable function.
-	frames := make([]*Frame, 0, vm.framesIndex)
-	for i := vm.framesIndex - 1; i >= 0; i-- {
-		frame := vm.frames[i]
-		if frame == nil || frame.cl == nil || frame.cl.Fn == nil {
-			continue
-		}
-		frames = append(frames, frame)
-	}
-
 	format := func(frame *Frame) string {
 		funcName := frame.cl.Fn.Name
 		if funcName == "" {
@@ -620,25 +609,40 @@ func (vm *VM) stackTrace() []string {
 		return funcName
 	}
 
-	if len(frames) <= maxStackTraceFrames {
-		entries := make([]string, 0, len(frames))
-		for _, frame := range frames {
-			entries = append(entries, format(frame))
-		}
-		return entries
-	}
-
-	// Truncate the middle: the innermost frames show where execution stopped and
-	// the outermost frames show how it got there, while the middle is usually the
-	// same recursive call repeated over and over.
+	// Only the frames that will be shown are kept. At the call-depth limit there are
+	// 8192 live frames and the trace shows 30; collecting every one first allocated a
+	// slice of the whole stack to throw almost all of it away.
 	head := maxStackTraceFrames / 2
 	tail := maxStackTraceFrames - head
+	var first, last []*Frame
+	total := 0
+	for i := vm.framesIndex - 1; i >= 0; i-- {
+		frame := vm.frames[i]
+		if frame == nil || frame.cl == nil || frame.cl.Fn == nil {
+			continue // no resolvable function
+		}
+		total++
+		if len(first) < head {
+			first = append(first, frame)
+			continue
+		}
+		last = append(last, frame)
+		if len(last) > tail {
+			last = last[1:]
+		}
+	}
+
+	// Truncate the middle: the innermost frames show where execution stopped and the
+	// outermost show how it got there, while the middle is usually the same recursive
+	// call repeated.
 	entries := make([]string, 0, maxStackTraceFrames+1)
-	for _, frame := range frames[:head] {
+	for _, frame := range first {
 		entries = append(entries, format(frame))
 	}
-	entries = append(entries, fmt.Sprintf("... %d frame(s) omitted ...", len(frames)-maxStackTraceFrames))
-	for _, frame := range frames[len(frames)-tail:] {
+	if total > maxStackTraceFrames {
+		entries = append(entries, fmt.Sprintf("... %d frame(s) omitted ...", total-maxStackTraceFrames))
+	}
+	for _, frame := range last {
 		entries = append(entries, format(frame))
 	}
 	return entries

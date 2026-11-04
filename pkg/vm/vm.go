@@ -612,9 +612,21 @@ func (vm *VM) stackTrace() []string {
 		return funcName
 	}
 
+	// Shallow stacks - the overwhelming majority - are printed whole, once.
+	if vm.framesIndex <= maxStackTraceFrames {
+		entries := make([]string, 0, vm.framesIndex)
+		for i := vm.framesIndex - 1; i >= 0; i-- {
+			if f := vm.frames[i]; f != nil && f.cl != nil && f.cl.Fn != nil {
+				entries = append(entries, format(f))
+			}
+		}
+		return entries
+	}
+
 	// The walk itself is capped: at the call-depth limit there are 8192 live frames and
 	// the trace shows 30, so the innermost and outermost few are collected from both
-	// ends and the middle is counted, not visited.
+	// ends and the middle is counted, not visited. The two blocks cannot overlap here:
+	// the stack is deeper than the number of frames printed.
 	head := maxStackTraceFrames / 2
 	tail := maxStackTraceFrames - head
 
@@ -2381,10 +2393,17 @@ func (vm *VM) callClosureSync(cl *value.Closure, args []value.Value) (value.Valu
 	savedSP := vm.sp
 	savedFramesIndex := vm.framesIndex
 
-	// Set up the call: push closure then args onto stack
-	vm.push(value.ClosureVal(cl))
+	// Set up the call: push closure then args onto stack. `push` refuses when the value
+	// stack is full, and a refusal that is ignored would leave basePointer describing
+	// values that were never written - silent corruption instead of a clean error.
+	if err := vm.push(value.ClosureVal(cl)); err != nil {
+		return value.Invalid(), err
+	}
 	for _, arg := range args {
-		vm.push(arg)
+		if err := vm.push(arg); err != nil {
+			vm.sp = savedSP
+			return value.Invalid(), err
+		}
 	}
 
 	// Create new frame. If that fails (the call-depth limit), the closure and its

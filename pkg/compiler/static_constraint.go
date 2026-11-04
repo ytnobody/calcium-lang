@@ -173,6 +173,13 @@ func (sc *staticConstraintChecker) checkReturnConstraint(fd *ast.FunctionDeclara
 		return ""
 	}
 
+	// Fold the body first: the built-in constraints below work on literal *kinds*, so a
+	// computed body (`2 << 1 | -5`) was not recognized as one and the check was skipped
+	// - the same gap `checkCallExpression` had.
+	if folded := staticEval(body, nil, sc); folded != nil {
+		body = folded
+	}
+
 	lit, _ := extractLiteralValue(body)
 
 	if result, recognized := checkBuiltinTypeConstraint(constraintName, body); recognized {

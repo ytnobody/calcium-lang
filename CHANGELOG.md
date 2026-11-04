@@ -4,6 +4,16 @@
 
 ### Breaking changes
 
+- **`os.proc_start` no longer hands the parent's environment to the child.** A child
+  process used to inherit every variable in the Calcium process's environment, which in
+  CI, containers and PaaS commonly includes credentials (`DB_PASSWORD`, `API_KEY`, …) -
+  a silent leak that `Secret` cannot guard, because the environment never enters the
+  language. `os.proc_start(cmd, args)` now runs the child with an **empty** environment;
+  pass the names it needs explicitly with the new
+  `os.proc_start_env(cmd, args, {"PATH": …})`. A command without a path separator is
+  still resolved through the parent's `PATH`, which is a lookup rather than part of the
+  child's environment. The primitive `__proc_start` takes an optional third argument, a
+  hash of name → value. See `specs/ffi-primitives.md` §3.10.
 - **Every `match` arm is now conditional, including the final one.** Previously
   the final arm always ran, whatever its pattern, so `match tok A(n) => ... B(n)
   => ...` destructured a `C` as `B` and ran the wrong branch. Now, if no arm

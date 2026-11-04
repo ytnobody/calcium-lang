@@ -127,3 +127,65 @@ func TestProcWriteSecretRejectsWrongHandleScope(t *testing.T) {
 		t.Fatal("expected failure for mismatched handle scope")
 	}
 }
+
+// The child must not inherit this process's environment: a Calcium program commonly
+// runs where credentials live in the environment, and `Secret` cannot protect what
+// never entered the language.
+func TestProcStartDoesNotInheritEnvironment(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh not available on this platform")
+	}
+	t.Setenv("CALCIUM_LEAK_CANARY", "secret-value")
+
+	start := primitiveProcStart(
+		value.String(sh),
+		value.Array([]value.Value{value.String("-c"), value.String("echo \"${CALCIUM_LEAK_CANARY-unset}\"")}),
+	)
+	if !start.IsSuccess() {
+		t.Fatalf("__proc_start failed: %v", start)
+	}
+	handle := start.AsSuccess()
+	line := primitiveProcReadLine(handle)
+	if !line.IsSuccess() {
+		t.Fatalf("__proc_read_line failed: %v", line)
+	}
+	if got := line.AsSuccess().AsString(); got != "unset" {
+		t.Fatalf("the child saw the parent's environment: %q", got)
+	}
+	primitiveProcClose(handle)
+}
+
+// With an explicit env hash, exactly the given names are passed.
+func TestProcStartPassesOnlyTheGivenEnvironment(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh not available on this platform")
+	}
+	t.Setenv("CALCIUM_LEAK_CANARY", "secret-value")
+
+	h := value.NewHash()
+	h.Set(value.String("CALCIUM_PASSED"), value.String("visible"))
+	env := value.HashVal(h)
+
+	start := primitiveProcStart(
+		value.String(sh),
+		value.Array([]value.Value{
+			value.String("-c"),
+			value.String("echo \"${CALCIUM_PASSED-unset}/${CALCIUM_LEAK_CANARY-unset}\""),
+		}),
+		env,
+	)
+	if !start.IsSuccess() {
+		t.Fatalf("__proc_start failed: %v", start)
+	}
+	handle := start.AsSuccess()
+	line := primitiveProcReadLine(handle)
+	if !line.IsSuccess() {
+		t.Fatalf("__proc_read_line failed: %v", line)
+	}
+	if got := line.AsSuccess().AsString(); got != "visible/unset" {
+		t.Fatalf("expected only the passed variable, got %q", got)
+	}
+	primitiveProcClose(handle)
+}

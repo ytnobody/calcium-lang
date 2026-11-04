@@ -246,7 +246,7 @@ runtime must implement the same layout tokens.
 
 | Primitive | Arity | Arguments | Success result |
 |---|---|---|---|
-| `__proc_start` | 2 | command: String, args: Array<String> | `S(Int)` handle |
+| `__proc_start` | 2 or 3 | command: String, args: Array<String>[, env: Hash<String→String>] | `S(Int)` handle |
 | `__proc_write` | 2 | handle: Int, data: String | `S(Maybe.None)` |
 | `__proc_write_secret` | 3 | handle, secret: Secret, capability | `S(Maybe.None)` |
 | `__proc_read_line` | 1 | handle | `S(String)`; `failure("process closed")` at EOF |
@@ -256,6 +256,20 @@ runtime must implement the same layout tokens.
 `__proc_*` is what lets Calcium drive external backends (e.g. `dbd-sqlite`)
 over a line-delimited stdio protocol. `__proc_write_secret` requires a
 capability authorising sink `"proc"` with `scope.handle == handle`.
+
+**The child does not inherit the parent's environment.** With two arguments it runs
+with an empty one; with three, exactly the names in the `env` hash are passed. This is
+deliberate, and a breaking change from the earlier behaviour of inheriting everything:
+
+* CI systems, containers and PaaS platforms commonly pass credentials (`DB_PASSWORD`,
+  `API_KEY`, …) through the environment, and a program that merely *starts* a tool
+  would hand them to it.
+* `Secret` protects values once they are Calcium values; the environment is outside the
+  language, so it offers no protection there.
+
+A command named without a path separator is still *resolved* through the parent's
+`PATH` — that is a lookup, not part of the child's environment. A child that needs
+`PATH` (or anything else) gets it explicitly: `os.proc_start_env(cmd, args, {"PATH": …})`.
 
 ---
 

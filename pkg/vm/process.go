@@ -119,12 +119,20 @@ func procRemove(p *proc) {
 // Primitives
 // ---------------------------------------------------------------------------
 
-// __proc_start(cmd, argsArray) -> success(handle) | failure(msg)
+// __proc_start(cmd, argsArray[, env]) -> success(handle) | failure(msg)
 // Launches a long-lived external program and returns an integer handle for
 // talking to it over stdin/stdout.
+//
+// The child does NOT inherit this process's environment. Without an `env` hash it
+// runs with an empty one; with it, exactly the names given are passed. A Calcium
+// process commonly holds credentials in its environment (CI, containers, PaaS) and
+// the `Secret` type cannot protect what never enters the language, so inheriting
+// silently handed those to every child. A command without a path separator is still
+// resolved through this process's PATH, which is a lookup, not part of the child's
+// environment.
 func primitiveProcStart(args ...value.Value) value.Value {
-	if len(args) != 2 {
-		return value.Failure(value.String("__proc_start: expected 2 arguments (command, args array)"))
+	if len(args) != 2 && len(args) != 3 {
+		return value.Failure(value.String("__proc_start: expected 2 or 3 arguments (command, args array[, env hash])"))
 	}
 	if args[0].Type != value.TYPE_STRING {
 		return value.Failure(value.String("__proc_start: command must be string"))
@@ -143,7 +151,28 @@ func primitiveProcStart(args ...value.Value) value.Value {
 		argv = append(argv, v.AsString())
 	}
 
+	env := []string{}
+	if len(args) == 3 {
+		if args[2].Type != value.TYPE_HASH {
+			return value.Failure(value.String("__proc_start: env must be a hash of name -> string"))
+		}
+		h := args[2].AsHash()
+		for _, k := range h.Keys() {
+			v, ok := h.Get(k)
+			if !ok || v.Type != value.TYPE_STRING {
+				return value.Failure(value.String("__proc_start: env values must be strings"))
+			}
+			name := k.AsString()
+			// exec rejects a name containing '=' or NUL, and allows an empty value.
+			if name == "" || strings.ContainsAny(name, "=\x00") {
+				return value.Failure(value.String(fmt.Sprintf("__proc_start: invalid environment variable name %q", name)))
+			}
+			env = append(env, name+"="+v.AsString())
+		}
+	}
+
 	cmd := exec.Command(cmdName, argv...)
+	cmd.Env = env          // empty, not nil: nil would inherit this process's environment
 	cmd.Stderr = os.Stderr // protocol lives on stdout; logs go to our stderr
 
 	stdin, err := cmd.StdinPipe()

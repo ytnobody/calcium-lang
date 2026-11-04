@@ -28,8 +28,17 @@ func! exit(code) = __os_exit(code);
 // proc_start(cmd, args) - Launch a long-lived external program and return a
 // process handle for talking to it over stdin/stdout as a text stream.
 // Returns success(handle) or failure(message).
+//
+// The child runs with an EMPTY environment: it does not inherit this process's
+// variables, because those often hold credentials and `Secret` cannot protect what
+// never entered the language. Use proc_start_env to pass specific variables.
 // Example: os.proc_start("sqlite3", ["app.db"]) -> success(1)
 func proc_start(cmd, args) = __proc_start(cmd, args);
+
+// proc_start_env(cmd, args, env) - proc_start with an explicit environment, a hash
+// of name -> value. Only the names given are visible to the child.
+// Example: os.proc_start_env("psql", ["-c", "select 1"], {"PGHOST": host})
+func proc_start_env(cmd, args, env) = __proc_start(cmd, args, env);
 
 // proc_write(handle, data) - Write a string to a process's stdin.
 // Returns success(true) or failure(message).

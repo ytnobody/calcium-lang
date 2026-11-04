@@ -1844,11 +1844,19 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 // match. Nesting is tracked so that an arrow inside an argument list (`map(x, x => ...)`)
 // does not count as this case's arrow.
 func (p *Parser) looksLikeMatchCase() bool {
-	startLine := p.peekToken.Line
+	line := p.peekToken.Line
 	depth := 0
-	for n := 1; n <= 64; n++ {
+	// No fixed budget: the terminators below guarantee the scan ends, and a guard with
+	// many comparisons can legitimately run long.
+	for n := 1; ; n++ {
 		tok := p.peekN(n)
-		if tok.Type == token.EOF || p.isEndToken(tok) || tok.Line != startLine {
+		if tok.Type == token.EOF || p.isEndToken(tok) {
+			return false
+		}
+		// At depth 0 the arrow must be on the same line as the pattern's last token, so
+		// that the statement after a match (which has no arrow) ends it. Inside brackets
+		// a pattern may span lines, and the closing bracket resets the line.
+		if depth == 0 && tok.Line != line {
 			return false
 		}
 		switch tok.Type {
@@ -1868,8 +1876,8 @@ func (p *Parser) looksLikeMatchCase() bool {
 				return true
 			}
 		}
+		line = tok.Line
 	}
-	return false
 }
 
 // withSuspendedArms clears the enclosing-arm stack while parsing a construct that

@@ -2227,6 +2227,30 @@ func TestNestedMatchDisambiguatedByIndentation(t *testing.T) {
 // one silently kept it, leaving the outer match without the arm its author wrote.
 // The parser reports it instead of guessing; the forms below say which match is meant
 // and stay valid.
+// A case is recognised by its arrow, so the pattern may legitimately span several
+// lines inside brackets, and a guard may be long. Neither is a reason to end the match.
+func TestMatchCaseDetectionToleratesMultiLinePatternsAndLongGuards(t *testing.T) {
+	cases := map[string]string{
+		"multi-line constructor pattern": `type Pair = Pair(a, b);
+func f(p) = match p
+    Pair(
+        1,
+        2
+    ) => "both"
+    _ => "other";`,
+		"long guard": `func f(x) = match x
+    n if n == 1 || n == 2 || n == 3 || n == 4 || n == 5 || n == 6 || n == 7 || n == 8 || n == 9 || n == 10 || n == 11 || n == 12 || n == 13 || n == 14 || n == 15 || n == 16 || n == 17 || n == 18 || n == 19 || n == 20 => "small"
+    _ => "big";`,
+	}
+	for name, src := range cases {
+		p := New(lexer.New(src))
+		p.ParseProgram()
+		if errs := p.Errors(); len(errs) > 0 {
+			t.Errorf("%s: unexpected parse errors: %v", name, errs)
+		}
+	}
+}
+
 func TestNestedMatchAtSameColumnIsRejected(t *testing.T) {
 	input := `func f(x, y) = match x
     true => match y

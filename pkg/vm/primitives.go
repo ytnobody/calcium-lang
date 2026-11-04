@@ -543,12 +543,17 @@ func primitiveStrToBytes(args ...value.Value) value.Value {
 	if args[0].Type != value.TYPE_STRING {
 		return value.Failure(value.String("__str_to_bytes: argument must be string"))
 	}
-	b := []byte(args[0].AsString())
+	return value.Array(bytesToValueArray([]byte(args[0].AsString())))
+}
+
+// bytesToValueArray boxes a byte slice as the Calcium array of ints the byte
+// primitives hand back. Every one of them does exactly this, so it lives here once.
+func bytesToValueArray(b []byte) []value.Value {
 	out := make([]value.Value, len(b))
 	for i, c := range b {
 		out[i] = value.Int(int64(c))
 	}
-	return value.Array(out)
+	return out
 }
 
 // __int_to_bytes encodes a signed 64-bit integer as its eight big-endian
@@ -562,12 +567,7 @@ func primitiveIntToBytes(args ...value.Value) value.Value {
 	if args[0].Type != value.TYPE_INT {
 		return value.Failure(value.String("__int_to_bytes: argument must be int"))
 	}
-	buf := bytecode.EncodeInt64(args[0].AsInt())
-	out := make([]value.Value, len(buf))
-	for i, c := range buf {
-		out[i] = value.Int(int64(c))
-	}
-	return value.Array(out)
+	return value.Array(bytesToValueArray(bytecode.EncodeInt64(args[0].AsInt())))
 }
 
 // __float_to_bytes encodes a float64 as its eight big-endian IEEE 754 bytes.
@@ -579,12 +579,7 @@ func primitiveFloatToBytes(args ...value.Value) value.Value {
 	if args[0].Type != value.TYPE_FLOAT {
 		return value.Failure(value.String("__float_to_bytes: argument must be float"))
 	}
-	buf := bytecode.EncodeFloat64(args[0].AsFloat())
-	out := make([]value.Value, len(buf))
-	for i, c := range buf {
-		out[i] = value.Int(int64(c))
-	}
-	return value.Array(out)
+	return value.Array(bytesToValueArray(bytecode.EncodeFloat64(args[0].AsFloat())))
 }
 
 // __str_from_bytes builds a string from an array of byte values (0-255). Bytes

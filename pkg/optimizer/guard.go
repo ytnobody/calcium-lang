@@ -14,12 +14,3 @@ func withGuard(pass func(ast.Node) ast.Node, guard ast.Expression) ast.Expressio
 	}
 	return pass(guard).(ast.Expression)
 }
-
-// withGuardExpr is withGuard for a pass that works on expressions only, such as the
-// CSE optimiser's.
-func withGuardExpr(pass func(ast.Expression) ast.Expression, guard ast.Expression) ast.Expression {
-	if guard == nil {
-		return nil
-	}
-	return pass(guard)
-}

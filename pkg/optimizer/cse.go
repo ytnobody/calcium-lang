@@ -228,7 +228,7 @@ func (o *CSEOptimizer) optimizeSubExprs(expr ast.Expression) ast.Expression {
 			cases[i] = &ast.MatchCase{
 				Token:     c.Token,
 				Pattern:   c.Pattern, // Don't optimize patterns
-				Guard:     withGuardExpr(o.optimizeExpr, c.Guard),
+				Guard:     withGuard(func(n ast.Node) ast.Node { return o.optimizeExpr(n.(ast.Expression)) }, c.Guard),
 				Body:      o.optimizeExpr(c.Body),
 				IsDefault: c.IsDefault,
 			}

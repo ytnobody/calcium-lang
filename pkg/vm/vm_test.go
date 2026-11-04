@@ -2759,3 +2759,31 @@ func TestCallClosureSyncRestoresStackOnDepthLimit(t *testing.T) {
 		t.Errorf("frame index not restored: before=%d after=%d", framesBefore, vm.framesIndex)
 	}
 }
+
+// isBitwiseOp relies on the bitwise opcodes forming one contiguous block, so an opcode
+// inserted in the middle would silently change the classification. This pins the block,
+// including the unary NOT that lives inside it.
+func TestBitwiseOpcodesAreAContiguousBlock(t *testing.T) {
+	want := []bytecode.OpCode{
+		bytecode.OpBitAnd, bytecode.OpBitOr, bytecode.OpBitXor, bytecode.OpBitNot,
+		bytecode.OpShl, bytecode.OpShr,
+	}
+	for i, op := range want {
+		if got := int(op); got != int(bytecode.OpBitAnd)+i {
+			t.Fatalf("opcode %d is not contiguous with OpBitAnd (%d)", got, bytecode.OpBitAnd)
+		}
+		if i == 3 {
+			continue // OpBitNot is unary: inside the range, never a binary op
+		}
+		if !isBitwiseOp(op) {
+			t.Errorf("isBitwiseOp(%d) = false, want true", op)
+		}
+	}
+	// OpBitNot sits inside the range and is a unary operator: it must not reach the
+	// binary path, which is guaranteed because it is never dispatched to executeBinaryOp.
+	for _, op := range []bytecode.OpCode{bytecode.OpAdd, bytecode.OpSub, bytecode.OpMul, bytecode.OpDiv} {
+		if isBitwiseOp(op) {
+			t.Errorf("isBitwiseOp(%d) = true for an arithmetic opcode", op)
+		}
+	}
+}

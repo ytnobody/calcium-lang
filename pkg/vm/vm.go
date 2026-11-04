@@ -280,8 +280,11 @@ func NewWithGlobals(constants []value.Value, globals []value.Value) *VM {
 }
 
 // CloneForSpawn creates a lightweight VM clone for async.spawn execution.
-// The cloned VM shares constants, globals, modules, and builtins with the parent,
-// but has its own stack and frame to avoid data races during concurrent execution.
+// The cloned VM gives a spawned task its own stack, frames and ip, which is what keeps
+// concurrent execution from corrupting the parent's call state. Constants, modules and
+// builtins are shared and read-only. `globals` is shared and writable, so a task that
+// *assigns* a global races with the parent: spawn is for running a function, not for
+// sharing mutable state through globals (the same constraint the reference has).
 func (vm *VM) CloneForSpawn() *VM {
 	mainFn := &value.Function{
 		Name:      "<spawn>",
@@ -609,38 +612,39 @@ func (vm *VM) stackTrace() []string {
 		return funcName
 	}
 
-	// Only the frames that will be shown are kept. At the call-depth limit there are
-	// 8192 live frames and the trace shows 30; collecting every one first allocated a
-	// slice of the whole stack to throw almost all of it away.
+	// The walk itself is capped: at the call-depth limit there are 8192 live frames and
+	// the trace shows 30, so the innermost and outermost few are collected from both
+	// ends and the middle is counted, not visited.
 	head := maxStackTraceFrames / 2
 	tail := maxStackTraceFrames - head
+
 	var first, last []*Frame
-	total := 0
-	for i := vm.framesIndex - 1; i >= 0; i-- {
-		frame := vm.frames[i]
-		if frame == nil || frame.cl == nil || frame.cl.Fn == nil {
-			continue // no resolvable function
-		}
-		total++
-		if len(first) < head {
-			first = append(first, frame)
-			continue
-		}
-		last = append(last, frame)
-		if len(last) > tail {
-			last = last[1:]
+	for i := vm.framesIndex - 1; i >= 0 && len(first) < head; i-- {
+		if f := vm.frames[i]; f != nil && f.cl != nil && f.cl.Fn != nil {
+			first = append(first, f)
 		}
 	}
+	for i := 0; i < vm.framesIndex && len(last) < tail; i++ {
+		if f := vm.frames[i]; f != nil && f.cl != nil && f.cl.Fn != nil {
+			last = append(last, f)
+		}
+	}
+	// Innermost first, so the outermost block has to be reversed.
+	for i, j := 0, len(last)-1; i < j; i, j = i+1, j-1 {
+		last[i], last[j] = last[j], last[i]
+	}
 
-	// Truncate the middle: the innermost frames show where execution stopped and the
-	// outermost show how it got there, while the middle is usually the same recursive
-	// call repeated.
+	// Frames between the two blocks were not visited; the count is of live frames, so a
+	// frame without a resolvable function is counted here but would not have been
+	// printed before either.
+	omitted := vm.framesIndex - len(first) - len(last)
+
 	entries := make([]string, 0, maxStackTraceFrames+1)
 	for _, frame := range first {
 		entries = append(entries, format(frame))
 	}
-	if total > maxStackTraceFrames {
-		entries = append(entries, fmt.Sprintf("... %d frame(s) omitted ...", total-maxStackTraceFrames))
+	if omitted > 0 {
+		entries = append(entries, fmt.Sprintf("... %d frame(s) omitted ...", omitted))
 	}
 	for _, frame := range last {
 		entries = append(entries, format(frame))
@@ -1652,10 +1656,8 @@ func (vm *VM) executeBinaryOp(op bytecode.OpCode) error {
 	}
 
 	// Bitwise operators are integer-only; handle them before the numeric branch
-	// so that float operands get a bitwise-specific error message. Their opcodes are
-	// contiguous (OpBitAnd..OpShr), so a range check keeps the dominant `+ - * /`
-	// path from paying for a helper call.
-	if op >= bytecode.OpBitAnd && op <= bytecode.OpShr {
+	// so that float operands get a bitwise-specific error message.
+	if isBitwiseOp(op) {
 		if leftType != value.TYPE_INT || rightType != value.TYPE_INT {
 			return fmt.Errorf("type error: bitwise operator requires int operands, got %s and %s\nhint: bitwise operators (&, |, ^, <<, >>) only accept int values", leftType, rightType)
 		}
@@ -1697,6 +1699,15 @@ func (vm *VM) executeIntegerBinaryOp(op bytecode.OpCode, left, right int64) erro
 		return fmt.Errorf("unknown integer operator: %d", op)
 	}
 	return vm.push(value.Int(result))
+}
+
+// isBitwiseOp reports whether op is one of the infix bitwise operators. They are declared
+// as one contiguous block (OpBitAnd..OpShr) - TestBitwiseOpcodesAreAContiguousBlock pins
+// that - so this is a range check rather than a switch, which matters because it runs
+// once per binary operation. OpBitNot sits inside the block but is a *unary* operator
+// with its own handler, so it never reaches executeBinaryOp.
+func isBitwiseOp(op bytecode.OpCode) bool {
+	return op >= bytecode.OpBitAnd && op <= bytecode.OpShr
 }
 
 // executeBitwiseIntOp implements the infix bitwise operators. Both operands are

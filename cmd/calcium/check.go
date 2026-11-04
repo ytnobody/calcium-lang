@@ -12,9 +12,14 @@ import (
 // runCheck prints the gradual type checker's findings for the given files.
 //
 // Like `lex`, this exists to make one component observable on its own so a
-// reimplementation can be compared against it. The format is one finding per
-// line, `<line>:<column>\t<rule>`, with a `<file>: <n> finding(s)` trailer. The
-// message text is deliberately absent: diagnostics are not part of the
+// reimplementation can be compared against it. Two shapes reach stdout:
+//
+//   - findings: one per line, `<line>:<column>\t<rule>`, then
+//     `<file>: <n> finding(s)`;
+//   - a file the parser cannot read: `<file>: parse errors`, with no finding lines,
+//     because positions of findings that were never produced are meaningless.
+//
+// The message text is deliberately absent: diagnostics are not part of the
 // compatibility contract, positions and rules are.
 func runCheck(args []string) int {
 	_, files := splitArgs(args)

@@ -31,10 +31,13 @@ func runLex(args []string) int {
 		return 1
 	}
 
+	status := 0
 	for _, file := range files {
 		content, ok := readInput("calcium lex", file)
 		if !ok {
-			return 1
+			// Like `check` and `lint`: report it and carry on with the rest of the list.
+			status = 1
+			continue
 		}
 		lex := lexer.New(string(content))
 		count := 0
@@ -48,5 +51,5 @@ func runLex(args []string) int {
 		}
 		fmt.Printf("# tokens: %d\n", count)
 	}
-	return 0
+	return status
 }

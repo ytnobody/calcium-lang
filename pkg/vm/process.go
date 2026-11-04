@@ -158,6 +158,9 @@ func primitiveProcStart(args ...value.Value) value.Value {
 		}
 		h := args[2].AsHash()
 		for _, k := range h.Keys() {
+			if k.Type != value.TYPE_STRING {
+				return value.Failure(value.String("__proc_start: env names must be strings"))
+			}
 			v, ok := h.Get(k)
 			if !ok || v.Type != value.TYPE_STRING {
 				return value.Failure(value.String("__proc_start: env values must be strings"))

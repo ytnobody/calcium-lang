@@ -446,8 +446,30 @@ func (f *Formatter) formatMatchCase(c *ast.MatchCase) string {
 		pattern += " if " + f.formatExpression(c.Guard)
 	}
 
+	// A match as the body needs a column of its own: its arms are indented one level
+	// below this case, and if they landed on this match's arm column the output would
+	// be rejected by the nested-match rule (and would read as the outer match's arms).
+	if _, isMatch := c.Body.(*ast.MatchExpression); isMatch {
+		f.depth++
+		body := f.formatExpression(c.Body)
+		f.depth--
+		return pattern + " => " + body
+	}
+
 	body := f.formatExpression(c.Body)
 	return pattern + " => " + body
+}
+
+// bodyExpression formats the body of a handler case, giving a nested match a column of
+// its own for the same reason as formatMatchCase.
+func (f *Formatter) bodyExpression(e ast.Expression) string {
+	if _, isMatch := e.(*ast.MatchExpression); isMatch {
+		f.depth++
+		formatted := f.formatExpression(e)
+		f.depth--
+		return formatted
+	}
+	return f.formatExpression(e)
 }
 
 func (f *Formatter) formatEffectHandleExpression(e *ast.EffectHandleExpression) string {
@@ -457,8 +479,8 @@ func (f *Formatter) formatEffectHandleExpression(e *ast.EffectHandleExpression) 
 	ind := f.indent()
 	f.depth--
 
-	successCase := ind + "success(" + e.SuccessVar.Value + ") => " + f.formatExpression(e.SuccessBody)
-	failureCase := ind + "failure(" + e.FailureVar.Value + ") => " + f.formatExpression(e.FailureBody)
+	successCase := ind + "success(" + e.SuccessVar.Value + ") => " + f.bodyExpression(e.SuccessBody)
+	failureCase := ind + "failure(" + e.FailureVar.Value + ") => " + f.bodyExpression(e.FailureBody)
 
 	return subject + " !? {\n" + successCase + "\n" + failureCase + "\n" + f.indent() + "}"
 }

@@ -2787,3 +2787,31 @@ func TestBitwiseOpcodesAreAContiguousBlock(t *testing.T) {
 		}
 	}
 }
+
+// A pattern's fields are bound only after every literal field has matched. Binding
+// `x` first meant a rejected arm still assigned it: `Pair(x, 5)` against `Pair(10, 7)`
+// left x = 10 for whatever came next.
+func TestRejectedMatchArmDoesNotBindPatternFields(t *testing.T) {
+	program := parse(`
+		type Pair = Pair(a, b);
+		p = Pair(10, 7);
+		match p
+			Pair(x, 5) => 0
+			_ => 0;
+		x;
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err != nil {
+		t.Fatalf("vm error: %s", err)
+	}
+
+	got := vm.LastPoppedStackElem()
+	if got.Type == value.TYPE_INT && got.AsInt() == 10 {
+		t.Fatalf("the rejected arm bound x to 10")
+	}
+}

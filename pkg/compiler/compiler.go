@@ -1881,6 +1881,11 @@ func (c *Compiler) compileNode(node ast.Node, inTail bool) error {
 	case *ast.SecretWithExpression:
 		// Secret.with(capability) { ... }: activate the capability while the
 		// block is evaluated and require !!!> for Secret effect writes.
+		//
+		// `c.tail` is deliberately *not* propagated to the final expression, unlike
+		// `do` blocks: OpSecretWithEnd must run to close the capability scope, and a
+		// tail call would replace the frame before it did - leaking the capability for
+		// the rest of the program.
 		if err := c.Compile(node.Capability); err != nil {
 			return err
 		}
@@ -1984,6 +1989,47 @@ func (c *Compiler) compileOr(node *ast.InfixExpression) error {
 	return nil
 }
 
+// patternFieldIsLiteral reports whether a constructor pattern's field is compared
+// against a literal rather than bound to a name. A wildcard does neither.
+func patternFieldIsLiteral(field ast.Expression) bool {
+	switch field.(type) {
+	case *ast.WildcardExpression:
+		return false
+	case *ast.Identifier:
+		return false
+	}
+	return true
+}
+
+// patternFieldIsBinding reports whether the field binds a name.
+func patternFieldIsBinding(field ast.Expression) bool {
+	if _, isWildcard := field.(*ast.WildcardExpression); isWildcard {
+		return false
+	}
+	_, isIdent := field.(*ast.Identifier)
+	return isIdent
+}
+
+// bindPatternField stores the value already extracted for a field in its name.
+func (c *Compiler) bindPatternField(field ast.Expression) {
+	ident, ok := field.(*ast.Identifier)
+	if !ok {
+		return
+	}
+	if ident.Value == "_" {
+		// Tolerate Identifier{"_"} produced before wildcards were represented
+		// explicitly.
+		c.emit(bytecode.OpPop)
+		return
+	}
+	sym := c.symbolTable.Define(ident.Value)
+	if sym.Scope == GlobalScope {
+		c.emit(bytecode.OpSetGlobal, sym.Index)
+		return
+	}
+	c.emit(bytecode.OpSetLocal, sym.Index)
+}
+
 func (c *Compiler) compileMatch(node *ast.MatchExpression, inTail bool) error {
 	// Compile subject
 	err := c.Compile(node.Subject)
@@ -2053,43 +2099,34 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression, inTail bool) error {
 			c.emit(bytecode.OpMatchADT, tagIdx, len(cp.Fields))
 			rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 
-			// Stack now: [subject]. Bind or match each field: extract the payload
-			// position, then either bind it to a variable or compare it against a
-			// literal.
+			// Stack now: [subject]. Every literal field is checked *before* any name
+			// is bound: a binding executed earlier survives the arm's rejection, and a
+			// following arm's identifier then resolves to it - `Pair(x, 5)` against
+			// `Pair(10, 7)` left `x = 10` behind for the next arm.
 			for i, field := range cp.Fields {
-				if _, isWildcard := field.(*ast.WildcardExpression); isWildcard {
+				if !patternFieldIsLiteral(field) {
 					continue
 				}
-
 				c.emit(bytecode.OpDup)
-				idxConst := c.addConstant(value.Int(int64(i)))
-				c.emit(bytecode.OpConstant, idxConst)
+				c.emit(bytecode.OpConstant, c.addConstant(value.Int(int64(i))))
 				c.emit(bytecode.OpIndex)
-
-				ident, isBinding := field.(*ast.Identifier)
-				if isBinding && ident.Value == "_" {
-					// Tolerate Identifier{"_"} produced before wildcards were
-					// represented explicitly.
-					c.emit(bytecode.OpPop)
-					continue
-				}
-
-				if isBinding {
-					sym := c.symbolTable.Define(ident.Value)
-					if sym.Scope == GlobalScope {
-						c.emit(bytecode.OpSetGlobal, sym.Index)
-					} else {
-						c.emit(bytecode.OpSetLocal, sym.Index)
-					}
-					continue
-				}
-
-				// Literal payload: compare the extracted value against it.
 				if err := c.Compile(field); err != nil {
 					return err
 				}
 				c.emit(bytecode.OpEqual)
 				rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
+			}
+
+			// Only now bind the names, so nothing is assigned by an arm that is
+			// rejected.
+			for i, field := range cp.Fields {
+				if !patternFieldIsBinding(field) {
+					continue
+				}
+				c.emit(bytecode.OpDup)
+				c.emit(bytecode.OpConstant, c.addConstant(value.Int(int64(i))))
+				c.emit(bytecode.OpIndex)
+				c.bindPatternField(field)
 			}
 
 			c.emit(bytecode.OpPop)

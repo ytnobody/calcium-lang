@@ -92,14 +92,20 @@ type Parser struct {
 	// match's cases cannot be told apart from that match's arms, so the parser
 	// reports it instead of silently attributing them to the inner match.
 	armColumns []int
+
+	// noArrowLines remembers lines that cannot contain a case arrow. The statement loop
+	// retries a malformed line token by token, and without this each retry rescanned the
+	// line - quadratic in its length on input like `match x x x ...`.
+	noArrowLines map[int]bool
 }
 
 // New creates a new Parser
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
-		l:      l,
-		input:  l.Input(),
-		errors: []string{},
+		l:            l,
+		input:        l.Input(),
+		errors:       []string{},
+		noArrowLines: make(map[int]bool),
 	}
 
 	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
@@ -1454,7 +1460,16 @@ func (p *Parser) exprToIdentifiers(expr ast.Expression) []*ast.Identifier {
 	}
 }
 
+// An array literal is bounded by `]`, so a match inside it cannot steal an enclosing
+// match's arms: the enclosing columns are suspended while its items are parsed, the
+// same way parentheses and `do ... end` suspend them.
 func (p *Parser) parseArrayLiteral() ast.Expression {
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+	return p.parseArrayLiteralInner()
+}
+
+func (p *Parser) parseArrayLiteralInner() ast.Expression {
 	array := &ast.ArrayLiteral{Token: p.curToken}
 	array.Elements = []ast.Expression{}
 
@@ -1492,7 +1507,15 @@ func (p *Parser) parseArrayLiteral() ast.Expression {
 	return array
 }
 
+// parseHashLiteral is bounded by `}`, so it suspends the enclosing columns like an
+// array literal does.
 func (p *Parser) parseHashLiteral() ast.Expression {
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+	return p.parseHashLiteralInner()
+}
+
+func (p *Parser) parseHashLiteralInner() ast.Expression {
 	hash := &ast.HashLiteral{Token: p.curToken}
 	hash.Pairs = []ast.HashPair{}
 
@@ -1563,7 +1586,11 @@ func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
 	}
 
 	exp := &ast.CallExpression{Token: p.curToken, Function: function}
+	// The argument list is bounded by `)`, so a match inside it cannot steal an
+	// enclosing match's arms: suspend the enclosing columns while it is parsed.
+	saved := p.suspendArms()
 	exp.Arguments = p.parseExpressionList(token.RPAREN)
+	p.resumeArms(saved)
 	return exp
 }
 
@@ -1846,9 +1873,15 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 func (p *Parser) looksLikeMatchCase() bool {
 	line := p.peekToken.Line
 	depth := 0
-	// No fixed budget: the terminators below guarantee the scan ends, and a guard with
-	// many comparisons can legitimately run long.
-	for n := 1; ; n++ {
+	// A cap, because this runs from the statement loop: a file of malformed `match`
+	// headers is retried token by token, and an unbounded scan makes that quadratic in
+	// the file size. 1024 tokens is far more than a real case needs - a guard with
+	// twenty comparisons is about 70 - while keeping recovery linear.
+	if p.noArrowLines[line] {
+		return false
+	}
+	const maxCaseLookaheadTokens = 256
+	for n := 1; n <= maxCaseLookaheadTokens; n++ {
 		tok := p.peekN(n)
 		if tok.Type == token.EOF || p.isEndToken(tok) {
 			return false
@@ -1857,6 +1890,8 @@ func (p *Parser) looksLikeMatchCase() bool {
 		// that the statement after a match (which has no arrow) ends it. Inside brackets
 		// a pattern may span lines, and the closing bracket resets the line.
 		if depth == 0 && tok.Line != line {
+			// The whole line was scanned without finding an arrow at depth 0.
+			p.noArrowLines[line] = true
 			return false
 		}
 		switch tok.Type {
@@ -1878,6 +1913,22 @@ func (p *Parser) looksLikeMatchCase() bool {
 		}
 		line = tok.Line
 	}
+	// The cap was reached: treat it as "not a case" rather than scanning the rest of
+	// the file.
+	return false
+}
+
+// suspendArms clears the enclosing-arm stack and returns it, so a caller can restore
+// it with resumeArms. `withSuspendedArms` is the expression-shaped wrapper; this pair
+// exists for the parse functions that return other types.
+func (p *Parser) suspendArms() []int {
+	saved := p.armColumns
+	p.armColumns = nil
+	return saved
+}
+
+func (p *Parser) resumeArms(saved []int) {
+	p.armColumns = saved
 }
 
 // withSuspendedArms clears the enclosing-arm stack while parsing a construct that

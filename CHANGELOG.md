@@ -4,6 +4,60 @@
 
 ### Breaking changes
 
+- **`os.proc_start` no longer hands the parent's environment to the child.** A child
+  process used to inherit every variable in the Calcium process's environment, which in
+  CI, containers and PaaS commonly includes credentials (`DB_PASSWORD`, `API_KEY`, …) -
+  a silent leak that `Secret` cannot guard, because the environment never enters the
+  language. `os.proc_start(cmd, args)` now runs the child with an **empty** environment;
+  pass the names it needs explicitly with the new
+  `os.proc_start_env(cmd, args, {"PATH": …})`. A command without a path separator is
+  still resolved through the parent's `PATH`, which is a lookup rather than part of the
+  child's environment. The primitive `__proc_start` takes an optional third argument, a
+  hash of name → value. See `specs/ffi-primitives.md` §3.10.
+- **Every `match` arm is now conditional, including the final one.** Previously
+  the final arm always ran, whatever its pattern, so `match tok A(n) => ... B(n)
+  => ...` destructured a `C` as `B` and ran the wrong branch. Now, if no arm
+  matches, the match raises a runtime error naming the value
+  (`no match arm matched 8`).
+
+  Code that relied on the implicit catch-all needs an explicit arm:
+
+  ```calcium
+  // before: the second `true` acted as "otherwise" by accident
+  func abs(n) = match n < 0  true => -n  true => n;
+  // after
+  func abs(n) = match n < 0  true => -n  _ => n;
+  ```
+
+  The same pattern appeared with non-boolean subjects, where the final `true`
+  never even compared equal (`match len(xs) 0 => ... true => ...`): those arms
+  now reject, which surfaces the latent bug instead of hiding it. The core
+  standard library has been fixed; dependent modules should be audited with
+  `calcium lint` or by running their tests.
+
+  Tail calls are unaffected: the no-match handler is emitted before the final
+  arm, so a tail call remains the last instruction before `OpReturn`.
+
+- **Tail calls are now optimized in any `match` arm and inside `do` blocks.** Previously only a call that happened to be the very last instruction before the function's return became a tail call, which in practice meant only the final arm. A recursive call in a non-final arm (`Cons(h, t) => parse(t, ...)` with `Nil => ...` after it) grew the stack and hit the 8,192-frame limit. Tail position is now tracked through match arms, `do` block final expressions and `return`.
+- **A nested `match` in an arm body no longer swallows the enclosing match's
+  remaining arms.** `true => match y ... false => ...` used to attach the outer
+  `false => ...` to the inner match, leaving the outer match with a single arm.
+  Indentation now decides: a case indented *strictly* further left than the inner
+  match's first case belongs to the enclosing match. Parentheses also delimit a
+  nested match in contexts where layout cannot.
+- **A nested `match` at the enclosing match's column is now a compile error.** Both
+  readings parse - the case could be the inner match's or the enclosing one's - and
+  the inner match used to keep it silently, leaving the enclosing match without the
+  arm its author wrote (which then failed later as "no match arm matched"). The
+  parser reports `ambiguous nested match` with a hint instead. Indent the inner match
+  further, wrap it in parentheses, or put it in a `do ... end` block to choose.
+- **`match` on a constant subject is only folded when it is decidable.** The
+  optimiser used to select the arm whose literal pattern equalled the subject,
+  ignoring condition patterns. `match true` with `n % 15 == 0 => ...` arms was
+  therefore mis-compiled at `-O1`; it now works. The same fix applies to guard
+  clauses, which were dropped entirely by all three optimiser passes
+  (`-O0` worked, `-O1`/`-O2` did not).
+
 - **Lookup absence now uses the built-in `Maybe` type.** `get(collection, key)`, `head(array)`, and `string.char_at(s, index)` return `Maybe.Some(value)` or `Maybe.None`; use `get(collection, key, default)` when a raw default is desired. Missing hash keys and out-of-range array/tuple/ADT indices now raise runtime errors instead of returning `null`.
 - **Removed the user-visible `Null` type and null APIs.** `types.null`, `Null` type annotations, `Null?`, `types.is_null`, `assert.is_null`, and `assert.not_null` are gone. Use `Maybe`, `Maybe.None`, `assert.is_none`, and `assert.is_some` instead.
 - **External nulls map to `Maybe.None`.** JSON `null`, database `NULL`, and TOML absence now become `Maybe.None`; `json.stringify(Maybe.None)` emits `null`, and `json.stringify(Maybe.Some(v))` serializes `v`. `dbi.query_row` returns `success(Maybe.None)` when no row matches, and `dbi.quote(Maybe.None)` returns `NULL`.
@@ -21,9 +75,47 @@
 
 ### Standard library
 
+- Added the **`core.bytes`** module: `bytes.to_bytes`, `bytes.from_bytes`,
+  `bytes.byte_len` and `bytes.char_count`. Byte offsets are now available
+  explicitly, without widening `core.string`'s rune-based contract: a
+  byte-oriented scanner needs byte positions, but `len`, `char_at` and
+  `substring` remain code-point based. Backed by the new `__str_to_bytes` and
+  `__str_from_bytes` primitives.
+
 - Added `string.from_code(cp)`: converts a Unicode code point to its string representation (returns `success`/`failure`; rejects surrogates and out-of-range values).
 
+### Tooling
+
+- Added `calcium lex <file.ca> [...]`, which dumps the token stream as
+  `<line>:<column>\t<kind>\t<literal>` (one token per line, plus a
+  `# tokens: N` trailer). Literals escape only backslash, newline, tab and
+  carriage return, so a line always holds exactly one token. This makes the
+  lexer observable on its own, which is what the self-hosted implementation is
+  compared against before a parser exists.
+
 ### Language
+
+- **A `match` can now be used inside a call, an array, a hash or a group.**
+  Case parsing stopped only at `;`, EOF or a shallower column, so
+  `f(match x a => 1 _ => 2)` was a parse error. A closing delimiter or a comma
+  cannot start a case, so the match now ends there.
+- **Qualified constructor patterns now match for user-defined types.** A value
+  stores the short variant tag, but a pattern like `Shape.Circle(r)` compares
+  against `"Shape.Circle"`, so it never matched — only the built-in `Maybe`,
+  whose tags happen to be spelled out in full, worked. Matching now accepts both
+  the bare variant and the type-qualified spelling, which is what makes a
+  variant matchable from another module.
+
+- **Constructor patterns can now match literal payloads.** A payload position may
+  be a binding name, `_`, or a literal (`5`, `"ok"`, `-2`, `3.5`, `true`).
+  Previously every payload token was parsed as a binding name, so `Number(0)`
+  matched *any* `Number` and silently bound a variable named `0`; `Keyword("if")`
+  matched any keyword. Anything that is not a name, `_`, or a literal is now a
+  parse error instead of a silent binding.
+- A literal payload pattern may appear in any arm, including the final one.
+
+- Added **bitwise operators**: `&`, `|`, `^` (plus prefix `^` for bitwise NOT), `<<`, and `>>`. They are integer-only and follow Go's precedence rather than C's (`<< >> &` bind like `* / %`, `| ^` like `+ -`), so `x & 0xFF == 0` reads as `(x & 0xFF) == 0`. Right shift is arithmetic; shift counts must be non-negative, and counts of 64 or more are well defined.
+- Running out of call frames (8,192) now reports a `stack overflow` error with a hint instead of crashing with a Go panic, and stack traces are truncated with a `... N frame(s) omitted ...` marker so that a maximum-depth failure stays readable.
 
 - Added built-in common constraints available everywhere (as parameter annotations and `?` checks): `NonZero`, `Positive`, `NonNegative`, `Natural`, `Finite`, `NonEmpty`, `Empty`, `Digits`, `Lowercase`, `Uppercase`. Statically-detectable violations on literal call arguments are caught at compile time. User-defined constraints with the same name shadow the built-ins.
 - Added composite parameter annotations: `func f(a: Positive & NonZero)` (AND) and `func f(a: Int | String)` (UNION), which expand to synthetic constraints with static + runtime enforcement. Mixing `&` and `|` in one annotation is a parse error.

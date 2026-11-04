@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 	"github.com/ytnobody/calcium-lang/pkg/value"
 )
 
@@ -530,6 +531,80 @@ func primitiveStrContains(args ...value.Value) value.Value {
 		return value.Failure(value.String("__str_contains: arguments must be strings"))
 	}
 	return value.Bool(strings.Contains(args[0].AsString(), args[1].AsString()))
+}
+
+// __str_to_bytes returns the UTF-8 bytes of a string as an array of ints.
+// The self-hosted front end works on bytes, because the reference lexer does:
+// columns and slices there are byte-based.
+func primitiveStrToBytes(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__str_to_bytes: expected 1 argument (string)"))
+	}
+	if args[0].Type != value.TYPE_STRING {
+		return value.Failure(value.String("__str_to_bytes: argument must be string"))
+	}
+	return value.Array(bytesToValueArray([]byte(args[0].AsString())))
+}
+
+// bytesToValueArray boxes a byte slice as the Calcium array of ints the byte
+// primitives hand back. Every one of them does exactly this, so it lives here once.
+func bytesToValueArray(b []byte) []value.Value {
+	out := make([]value.Value, len(b))
+	for i, c := range b {
+		out[i] = value.Int(int64(c))
+	}
+	return out
+}
+
+// __int_to_bytes encodes a signed 64-bit integer as its eight big-endian
+// two's-complement bytes. The .bone format stores integers that way, and doing
+// the two's-complement conversion in Calcium would mean exact arithmetic on
+// values that do not fit an int64.
+func primitiveIntToBytes(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__int_to_bytes: expected 1 argument (int)"))
+	}
+	if args[0].Type != value.TYPE_INT {
+		return value.Failure(value.String("__int_to_bytes: argument must be int"))
+	}
+	return value.Array(bytesToValueArray(bytecode.EncodeInt64(args[0].AsInt())))
+}
+
+// __float_to_bytes encodes a float64 as its eight big-endian IEEE 754 bytes.
+// The .bone format stores floats that way.
+func primitiveFloatToBytes(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__float_to_bytes: expected 1 argument (float)"))
+	}
+	if args[0].Type != value.TYPE_FLOAT {
+		return value.Failure(value.String("__float_to_bytes: argument must be float"))
+	}
+	return value.Array(bytesToValueArray(bytecode.EncodeFloat64(args[0].AsFloat())))
+}
+
+// __str_from_bytes builds a string from an array of byte values (0-255). Bytes
+// are copied verbatim, so a run of single bytes reassembles the original UTF-8
+// text.
+func primitiveStrFromBytes(args ...value.Value) value.Value {
+	if len(args) != 1 {
+		return value.Failure(value.String("__str_from_bytes: expected 1 argument (array of bytes)"))
+	}
+	if args[0].Type != value.TYPE_ARRAY {
+		return value.Failure(value.String("__str_from_bytes: argument must be an array"))
+	}
+	arr := args[0].AsArray()
+	b := make([]byte, len(arr))
+	for i, v := range arr {
+		if v.Type != value.TYPE_INT {
+			return value.Failure(value.String("__str_from_bytes: every element must be an int"))
+		}
+		n := v.AsInt()
+		if n < 0 || n > 255 {
+			return value.Failure(value.String(fmt.Sprintf("__str_from_bytes: byte out of range: %d", n)))
+		}
+		b[i] = byte(n)
+	}
+	return value.String(string(b))
 }
 
 // =============================================================================
@@ -1628,6 +1703,10 @@ func GetPrimitives() map[string]*value.Builtin {
 		"__str_trim":        {Name: "__str_trim", Fn: primitiveStrTrim},
 		"__str_upper":       {Name: "__str_upper", Fn: primitiveStrUpper},
 		"__str_lower":       {Name: "__str_lower", Fn: primitiveStrLower},
+		"__str_to_bytes":    {Name: "__str_to_bytes", Fn: primitiveStrToBytes},
+		"__str_from_bytes":  {Name: "__str_from_bytes", Fn: primitiveStrFromBytes},
+		"__int_to_bytes":    {Name: "__int_to_bytes", Fn: primitiveIntToBytes},
+		"__float_to_bytes":  {Name: "__float_to_bytes", Fn: primitiveFloatToBytes},
 		"__str_replace":     {Name: "__str_replace", Fn: primitiveStrReplace},
 		"__str_substring":   {Name: "__str_substring", Fn: primitiveStrSubstring},
 		"__str_char_at":     {Name: "__str_char_at", Fn: primitiveStrCharAt},

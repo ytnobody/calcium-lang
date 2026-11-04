@@ -17,18 +17,13 @@ type lintFileResult struct {
 // runLint lints the given source files and reports findings. It returns a
 // process exit code (0 = no findings, 1 = findings or read error).
 func runLint(args []string) int {
+	flags, files := splitArgs(args, "--json")
 	jsonOut := false
-	var files []string
-
-	for _, a := range args {
-		switch a {
-		case "--json":
+	for _, f := range flags {
+		if f == "--json" {
 			jsonOut = true
-		default:
-			files = append(files, a)
 		}
 	}
-
 	if len(files) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: calcium lint [--json] <file.ca> [...]")
 		return 1

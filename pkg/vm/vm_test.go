@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/bytecode"
 	"github.com/ytnobody/calcium-lang/pkg/compiler"
 	"github.com/ytnobody/calcium-lang/pkg/lexer"
 	"github.com/ytnobody/calcium-lang/pkg/parser"
@@ -1722,6 +1723,333 @@ func TestTailCallDeepRecursion(t *testing.T) {
 	testExpectedValue(t, 0, result)
 }
 
+func TestNonTailRecursionReportsStackOverflow(t *testing.T) {
+	// Non-tail recursion cannot be optimized away, so it must exhaust the frame
+	// stack. Before the bounds check in pushFrame this indexed past the end of
+	// the frame slice and crashed the whole process with a Go panic.
+	program := parse(`
+		func countdown(n) =
+			match n
+				0 => 0
+				_ => 1 + countdown(n - 1);
+		countdown(100000);
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	err := vm.Run(comp.Bytecode().Instructions)
+	if err == nil {
+		t.Fatal("expected a stack overflow error, got nil")
+	}
+	if !strings.Contains(err.Error(), "stack overflow") {
+		t.Fatalf("expected a stack overflow error, got: %s", err)
+	}
+	if !strings.Contains(err.Error(), "call depth") {
+		t.Fatalf("expected the call depth to be reported, got: %s", err)
+	}
+}
+
+func TestStackOverflowTraceIsBounded(t *testing.T) {
+	// A stack overflow happens at maximum depth, so rendering every frame would
+	// produce thousands of lines. The trace must be truncated instead.
+	program := parse(`
+		func countdown(n) =
+			match n
+				0 => 0
+				_ => 1 + countdown(n - 1);
+		countdown(100000);
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	err := vm.Run(comp.Bytecode().Instructions)
+	if err == nil {
+		t.Fatal("expected a stack overflow error, got nil")
+	}
+
+	rendered := 0
+	for _, line := range strings.Split(err.Error(), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "countdown at ") {
+			rendered++
+		}
+	}
+	if rendered == 0 {
+		t.Fatal("expected the stack trace to contain call frames")
+	}
+	if rendered > maxStackTraceFrames {
+		t.Fatalf("stack trace was not truncated: rendered %d frames (limit %d)", rendered, maxStackTraceFrames)
+	}
+	if !strings.Contains(err.Error(), "frame(s) omitted") {
+		t.Fatalf("expected an omission marker in the stack trace, got: %s", err)
+	}
+}
+
+func TestBitwiseOperators(t *testing.T) {
+	// runVmExpr compiles without the optimizer, so these exercise the VM opcodes
+	// rather than constant folding.
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{"12 & 10;", 8},
+		{"12 | 10;", 14},
+		{"12 ^ 10;", 6},
+		{"1 << 4;", 16},
+		{"256 >> 3;", 32},
+		{"^0;", -1},
+		{"^5;", -6},
+		{"-1 >> 1;", -1}, // arithmetic shift keeps the sign
+		{"5 >> 70;", 0},  // oversized shifts are defined, not a panic
+		{"1 << 70;", 0},
+		{"1 + 2 << 3;", 17}, // Go precedence: 1 + (2 << 3)
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_INT || result.AsInt() != tt.expected {
+			t.Errorf("%q: expected %d, got %v", tt.input, tt.expected, result)
+		}
+	}
+}
+
+func TestBitwiseOperandTypeErrors(t *testing.T) {
+	runVmErrorTests(t, []string{
+		`func f(x, y) = x & y; f(1, 2.0);`,
+		`func f(x, y) = x | y; f("a", 1);`,
+		`func f(x, y) = x << y; f(1, 2.0);`,
+		`func f(x) = ^x; f(1.5);`,
+	})
+}
+
+func TestNegativeShiftCountIsAnError(t *testing.T) {
+	// A negative shift count would panic in Go, so it must be rejected first.
+	program := parse(`func f(x, y) = x << y; f(1, 0 - 1);`)
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+
+	vm := New(comp.Constants())
+	err := vm.Run(comp.Bytecode().Instructions)
+	if err == nil {
+		t.Fatal("expected an error for a negative shift count, got nil")
+	}
+	if !strings.Contains(err.Error(), "shift count must be non-negative") {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
+func TestADTConstructorPatternLiteralPayloads(t *testing.T) {
+	// A literal inside a constructor pattern must match the payload by value.
+	// Regression: every field used to be parsed as a binding, so `Tag(5)`
+	// matched any single-payload Tag and silently bound a variable named "5".
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{
+			`type T = Tag(v) | Other; s = Tag(5);
+			 match s Tag(5) => "literal" Tag(n) => "bound" Other => "other";`,
+			"literal",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag(9);
+			 match s Tag(5) => "literal" Tag(n) => "bound" Other => "other";`,
+			"bound",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag("a");
+			 match s Tag("a") => "literal" Tag(n) => "bound" Other => "other";`,
+			"literal",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag("b");
+			 match s Tag("a") => "literal" Tag(n) => "bound" Other => "other";`,
+			"bound",
+		},
+		{
+			`type T = Pair(a, b) | Other; s = Pair(1, 2);
+			 match s Pair(1, 2) => "both" Pair(x, y) => "pair" Other => "other";`,
+			"both",
+		},
+		{
+			`type T = Pair(a, b) | Other; s = Pair(1, 3);
+			 match s Pair(1, 2) => "both" Pair(x, y) => "pair" Other => "other";`,
+			"pair",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag(0 - 3);
+			 match s Tag(-3) => "neg" Tag(n) => "bound" Other => "other";`,
+			"neg",
+		},
+		{
+			`type T = Tag(v) | Other; s = Tag(true);
+			 match s Tag(false) => "f" Tag(_) => "wild" Other => "other";`,
+			"wild",
+		},
+		{
+			`type T = Tag(v) | Other; s = Other;
+			 match s Tag(1) => "one" Other => "other";`,
+			"other",
+		},
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_STRING || result.AsString() != tt.expected {
+			t.Errorf("%q: expected %q, got %v", tt.input, tt.expected, result)
+		}
+	}
+}
+
+func TestMatchNoArmMatched(t *testing.T) {
+	// Every arm is conditional, including the final one: if nothing matches, the
+	// match raises a runtime error instead of silently running the last body.
+	tests := []string{
+		// standard pattern
+		`match 5 0 => 0 99 => 99;`,
+		// constructor pattern, final arm
+		`type T = A(v) | B(v); t = A(1); match t B(n) => n;`,
+		// constructor pattern with a literal payload in the final arm
+		`type T = A(v) | B(v); t = B(2); match t A(1) => 1 B(9) => 9;`,
+		// guard whose condition is false
+		`func f(n) = match n x if x > 10 => x; f(3);`,
+	}
+
+	for _, input := range tests {
+		program := parse(input)
+		comp := compiler.New()
+		if err := comp.Compile(program); err != nil {
+			t.Fatalf("unexpected compile error for %q: %s", input, err)
+		}
+		machine := New(comp.Constants())
+		err := machine.Run(comp.Bytecode().Instructions)
+		if err == nil {
+			t.Fatalf("expected a no-match error for %q", input)
+		}
+		if !strings.Contains(err.Error(), "no match arm matched") {
+			t.Fatalf("%q: unexpected error: %s", input, err)
+		}
+	}
+}
+
+func TestMatchFinalArmStillMatches(t *testing.T) {
+	// The final arm is only an error when nothing matches; a matching final arm
+	// runs normally, including one with a literal payload.
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{`match 0 0 => 10 99 => 20;`, 10},
+		{`match 99 0 => 10 99 => 20;`, 20},
+		{`type T = A(v) | B(v); t = B(2); match t A(1) => 1 B(2) => 2;`, 2},
+		{`type T = A(v) | B(v); t = B(2); match t A(n) => 1 B(n) => n;`, 2},
+		{`func f(n) = match n x if x > 10 => 1 x if x >= 0 => 2; f(3);`, 2},
+		{`match 5 0 => 10 _ => 20;`, 20},
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_INT || result.AsInt() != tt.expected {
+			t.Errorf("%q: expected %d, got %v", tt.input, tt.expected, result)
+		}
+	}
+}
+
+// countOpcodeInFunctions counts `want` across the bodies of every compiled function
+// in the pool - a tail call lives inside a function record, not in main.
+func countOpcodeInFunctions(comp *compiler.Compiler, want bytecode.OpCode) int {
+	n := 0
+	for _, k := range comp.Constants() {
+		if k.Type != value.TYPE_FUNCTION {
+			continue
+		}
+		fn, ok := k.Data.(*value.Function)
+		if !ok {
+			continue
+		}
+		for ip := 0; ip < len(fn.Body); {
+			op := bytecode.OpCode(fn.Body[ip])
+			def, err := bytecode.Lookup(op)
+			if err != nil {
+				break
+			}
+			if op == want {
+				n++
+			}
+			_, width := bytecode.ReadOperands(def, fn.Body[ip+1:])
+			ip += 1 + width
+		}
+	}
+	return n
+}
+
+// The recursive call is in the *first* of two arms, so an arm's jump-to-end
+// instruction follows it. The call is still in tail position - the jump only skips
+// the remaining arms and a tail call never returns to run it - so it must be
+// optimized, or the recursion grows the stack and hits the frame limit.
+//
+// Both the bytecode and the depth-100000 run are asserted: the bytecode check is
+// what makes this a test of *this* shape, since a call in the final arm would be
+// optimized by the general mechanism and pass the run alone.
+func TestTailCallInNonFinalMatchArm(t *testing.T) {
+	program := parse(`
+		func loop(n, acc) = match n <= 0
+			false => loop(n - 1, acc + 1)
+			true => acc;
+		loop(100000, 0);
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+	if got := countOpcodeInFunctions(comp, bytecode.OpTailCall); got == 0 {
+		t.Fatalf("no OpTailCall in the compiled function: the call in a non-final arm was not optimized")
+	}
+
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err != nil {
+		t.Fatalf("vm error (tail call not optimized?): %s", err)
+	}
+	testExpectedValue(t, 100000, vm.LastPoppedStackElem())
+}
+
+// The same, with the match inside a `do` block in the first of two arms.
+func TestTailCallInsideDoBlockInNonFinalMatchArm(t *testing.T) {
+	program := parse(`
+		func loop(n, acc) = do
+			m = n - 1
+			match m < 0
+				false => loop(m, acc + 1)
+				true => acc
+		end;
+		loop(100000, 0);
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+	if got := countOpcodeInFunctions(comp, bytecode.OpTailCall); got == 0 {
+		t.Fatalf("no OpTailCall in the compiled function: the call in a non-final arm was not optimized")
+	}
+
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err != nil {
+		t.Fatalf("vm error (tail call not optimized?): %s", err)
+	}
+	testExpectedValue(t, 100000, vm.LastPoppedStackElem())
+}
+
 func TestCachedModuleStruct(t *testing.T) {
 	mod := CachedModule{
 		Author: "testauthor",
@@ -2350,5 +2678,140 @@ greet("a", "b", "c");
 	err := machine.Run(comp.Bytecode().Instructions)
 	if err == nil {
 		t.Fatal("expected error for unmatched arity overload, got nil")
+	}
+}
+
+func TestADTQualifiedConstructorPattern(t *testing.T) {
+	// A pattern may name the variant alone or qualify it with its type. Values
+	// store the short tag, so a qualified pattern has to be compared against
+	// "TypeName.Tag" as well; without that, matching a variant from another
+	// module (where only the type-qualified spelling is meaningful) never
+	// matched anything.
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`type Shape = Circle(r) | Other; s = Circle(2);
+		  match s Shape.Circle(r) => "qualified" Other => "other" _ => "none";`, "qualified"},
+		{`type Shape = Circle(r) | Other; s = Circle(2);
+		  match s Circle(r) => "short" Other => "other" _ => "none";`, "short"},
+		{`type Shape = Circle(r) | Other; s = Other;
+		  match s Shape.Circle(r) => "qualified" Other => "other" _ => "none";`, "other"},
+		// The later declaration wins the constructor name, so the value is a B.
+		{`type A = Same(x) | Other; type B = Same(y) | Other; v = Same(1);
+		  match v A.Same(x) => "a" B.Same(y) => "b" _ => "none";`, "b"},
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_STRING || result.AsString() != tt.expected {
+			t.Errorf("%q: expected %q, got %v", tt.input, tt.expected, result)
+		}
+	}
+}
+
+func TestMatchInsideCallOrGroup(t *testing.T) {
+	// A closing delimiter or a comma cannot start a case, so a match can be used
+	// inside a call, an array or a group without a trailing ';'.
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{`func id(x) = x; id(match 1 1 => 7 _ => 0);`, 7},
+		{`(match 2 1 => 7 2 => 8 _ => 0);`, 8},
+		{`h = [match 1 1 => 7 _ => 0, match 2 2 => 9 _ => 0]; h[1];`, 9},
+		{`{k: match 3 3 => 5 _ => 0}.k;`, 5},
+		{`func two(a, b) = a + b; two(match 1 1 => 3 _ => 0, match 1 1 => 4 _ => 0);`, 7},
+	}
+
+	for _, tt := range tests {
+		result := runVmExpr(t, tt.input)
+		if result.Type != value.TYPE_INT || result.AsInt() != tt.expected {
+			t.Errorf("%q: expected %d, got %v", tt.input, tt.expected, result)
+		}
+	}
+}
+
+// A call that cannot start because the frame stack is full must leave the VM as it
+// found it. The closure and its arguments are pushed before the frame is created, so
+// a failure that does not unwind leaves vm.sp permanently elevated and every later
+// push and pop addresses the wrong slot - a corrupted VM instead of a clean error.
+func TestCallClosureSyncRestoresStackOnDepthLimit(t *testing.T) {
+	fn := &value.Function{
+		Name:       "f",
+		Parameters: []string{"x"},
+		NumLocals:  1,
+		Body:       []byte{byte(bytecode.OpReturn)},
+	}
+	cl := &value.Closure{Fn: fn}
+
+	vm := New(nil)
+	vm.framesIndex = MaxFrames
+	spBefore, framesBefore := vm.sp, vm.framesIndex
+
+	if _, err := vm.callClosureSync(cl, []value.Value{value.Int(1)}); err == nil {
+		t.Fatal("expected a call-depth error")
+	}
+	if vm.sp != spBefore {
+		t.Errorf("stack pointer not restored: before=%d after=%d", spBefore, vm.sp)
+	}
+	if vm.framesIndex != framesBefore {
+		t.Errorf("frame index not restored: before=%d after=%d", framesBefore, vm.framesIndex)
+	}
+}
+
+// isBitwiseOp relies on the bitwise opcodes forming one contiguous block, so an opcode
+// inserted in the middle would silently change the classification. This pins the block,
+// including the unary NOT that lives inside it.
+func TestBitwiseOpcodesAreAContiguousBlock(t *testing.T) {
+	want := []bytecode.OpCode{
+		bytecode.OpBitAnd, bytecode.OpBitOr, bytecode.OpBitXor, bytecode.OpBitNot,
+		bytecode.OpShl, bytecode.OpShr,
+	}
+	for i, op := range want {
+		if got := int(op); got != int(bytecode.OpBitAnd)+i {
+			t.Fatalf("opcode %d is not contiguous with OpBitAnd (%d)", got, bytecode.OpBitAnd)
+		}
+		if i == 3 {
+			continue // OpBitNot is unary: inside the range, never a binary op
+		}
+		if !isBitwiseOp(op) {
+			t.Errorf("isBitwiseOp(%d) = false, want true", op)
+		}
+	}
+	// OpBitNot sits inside the range and is a unary operator: it must not reach the
+	// binary path, which is guaranteed because it is never dispatched to executeBinaryOp.
+	for _, op := range []bytecode.OpCode{bytecode.OpAdd, bytecode.OpSub, bytecode.OpMul, bytecode.OpDiv} {
+		if isBitwiseOp(op) {
+			t.Errorf("isBitwiseOp(%d) = true for an arithmetic opcode", op)
+		}
+	}
+}
+
+// A pattern's fields are bound only after every literal field has matched. Binding
+// `x` first meant a rejected arm still assigned it: `Pair(x, 5)` against `Pair(10, 7)`
+// left x = 10 for whatever came next.
+func TestRejectedMatchArmDoesNotBindPatternFields(t *testing.T) {
+	program := parse(`
+		type Pair = Pair(a, b);
+		p = Pair(10, 7);
+		match p
+			Pair(x, 5) => 0
+			_ => 0;
+		x;
+	`)
+
+	comp := compiler.New()
+	if err := comp.Compile(program); err != nil {
+		t.Fatalf("compiler error: %s", err)
+	}
+	vm := New(comp.Constants())
+	if err := vm.Run(comp.Bytecode().Instructions); err != nil {
+		t.Fatalf("vm error: %s", err)
+	}
+
+	got := vm.LastPoppedStackElem()
+	if got.Type == value.TYPE_INT && got.AsInt() == 10 {
+		t.Fatalf("the rejected arm bound x to 10")
 	}
 }

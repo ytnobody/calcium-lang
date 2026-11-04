@@ -502,12 +502,17 @@ type SecretWithExpression struct {
 func (se *SecretWithExpression) expressionNode()      {}
 func (se *SecretWithExpression) TokenLiteral() string { return se.Token.Literal }
 
-// ConstructorPattern represents a pattern like Some(x) or Leaf(v) in match
+// ConstructorPattern represents a pattern like Some(x) or Leaf(v) in match.
+//
+// Fields are pattern atoms. An *Identifier binds the payload position to a
+// variable, a *WildcardExpression ignores it, and any other expression must be
+// a literal and is matched against the payload by value. Literal matching is
+// what makes patterns like Some("version") compare instead of binding.
 type ConstructorPattern struct {
-	Token    token.Token   // the constructor name token
-	TypeName string        // optional qualified type name, e.g., "Maybe"
-	Name     string        // constructor name, e.g., "Some"
-	Fields   []*Identifier // binding variables, e.g., [x]
+	Token    token.Token  // the constructor name token
+	TypeName string       // optional qualified type name, e.g., "Maybe"
+	Name     string       // constructor name, e.g., "Some"
+	Fields   []Expression // bindings, wildcards, or literal matches
 }
 
 func (cp *ConstructorPattern) expressionNode()      {}

@@ -1,6 +1,7 @@
 package bytecode
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/ytnobody/calcium-lang/pkg/value"
@@ -284,5 +285,39 @@ func TestSerializeInstructions(t *testing.T) {
 		if cb2.Instructions[i] != instructions[i] {
 			t.Errorf("Instruction byte %d: expected %d, got %d", i, instructions[i], cb2.Instructions[i])
 		}
+	}
+}
+
+// A 1.0 file has no module_id field, and the format says the reader supplies
+// "entry". Leaving the Go zero value "" would map to "<unknown>" in the VM and
+// diverge from the specification a self-hosted reader follows - including for
+// Secret.capability, which is gated on the identity being "entry".
+func TestDeserializeVersion10DefaultsModuleIDToEntry(t *testing.T) {
+	var buf bytes.Buffer
+	buf.WriteString(MagicNumber)
+	buf.WriteByte(VersionMajor)
+	buf.WriteByte(0) // versionMinor: 1.0, so a function record has no module_id
+	writeUint32(&buf, 1)
+	buf.WriteByte(TypeTagFunction)
+	writeString(&buf, "f")
+	writeUint32(&buf, 0) // parameters
+	writeUint32(&buf, 0) // locals
+	buf.WriteByte(0)     // is_effect
+	writeUint32(&buf, 0) // body length
+	writeUint32(&buf, 0) // instruction length
+
+	cb, err := Deserialize(buf.Bytes())
+	if err != nil {
+		t.Fatalf("deserialize: %v", err)
+	}
+	if len(cb.Constants) != 1 {
+		t.Fatalf("expected 1 constant, got %d", len(cb.Constants))
+	}
+	fn, ok := cb.Constants[0].Data.(*value.Function)
+	if !ok {
+		t.Fatalf("constant is not a function: %T", cb.Constants[0].Data)
+	}
+	if fn.ModuleID != "entry" {
+		t.Errorf("1.0 module identity = %q, want %q", fn.ModuleID, "entry")
 	}
 }

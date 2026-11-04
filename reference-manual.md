@@ -273,6 +273,30 @@ x = 10;  // Error!
 
 Note: `+` is for numbers only. Use `concat()` for string concatenation.
 
+### Bitwise Operators
+
+Bitwise operators are integer-only; applying them to any other type is a runtime error.
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `&` | Bitwise AND | `0xFF & 0x0F` → `15` |
+| `\|` | Bitwise OR | `0x10 \| 0x01` → `17` |
+| `^` | Bitwise XOR | `0x0C ^ 0x0A` → `6` |
+| `<<` | Left shift | `1 << 4` → `16` |
+| `>>` | Right shift (arithmetic) | `256 >> 3` → `32` |
+| `^x` | Bitwise NOT (prefix) | `^5` → `-6` |
+
+```calcium
+-1 >> 1    // -1  (arithmetic shift replicates the sign bit)
+5 >> 70    // 0   (counts of 64 or more are well defined)
+^0         // -1
+```
+
+Shift counts must be non-negative; a negative count is a runtime error.
+
+As in Go, bitwise operators bind tighter than comparison: `x & 0xFF == 0` is
+`(x & 0xFF) == 0`, and `1 + 2 << 3` is `1 + (2 << 3)`.
+
 ### Comparison Operators
 
 | Operator | Description |
@@ -338,10 +362,10 @@ From highest to lowest:
 | Precedence | Operators |
 |------------|-----------|
 | 1 | `f(x)`, `obj.key`, `...` |
-| 2 | `-` (unary), `!` |
+| 2 | `-` (unary), `!`, `^` (unary) |
 | 3 | `**` |
-| 4 | `*`, `/`, `%` |
-| 5 | `+`, `-` |
+| 4 | `*`, `/`, `%`, `<<`, `>>`, `&` |
+| 5 | `+`, `-`, `\|`, `^` |
 | 6 | `<`, `>`, `<=`, `>=` |
 | 7 | `==`, `!=` |
 | 8 | `&&` |
@@ -379,6 +403,72 @@ result !? {
 ```
 
 The wildcard `_` matches anything and ensures exhaustiveness.
+
+Every arm is conditional, including the last one. If no arm matches, the match
+raises a runtime error naming the value:
+
+```calcium
+match 5
+    0 => "zero"
+    1 => "one";      // 5 matches nothing: runtime error
+
+match 5
+    0 => "zero"
+    1 => "one"
+    _ => "many";     // returns "many"
+```
+
+A chain of conditions is written with a boolean subject and a `_` arm:
+
+```calcium
+func sign(n) = match true
+    n < 0 => -1
+    n > 0 => 1
+    _ => 0;
+```
+
+#### Nested matches
+
+An arm body may contain another `match`. Layout disambiguates which match a case
+belongs to: a case indented further left than the inner match's first case
+belongs to the enclosing match.
+
+```calcium
+func f(x, y) = match x
+    true => match y          // inner match starts here
+        true => 1            //   10 spaces: inner
+        false => 2           //   10 spaces: inner
+    false => 3;              //    5 spaces: outer
+```
+
+Indent nested cases deeper than their own match's cases. When that is not
+possible (for example a single line), parenthesise the nested match instead:
+`true => (match y true => 1 false => 2)`.
+
+#### Constructor patterns
+
+A variant value is destructured by naming its constructor. Each payload position
+is a binding name, a wildcard, or a literal to match against:
+
+```calcium
+type Token = Ident(name) | Keyword(word) | Number(n);
+
+func classify(t) = match t
+    Keyword("if") => "conditional"       // literal: matches by value
+    Keyword(w) => concat("keyword ", w)  // name: binds the payload
+    Number(0) => "zero"                  // literal: matches by value
+    Number(n) => concat("number ", to_string(n))
+    Ident(_) => "identifier"             // wildcard: ignores the payload
+    _ => "other";
+```
+
+A payload pattern is matched or bound, never evaluated: `Number(n + 1)` is a
+parse error rather than an expression.
+
+The final arm is conditional like every other one (see Matching above), so a literal
+payload pattern there still has to match: a value that reaches it without matching ends
+the program instead of silently taking that arm. Follow arms that use literal payloads
+with an explicit `_ => ...` when the match is meant to be exhaustive.
 
 ---
 
@@ -750,6 +840,26 @@ src = schedule.interval(100);  // Fires every 100ms
 | `string.substring(s, start, end)` | Extract substring |
 | `string.char_at(s, index)` | Get character as `Maybe.Some(c)` / `Maybe.None` |
 | `string.index_of(s, sub)` | Find position |
+
+### core.bytes
+
+Byte offsets, exposed separately from the rune-based `core.string`.
+
+| Function | Description |
+|----------|-------------|
+| `bytes.to_bytes(s)` | UTF-8 bytes as an array of ints 0-255 |
+| `bytes.from_bytes(bs)` | Array of bytes to string (copied verbatim) |
+| `bytes.byte_len(s)` | Length in bytes |
+| `bytes.char_count(s)` | Length in code points |
+
+```calcium
+use core.bytes;
+
+bytes.to_bytes("aあ");    // [97, 227, 129, 130]
+bytes.byte_len("aあ");    // 4
+bytes.char_count("aあ");  // 2
+bytes.from_bytes([97, 227, 129, 130]);  // "aあ"
+```
 
 ### core.array
 

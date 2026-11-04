@@ -95,6 +95,10 @@ type Compiler struct {
 	secretVarsStack []map[string]bool
 
 	nextFunctionID int
+
+	// tail is true while compiling a node whose value is the enclosing
+	// function's return value. See Compile.
+	tail bool
 }
 
 // CompilationScope represents a compilation scope (function/global)
@@ -607,7 +611,48 @@ func NewWithState(symbolTable *SymbolTable, constants []value.Value) *Compiler {
 }
 
 // Compile compiles a program
+// Compile compiles a node. Only the value of a function body is in tail
+// position, so `c.tail` is true just for that node and is cleared before
+// descending into children; the constructs that can appear in tail position
+// (a match arm, a do block's final expression, a return value) re-enable it for
+// their subtree.
 func (c *Compiler) Compile(node ast.Node) error {
+	inTail := c.tail
+	c.tail = false
+
+	if err := c.compileNode(node, inTail); err != nil {
+		return err
+	}
+
+	// The node's value is the function's return value, and it was produced by a
+	// call: make that call a tail call so it reuses this frame instead of
+	// growing the stack. Doing it here rather than at the call site covers every
+	// construct whose value happens to end in a call (plain calls, pipelines,
+	// partial application).
+	if inTail && c.scopeIndex > 0 && c.lastInstructionIs(bytecode.OpCall) {
+		c.markTailCall(c.scopes[c.scopeIndex].lastInstruction.Position)
+	}
+
+	return nil
+}
+
+// returnConstraintFor resolves the constraint a function's return value must satisfy:
+// an explicit `: Positive` wins, otherwise a return *type* that names a constraint
+// (`: Int` where `Int` is the built-in checker). Both the decision to keep the body in
+// tail position and the check itself need this, so it is resolved once.
+func (c *Compiler) returnConstraintFor(node *ast.FunctionDeclaration) (string, token.Token) {
+	if node.ReturnConstraint != nil {
+		return node.ReturnConstraint.Value, node.ReturnConstraint.Token
+	}
+	if node.ReturnType != nil {
+		if _, ok := c.symbolTable.Resolve(node.ReturnType.Name); ok {
+			return node.ReturnType.Name, node.ReturnType.Token
+		}
+	}
+	return "", token.Token{}
+}
+
+func (c *Compiler) compileNode(node ast.Node, inTail bool) error {
 	switch node := node.(type) {
 	case *ast.Program:
 		// A Compiler instance may be reused by the REPL. Reset lexical Secret
@@ -890,7 +935,13 @@ func (c *Compiler) Compile(node ast.Node) error {
 			}
 		}
 
-		// Compile function body
+		// Compile function body. It is in tail position only when nothing follows it:
+		// a return-constraint check and the success wrapping of an effect function are
+		// emitted *after* the body, and a tail call replaces the frame, so those
+		// instructions would never run. `helper(n)` in `func f(n): Positive = helper(n)`
+		// used to bypass the constraint check that way.
+		returnConstraint, returnToken := c.returnConstraintFor(node)
+		c.tail = !node.IsEffect && !hasConstraints && returnConstraint == ""
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
@@ -900,18 +951,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		// Determine the effective return constraint name:
 		// 1. Explicit ReturnConstraint (e.g., func add(a, b): Positive = ...)
 		// 2. ReturnType annotation with a resolvable constraint (e.g., func add(a, b): Int = ...)
-		var returnConstraintName string
-		var returnConstraintToken token.Token
-		if node.ReturnConstraint != nil {
-			returnConstraintName = node.ReturnConstraint.Value
-			returnConstraintToken = node.ReturnConstraint.Token
-		} else if node.ReturnType != nil {
-			// Check if the return type name resolves to a constraint function
-			if _, ok := c.symbolTable.Resolve(node.ReturnType.Name); ok {
-				returnConstraintName = node.ReturnType.Name
-				returnConstraintToken = node.ReturnType.Token
-			}
-		}
+		returnConstraintName, returnConstraintToken := returnConstraint, returnToken
 
 		hasReturnConstraint := returnConstraintName != ""
 		if hasReturnConstraint {
@@ -1033,6 +1073,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.symbolTable.Define(param.Value)
 		}
 
+		c.tail = true
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
@@ -1210,6 +1251,8 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.emit(bytecode.OpNeg)
 		case "!":
 			c.emit(bytecode.OpNot)
+		case "^":
+			c.emit(bytecode.OpBitNot)
 		default:
 			return c.newCompileError(node.Token, fmt.Sprintf("unknown prefix operator '%s'", node.Operator))
 		}
@@ -1245,6 +1288,16 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.emit(bytecode.OpDiv)
 		case "%":
 			c.emit(bytecode.OpMod)
+		case "&":
+			c.emit(bytecode.OpBitAnd)
+		case "|":
+			c.emit(bytecode.OpBitOr)
+		case "^":
+			c.emit(bytecode.OpBitXor)
+		case "<<":
+			c.emit(bytecode.OpShl)
+		case ">>":
+			c.emit(bytecode.OpShr)
 		case "**":
 			c.emit(bytecode.OpPow)
 		case "==":
@@ -1406,6 +1459,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.symbolTable.Define(param.Value)
 		}
 
+		c.tail = true
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
@@ -1734,7 +1788,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpGetMember, nameIndex)
 
 	case *ast.MatchExpression:
-		err := c.compileMatch(node)
+		err := c.compileMatch(node, inTail)
 		if err != nil {
 			return err
 		}
@@ -1754,7 +1808,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpWrapFailure)
 
 	case *ast.EffectHandleExpression:
-		err := c.compileEffectHandle(node)
+		err := c.compileEffectHandle(node, inTail)
 		if err != nil {
 			return err
 		}
@@ -1764,6 +1818,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		c.emit(bytecode.OpTrue)
 
 	case *ast.ReturnExpression:
+		c.tail = true
 		err := c.Compile(node.Value)
 		if err != nil {
 			return err
@@ -1826,6 +1881,11 @@ func (c *Compiler) Compile(node ast.Node) error {
 	case *ast.SecretWithExpression:
 		// Secret.with(capability) { ... }: activate the capability while the
 		// block is evaluated and require !!!> for Secret effect writes.
+		//
+		// `c.tail` is deliberately *not* propagated to the final expression, unlike
+		// `do` blocks: OpSecretWithEnd must run to close the capability scope, and a
+		// tail call would replace the frame before it did - leaking the capability for
+		// the rest of the program.
 		if err := c.Compile(node.Capability); err != nil {
 			return err
 		}
@@ -1853,7 +1913,9 @@ func (c *Compiler) Compile(node ast.Node) error {
 				return err
 			}
 		}
-		// Compile the final expression (its value stays on the stack as the block result)
+		// Compile the final expression (its value stays on the stack as the block
+		// result, so it inherits the block's tail position)
+		c.tail = inTail
 		err := c.Compile(node.FinalExpression)
 		if err != nil {
 			return err
@@ -1927,7 +1989,48 @@ func (c *Compiler) compileOr(node *ast.InfixExpression) error {
 	return nil
 }
 
-func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
+// patternFieldIsLiteral reports whether a constructor pattern's field is compared
+// against a literal rather than bound to a name. A wildcard does neither.
+func patternFieldIsLiteral(field ast.Expression) bool {
+	switch field.(type) {
+	case *ast.WildcardExpression:
+		return false
+	case *ast.Identifier:
+		return false
+	}
+	return true
+}
+
+// patternFieldIsBinding reports whether the field binds a name.
+func patternFieldIsBinding(field ast.Expression) bool {
+	if _, isWildcard := field.(*ast.WildcardExpression); isWildcard {
+		return false
+	}
+	_, isIdent := field.(*ast.Identifier)
+	return isIdent
+}
+
+// bindPatternField stores the value already extracted for a field in its name.
+func (c *Compiler) bindPatternField(field ast.Expression) {
+	ident, ok := field.(*ast.Identifier)
+	if !ok {
+		return
+	}
+	if ident.Value == "_" {
+		// Tolerate Identifier{"_"} produced before wildcards were represented
+		// explicitly.
+		c.emit(bytecode.OpPop)
+		return
+	}
+	sym := c.symbolTable.Define(ident.Value)
+	if sym.Scope == GlobalScope {
+		c.emit(bytecode.OpSetGlobal, sym.Index)
+		return
+	}
+	c.emit(bytecode.OpSetLocal, sym.Index)
+}
+
+func (c *Compiler) compileMatch(node *ast.MatchExpression, inTail bool) error {
 	// Compile subject
 	err := c.Compile(node.Subject)
 	if err != nil {
@@ -1939,17 +2042,32 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 	for i, mc := range node.Cases {
 		isLast := i == len(node.Cases)-1
 
+		// Every arm is conditional. When the final arm can reject, there is no
+		// arm left to try, so it needs a no-match handler. The handler is
+		// emitted *before* the final arm rather than after it: placed after, it
+		// would sit between the arm body and OpReturn, and tail-call detection
+		// looks for an OpCall immediately before the return.
+		failPos := -1
+		if isLast && !mc.IsDefault {
+			skipFailPos := c.emit(bytecode.OpJump, 9999)
+			failPos = len(c.currentInstructions())
+			c.emit(bytecode.OpMatchFail)
+			c.changeOperand(skipFailPos, len(c.currentInstructions()))
+		}
+
+		// rejections collects the jumps taken when this arm does not match. All
+		// of them leave the stack as [subject], which is what both the next arm
+		// and OpMatchFail expect.
+		var rejections []int
+
 		if mc.Guard != nil {
 			// Guard case: pattern if guard => body
-			// The pattern is an identifier that binds the subject value.
-			// 1. Bind subject to the pattern variable
-			// 2. Evaluate guard condition
-			// 3. If guard is false, unbind and jump to next case
+			// 1. Bind the subject to the pattern variable
+			// 2. Evaluate the guard
+			// 3. If the guard is false, reject the arm
 
-			// Duplicate subject for binding
 			c.emit(bytecode.OpDup)
 
-			// Bind the pattern identifier as a local variable
 			ident, ok := mc.Pattern.(*ast.Identifier)
 			if !ok {
 				return fmt.Errorf("guard clause requires a variable pattern (e.g., x if x > 0)")
@@ -1961,130 +2079,102 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 				c.emit(bytecode.OpSetLocal, guardSymbol.Index)
 			}
 
-			// Evaluate guard condition
-			err := c.Compile(mc.Guard)
-			if err != nil {
+			if err := c.Compile(mc.Guard); err != nil {
 				return err
 			}
+			rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 
-			var jumpToNextPos int
-			if !isLast {
-				// Jump to next case if guard fails
-				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
-			}
-
-			// Guard passed: pop subject, compile body
+			// Guard passed: pop the subject, then run the body
 			c.emit(bytecode.OpPop)
-
-			err = c.Compile(mc.Body)
-			if err != nil {
+			c.tail = inTail
+			if err := c.Compile(mc.Body); err != nil {
 				return err
-			}
-
-			if !isLast {
-				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
-				// Patch jump to next case
-				afterPos := len(c.currentInstructions())
-				c.changeOperand(jumpToNextPos, afterPos)
 			}
 		} else if cp, ok := mc.Pattern.(*ast.ConstructorPattern); ok {
 			// Constructor pattern: Some(x) => body
-			// Duplicate subject for tag comparison
 			c.emit(bytecode.OpDup)
 
-			// Emit OpMatchADT which pops dup, checks tag, pushes true/false
+			// OpMatchADT pops the duplicate, checks the tag and pushes true/false
 			tagIdx := c.addConstant(value.String(c.constructorTag(cp)))
 			c.emit(bytecode.OpMatchADT, tagIdx, len(cp.Fields))
+			rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 
-			var jumpToNextPos int
-			if !isLast {
-				// JumpIfFalse pops the bool
-				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
-			} else {
-				// Last case: pop the bool explicitly
-				c.emit(bytecode.OpPop)
-			}
-
-			// Stack now: [subject]
-			// Bind fields: extract values from the ADT and bind to local variables
+			// Stack now: [subject]. Every literal field is checked *before* any name
+			// is bound: a binding executed earlier survives the arm's rejection, and a
+			// following arm's identifier then resolves to it - `Pair(x, 5)` against
+			// `Pair(10, 7)` left `x = 10` behind for the next arm.
 			for i, field := range cp.Fields {
-				if field.Value != "_" {
-					// Duplicate subject again to extract field
-					c.emit(bytecode.OpDup)
-					// Push index
-					idxConst := c.addConstant(value.Int(int64(i)))
-					c.emit(bytecode.OpConstant, idxConst)
-					c.emit(bytecode.OpIndex)
-					// Bind to variable
-					sym := c.symbolTable.Define(field.Value)
-					if sym.Scope == GlobalScope {
-						c.emit(bytecode.OpSetGlobal, sym.Index)
-					} else {
-						c.emit(bytecode.OpSetLocal, sym.Index)
-					}
+				if !patternFieldIsLiteral(field) {
+					continue
 				}
+				c.emit(bytecode.OpDup)
+				c.emit(bytecode.OpConstant, c.addConstant(value.Int(int64(i))))
+				c.emit(bytecode.OpIndex)
+				if err := c.Compile(field); err != nil {
+					return err
+				}
+				c.emit(bytecode.OpEqual)
+				rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 			}
 
-			// Pop subject
-			c.emit(bytecode.OpPop)
+			// Only now bind the names, so nothing is assigned by an arm that is
+			// rejected.
+			for i, field := range cp.Fields {
+				if !patternFieldIsBinding(field) {
+					continue
+				}
+				c.emit(bytecode.OpDup)
+				c.emit(bytecode.OpConstant, c.addConstant(value.Int(int64(i))))
+				c.emit(bytecode.OpIndex)
+				c.bindPatternField(field)
+			}
 
-			// Compile body
-			err = c.Compile(mc.Body)
-			if err != nil {
+			c.emit(bytecode.OpPop)
+			c.tail = inTail
+			if err := c.Compile(mc.Body); err != nil {
 				return err
 			}
-
-			if !isLast {
-				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
-				afterPos := len(c.currentInstructions())
-				c.changeOperand(jumpToNextPos, afterPos)
-			}
 		} else {
-			// Standard case (no guard)
-
-			// Duplicate subject for comparison
+			// Standard case: <expression> => body
 			c.emit(bytecode.OpDup)
 
 			if mc.IsDefault {
-				// Default case: always matches, pop the duplicate
+				// `_` always matches: discard the duplicate.
 				c.emit(bytecode.OpPop)
 			} else {
-				// Compile pattern/condition
-				err := c.Compile(mc.Pattern)
-				if err != nil {
+				if err := c.Compile(mc.Pattern); err != nil {
 					return err
 				}
-
-				// Compare
 				c.emit(bytecode.OpEqual)
+				rejections = append(rejections, c.emit(bytecode.OpJumpIfFalse, 9999))
 			}
 
-			var jumpToNextPos int
-			if !isLast && !mc.IsDefault {
-				// Jump to next case if no match
-				jumpToNextPos = c.emit(bytecode.OpJumpIfFalse, 9999)
-			}
-
-			// Pop subject (matched)
 			c.emit(bytecode.OpPop)
-
-			// Compile body
-			err = c.Compile(mc.Body)
-			if err != nil {
+			c.tail = inTail
+			if err := c.Compile(mc.Body); err != nil {
 				return err
 			}
-
-			if !isLast {
-				// Jump to end after body
-				jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
-			}
-
-			if !isLast && !mc.IsDefault {
-				// Patch jump to next case
-				afterPos := len(c.currentInstructions())
-				c.changeOperand(jumpToNextPos, afterPos)
-			}
 		}
+
+		// Non-final arms jump over the remaining arms once their body has run.
+		if !isLast {
+			jumpToEndPositions = append(jumpToEndPositions, c.emit(bytecode.OpJump, 9999))
+		}
+
+		// Patch this arm's rejections: to the no-match handler when this is the
+		// final arm, otherwise to the start of the next arm.
+		patchTarget := failPos
+		if !isLast {
+			patchTarget = len(c.currentInstructions())
+		}
+		for _, pos := range rejections {
+			c.changeOperand(pos, patchTarget)
+		}
+	}
+
+	// A match with no arms has nothing to fall back to either.
+	if len(node.Cases) == 0 {
+		c.emit(bytecode.OpMatchFail)
 	}
 
 	// Patch all jumps to end
@@ -2096,7 +2186,11 @@ func (c *Compiler) compileMatch(node *ast.MatchExpression) error {
 	return nil
 }
 
-func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression) error {
+// compileEffectHandle compiles `subject !? { success(v) => ... failure(e) => ... }`.
+// Both handler bodies inherit the construct's tail position, like a match's arms: a
+// call in either is the handler's value, so without this a recursive `!?` loop grew the
+// stack until the frame limit.
+func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression, inTail bool) error {
 	// Compile subject
 	err := c.Compile(node.Subject)
 	if err != nil {
@@ -2126,6 +2220,7 @@ func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression) error {
 	// Compile success body
 	if node.SuccessBody != nil {
 		c.emit(bytecode.OpPop)
+		c.tail = inTail
 		err = c.Compile(node.SuccessBody)
 		if err != nil {
 			return err
@@ -2156,6 +2251,7 @@ func (c *Compiler) compileEffectHandle(node *ast.EffectHandleExpression) error {
 	// Compile failure body
 	if node.FailureBody != nil {
 		c.emit(bytecode.OpPop)
+		c.tail = inTail
 		err = c.Compile(node.FailureBody)
 		if err != nil {
 			return err
@@ -2321,27 +2417,12 @@ func (c *Compiler) replaceLastPopWithReturn() {
 	if c.lastInstructionIs(bytecode.OpPop) {
 		c.removeLastPop()
 	}
-	// Check if the last instruction (before Return) is OpCall
-	// If so, replace it with OpTailCall for tail call optimization
-	c.replaceLastCallWithTailCall()
 	c.emit(bytecode.OpReturn)
 }
 
-// replaceLastCallWithTailCall replaces the last OpCall with OpTailCall
-// for tail call optimization. This is called when the call is in tail position
-// (i.e., the last expression in a function body, right before OpReturn).
-func (c *Compiler) replaceLastCallWithTailCall() {
-	// Only optimize if we're inside a function scope (not global)
-	if c.scopeIndex == 0 {
-		return
-	}
-
-	last := c.scopes[c.scopeIndex].lastInstruction
-	if last.Opcode == bytecode.OpCall {
-		// Replace OpCall with OpTailCall in-place
-		c.currentInstructions()[last.Position] = byte(bytecode.OpTailCall)
-		c.scopes[c.scopeIndex].lastInstruction.Opcode = bytecode.OpTailCall
-	}
+// markTailCall rewrites the OpCall at pos into an OpTailCall.
+func (c *Compiler) markTailCall(pos int) {
+	c.currentInstructions()[pos] = byte(bytecode.OpTailCall)
 }
 
 func (c *Compiler) changeOperand(opPos int, operand int) {

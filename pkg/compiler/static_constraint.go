@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/ops"
 	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
@@ -172,6 +173,13 @@ func (sc *staticConstraintChecker) checkReturnConstraint(fd *ast.FunctionDeclara
 		return ""
 	}
 
+	// Fold the body first: the built-in constraints below work on literal *kinds*, so a
+	// computed body (`2 << 1 | -5`) was not recognized as one and the check was skipped
+	// - the same gap `checkCallExpression` had.
+	if folded := staticEval(body, nil, sc); folded != nil {
+		body = folded
+	}
+
 	lit, _ := extractLiteralValue(body)
 
 	if result, recognized := checkBuiltinTypeConstraint(constraintName, body); recognized {
@@ -222,6 +230,14 @@ func (sc *staticConstraintChecker) checkCallExpression(funcName string, args []a
 
 		// Resolve identifier arguments through known constants before checking.
 		arg = sc.resolveArg(arg)
+
+		// A computed argument (`2 << 1 | 1`) is folded first: `extractLiteralValue`
+		// only recognises literal nodes, so gating on it let a call whose argument is a
+		// constant *expression* skip the check entirely, even though it has the same
+		// runtime value as the literal it computes.
+		if folded := staticEval(arg, nil, sc); folded != nil {
+			arg = folded
+		}
 
 		// Check if the argument is a literal value
 		litValue, isLiteral := extractLiteralValue(arg)
@@ -320,57 +336,55 @@ func extractLiteralValue(expr ast.Expression) (string, bool) {
 	}
 }
 
-// checkBuiltinTypeConstraint checks if a literal satisfies a built-in type constraint
-// Returns (result, isBuiltinConstraint)
+// literalKind returns the built-in type name of a statically known literal
+// expression, or "" when the expression's type cannot be determined statically.
+// Static constraint checking must only report a violation when the kind is
+// actually known; otherwise every non-literal body (e.g. `func add(a, b): Int =
+// a + b`) would be rejected.
+func literalKind(expr ast.Expression) string {
+	switch e := expr.(type) {
+	case *ast.IntegerLiteral:
+		return "Int"
+	case *ast.FloatLiteral:
+		return "Float"
+	case *ast.StringLiteral:
+		return "String"
+	case *ast.BooleanLiteral:
+		return "Bool"
+	case *ast.ArrayLiteral:
+		return "Array"
+	case *ast.HashLiteral:
+		return "Hash"
+	case *ast.TupleLiteral:
+		return "Tuple"
+	case *ast.LambdaExpression:
+		return "Function"
+	case *ast.PrefixExpression:
+		// A negated literal keeps the kind of its operand. That includes a
+		// non-numeric operand: `-"hi"` is a String, so a constraint expecting an Int
+		// must reject it here rather than treat it as statically unknown.
+		if e.Operator == "-" {
+			return literalKind(e.Right)
+		}
+	}
+	return ""
+}
+
+// checkBuiltinTypeConstraint checks if a literal satisfies a built-in type
+// constraint. Returns (result, isBuiltinConstraint). isBuiltinConstraint is
+// false when the constraint is unknown or the argument's kind is not statically
+// known, in which case no violation should be reported.
 func checkBuiltinTypeConstraint(constraintName string, arg ast.Expression) (bool, bool) {
+	kind := literalKind(arg)
+	if kind == "" {
+		return false, false
+	}
+
 	switch constraintName {
-	case "Int":
-		_, ok := arg.(*ast.IntegerLiteral)
-		if !ok {
-			// Check for negative int: PrefixExpression with "-" and IntegerLiteral
-			if prefix, ok := arg.(*ast.PrefixExpression); ok && prefix.Operator == "-" {
-				_, ok = prefix.Right.(*ast.IntegerLiteral)
-				return ok, true
-			}
-		}
-		return ok, true
-	case "Float":
-		_, ok := arg.(*ast.FloatLiteral)
-		if !ok {
-			if prefix, ok := arg.(*ast.PrefixExpression); ok && prefix.Operator == "-" {
-				_, ok = prefix.Right.(*ast.FloatLiteral)
-				return ok, true
-			}
-		}
-		return ok, true
-	case "String":
-		_, ok := arg.(*ast.StringLiteral)
-		return ok, true
-	case "Bool":
-		_, ok := arg.(*ast.BooleanLiteral)
-		return ok, true
+	case "Int", "Float", "String", "Bool", "Array", "Hash", "Tuple", "Function":
+		return kind == constraintName, true
 	case "Number":
-		_, isInt := arg.(*ast.IntegerLiteral)
-		_, isFloat := arg.(*ast.FloatLiteral)
-		if !isInt && !isFloat {
-			if prefix, ok := arg.(*ast.PrefixExpression); ok && prefix.Operator == "-" {
-				_, isInt = prefix.Right.(*ast.IntegerLiteral)
-				_, isFloat = prefix.Right.(*ast.FloatLiteral)
-			}
-		}
-		return isInt || isFloat, true
-	case "Array":
-		_, ok := arg.(*ast.ArrayLiteral)
-		return ok, true
-	case "Hash":
-		_, ok := arg.(*ast.HashLiteral)
-		return ok, true
-	case "Tuple":
-		_, ok := arg.(*ast.TupleLiteral)
-		return ok, true
-	case "Function":
-		_, ok := arg.(*ast.LambdaExpression)
-		return ok, true
+		return kind == "Int" || kind == "Float", true
 	default:
 		return false, false
 	}
@@ -556,6 +570,13 @@ func staticEval(expr ast.Expression, env map[string]ast.Expression, sc *staticCo
 		// Look up variable in environment
 		if env != nil {
 			if val, ok := env[e.Value]; ok {
+				// The bound value may itself be an expression (`2 << 1 | 1`), so fold it
+				// before substituting. Normalising alone leaves a non-literal operand
+				// behind, which the operator table then cannot evaluate - so a violated
+				// constraint on a computed literal was silently skipped.
+				if folded := staticEval(val, nil, sc); folded != nil {
+					return folded
+				}
 				// Normalize the value (e.g., PrefixExpression "-" IntegerLiteral → IntegerLiteral with negative value)
 				return normalizeExpr(val)
 			}
@@ -567,7 +588,7 @@ func staticEval(expr ast.Expression, env map[string]ast.Expression, sc *staticCo
 		if right == nil {
 			return nil
 		}
-		return evalStaticPrefix(e.Operator, right, e.Token)
+		return ops.Prefix(e.Operator, right, e.Token)
 
 	case *ast.InfixExpression:
 		// Short-circuit for && and ||
@@ -681,24 +702,6 @@ func normalizeExpr(expr ast.Expression) ast.Expression {
 	}
 }
 
-// evalStaticPrefix evaluates a prefix operation on a static value
-func evalStaticPrefix(op string, right ast.Expression, tok token.Token) ast.Expression {
-	switch op {
-	case "-":
-		if intLit, ok := right.(*ast.IntegerLiteral); ok {
-			return &ast.IntegerLiteral{Token: tok, Value: -intLit.Value}
-		}
-		if floatLit, ok := right.(*ast.FloatLiteral); ok {
-			return &ast.FloatLiteral{Token: tok, Value: -floatLit.Value}
-		}
-	case "!":
-		if boolLit, ok := right.(*ast.BooleanLiteral); ok {
-			return &ast.BooleanLiteral{Token: tok, Value: !boolLit.Value}
-		}
-	}
-	return nil
-}
-
 // evalStaticInfix evaluates a binary operation on two static values
 func evalStaticInfix(op string, left, right ast.Expression, tok token.Token) ast.Expression {
 	// Integer operations
@@ -706,7 +709,7 @@ func evalStaticInfix(op string, left, right ast.Expression, tok token.Token) ast
 	rightInt, rightIsInt := right.(*ast.IntegerLiteral)
 
 	if leftIsInt && rightIsInt {
-		return evalStaticIntegerInfix(op, leftInt.Value, rightInt.Value, tok)
+		return ops.IntInfix(op, leftInt.Value, rightInt.Value, tok)
 	}
 
 	// Float / mixed operations
@@ -731,7 +734,7 @@ func evalStaticInfix(op string, left, right ast.Expression, tok token.Token) ast
 	}
 
 	if hasFloat && (leftIsInt || leftIsFloat) && (rightIsInt || rightIsFloat) {
-		return evalStaticFloatInfix(op, leftNum, rightNum, tok)
+		return ops.FloatInfix(op, leftNum, rightNum, tok)
 	}
 
 	// String comparison
@@ -762,68 +765,5 @@ func evalStaticInfix(op string, left, right ast.Expression, tok token.Token) ast
 		}
 	}
 
-	return nil
-}
-
-func evalStaticIntegerInfix(op string, left, right int64, tok token.Token) ast.Expression {
-	switch op {
-	case "+":
-		return &ast.IntegerLiteral{Token: tok, Value: left + right}
-	case "-":
-		return &ast.IntegerLiteral{Token: tok, Value: left - right}
-	case "*":
-		return &ast.IntegerLiteral{Token: tok, Value: left * right}
-	case "/":
-		if right == 0 {
-			return nil
-		}
-		return &ast.IntegerLiteral{Token: tok, Value: left / right}
-	case "%":
-		if right == 0 {
-			return nil
-		}
-		return &ast.IntegerLiteral{Token: tok, Value: left % right}
-	case "<":
-		return &ast.BooleanLiteral{Token: tok, Value: left < right}
-	case ">":
-		return &ast.BooleanLiteral{Token: tok, Value: left > right}
-	case "<=":
-		return &ast.BooleanLiteral{Token: tok, Value: left <= right}
-	case ">=":
-		return &ast.BooleanLiteral{Token: tok, Value: left >= right}
-	case "==":
-		return &ast.BooleanLiteral{Token: tok, Value: left == right}
-	case "!=":
-		return &ast.BooleanLiteral{Token: tok, Value: left != right}
-	}
-	return nil
-}
-
-func evalStaticFloatInfix(op string, left, right float64, tok token.Token) ast.Expression {
-	switch op {
-	case "+":
-		return &ast.FloatLiteral{Token: tok, Value: left + right}
-	case "-":
-		return &ast.FloatLiteral{Token: tok, Value: left - right}
-	case "*":
-		return &ast.FloatLiteral{Token: tok, Value: left * right}
-	case "/":
-		if right == 0 {
-			return nil
-		}
-		return &ast.FloatLiteral{Token: tok, Value: left / right}
-	case "<":
-		return &ast.BooleanLiteral{Token: tok, Value: left < right}
-	case ">":
-		return &ast.BooleanLiteral{Token: tok, Value: left > right}
-	case "<=":
-		return &ast.BooleanLiteral{Token: tok, Value: left <= right}
-	case ">=":
-		return &ast.BooleanLiteral{Token: tok, Value: left >= right}
-	case "==":
-		return &ast.BooleanLiteral{Token: tok, Value: left == right}
-	case "!=":
-		return &ast.BooleanLiteral{Token: tok, Value: left != right}
-	}
 	return nil
 }

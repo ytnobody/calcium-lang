@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -88,16 +89,18 @@ type Parser struct {
 	lookahead []token.Token // Buffer for lookahead tokens (used in destructuring detection)
 
 	// armColumns is the stack of case columns of the matches currently being
-	// parsed. A nested match whose cases sit at the same column as an enclosing
-	// match's cases cannot be told apart from that match's arms, so the parser
-	// reports it instead of silently attributing them to the inner match.
-	armColumns []int
+	// parsed, one []int per enclosing match holding every arm column seen in it so
+	// far (arms need not share a column - ragged indentation is allowed). A nested
+	// match whose case sits at any of those columns cannot be told apart from that
+	// match's arms, so the parser reports it instead of silently attributing it to
+	// the inner match.
+	armColumns [][]int
 
 	// paramsSaved holds armColumns from before a parenthesised construct, so a lambda
 	// body can put it back: the `)` bounds the *parameter list*, and the body after
 	// `=>` is ordinary expression territory where an enclosing match's columns apply
 	// again.
-	paramsSaved []int
+	paramsSaved [][]int
 
 	// noArrowLines remembers lines that cannot contain a case arrow. The statement loop
 	// retries a malformed line token by token, and without this each retry rescanned the
@@ -1410,6 +1413,9 @@ func (p *Parser) parseLambdaFromIdent(left ast.Expression) ast.Expression {
 // Used for block-body lambdas: (x) => { stmt1; stmt2; lastExpr }
 // Reuses DoExpression structure: intermediate statements are popped, last expression is the return value.
 func (p *Parser) parseBraceBlockExpression() ast.Expression {
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+
 	expr := &ast.DoExpression{Token: p.curToken}
 	expr.Statements = []ast.Statement{}
 
@@ -1622,6 +1628,9 @@ func (p *Parser) parseSecretWithExpression(tok token.Token) ast.Expression {
 		return nil
 	}
 
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+
 	expr.Statements = []ast.Statement{}
 	p.nextToken()
 	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
@@ -1691,6 +1700,9 @@ func (p *Parser) parseStayExpression(tok token.Token) ast.Expression {
 	if !p.expectPeek(token.LBRACE) {
 		return nil
 	}
+
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
 
 	// Parse body statements until '}'
 	stay.Body = []ast.Statement{}
@@ -1844,7 +1856,7 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	caseColumn := 0
 
 	outerColumns := p.armColumns
-	p.armColumns = append(p.armColumns, 0)
+	p.armColumns = append(p.armColumns, []int(nil))
 	defer func() { p.armColumns = outerColumns }()
 
 	for !p.peekTokenIs(token.SEMICOLON) && !p.peekTokenIs(token.EOF) &&
@@ -1854,11 +1866,14 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 		// An interpolation's closing brace is its own token, and it ends a match the
 		// same way `}` does.
 		!p.peekTokenIs(token.STRING_TEMPLATE_MIDDLE) && !p.peekTokenIs(token.STRING_TEMPLATE_END) {
-		// Once this match has an arm, a case at an enclosing match's column is that
-		// match's and this one is finished with it. Before the first arm it can only
-		// be this match's own - which is the ambiguity reported below when its column
-		// happens to coincide.
-		if caseColumn > 0 && p.atEnclosingCaseColumn(p.peekToken.Column, outerColumns) {
+		// Once this match has an arm, a case at or to the left of an enclosing match's
+		// leftmost known arm is that match's (or further out still) and this one is
+		// finished with it - a dedent can only mean returning to an enclosing level,
+		// even if the enclosing match hasn't reached that exact column yet itself (its
+		// own ragged arm there is parsed only after this nested match returns). Before
+		// the first arm a coinciding column can only be this match's own, which is the
+		// ambiguity reported below.
+		if caseColumn > 0 && p.belowOrAtEnclosingColumn(p.peekToken.Column, outerColumns) {
 			break
 		}
 		if !p.looksLikeMatchCase() {
@@ -1867,7 +1882,12 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 		p.nextToken()
 		if caseColumn == 0 {
 			caseColumn = p.curToken.Column
-			p.armColumns[len(p.armColumns)-1] = caseColumn
+		}
+		// Every arm's column is recorded, not just the first - arms need not share a
+		// column (ragged indentation), so an enclosing match's later arms must be
+		// checked against all columns this match has actually used so far.
+		p.armColumns[len(p.armColumns)-1] = append(p.armColumns[len(p.armColumns)-1], p.curToken.Column)
+		if len(p.armColumns[len(p.armColumns)-1]) == 1 {
 			// The ambiguity is this match's *own* column coinciding with an
 			// enclosing match's: its cases and that match's arms are then
 			// indistinguishable, and before this check the inner match took them all.
@@ -1940,13 +1960,13 @@ func (p *Parser) looksLikeMatchCase() bool {
 // suspendArms clears the enclosing-arm stack and returns it, so a caller can restore
 // it with resumeArms. `withSuspendedArms` is the expression-shaped wrapper; this pair
 // exists for the parse functions that return other types.
-func (p *Parser) suspendArms() []int {
+func (p *Parser) suspendArms() [][]int {
 	saved := p.armColumns
 	p.armColumns = nil
 	return saved
 }
 
-func (p *Parser) resumeArms(saved []int) {
+func (p *Parser) resumeArms(saved [][]int) {
 	p.armColumns = saved
 }
 
@@ -1977,12 +1997,30 @@ func (p *Parser) resumeArmsForBody() {
 
 // atEnclosingCaseColumn reports whether a case at `column` would sit at the column of
 // an enclosing match's cases, where the two readings cannot be told apart.
-func (p *Parser) atEnclosingCaseColumn(column int, outerColumns []int) bool {
+func (p *Parser) atEnclosingCaseColumn(column int, outerColumns [][]int) bool {
 	if column == 0 {
 		return false
 	}
-	for _, outer := range outerColumns {
-		if outer != 0 && outer == column {
+	for _, cols := range outerColumns {
+		if slices.Contains(cols, column) {
+			return true
+		}
+	}
+	return false
+}
+
+// belowOrAtEnclosingColumn reports whether `column` sits at or to the left of the
+// leftmost arm column any enclosing match has used so far. A dedent that reaches an
+// enclosing level can only be that level's (or one further out still) - unlike
+// atEnclosingCaseColumn's exact-equality test, this also catches an enclosing match's
+// own ragged arm that is further left than any column seen there yet, because that
+// arm is parsed only after this nested match returns control to it.
+func (p *Parser) belowOrAtEnclosingColumn(column int, outerColumns [][]int) bool {
+	if column == 0 {
+		return false
+	}
+	for _, cols := range outerColumns {
+		if len(cols) > 0 && column <= slices.Min(cols) {
 			return true
 		}
 	}
@@ -2165,6 +2203,9 @@ func (p *Parser) parseEffectHandleExpression(subject ast.Expression) ast.Express
 	if !p.expectPeek(token.LBRACE) {
 		return nil
 	}
+
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
 
 	// Parse success and failure cases
 	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {

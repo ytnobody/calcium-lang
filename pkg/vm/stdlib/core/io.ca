@@ -33,10 +33,11 @@ func _format_helper(template, args) = match len(args)
 
 func _replace_first(s, old, new) =
     match __str_index_of(s, old)
-        -1 => s
-        _ => __str_substring(s, 0, __str_index_of(s, old))
-                ++ new
-                ++ __str_substring(s, __str_index_of(s, old) + len(old), len(s));
+        idx if idx < 0 => s
+        _ => concat(
+            __str_substring(s, 0, __str_index_of(s, old)),
+            concat(new, __str_substring(s, __str_index_of(s, old) + len(old), len(s)))
+        );
 
 // read_lines reads a file and returns an array of lines
 func read_lines(path) =

@@ -3,7 +3,7 @@ use core.io!;
 
 func factorial(n) = match n
     0 => 1
-    true => n * factorial(n - 1);
+    _ => n * factorial(n - 1);
 
 func build_factorial_message(n) = n
     |> factorial

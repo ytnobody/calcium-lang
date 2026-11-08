@@ -1580,7 +1580,7 @@ positions are reported in. They are exposed here, separately from the
 rune-based `core.string`, so the distinction is always explicit.
 
 ```calcium
-use bytes;
+use core.bytes;
 
 bytes.to_bytes(s)        // UTF-8 bytes as an array of ints 0-255
 bytes.from_bytes(bs)     // Array of bytes -> string (bytes copied verbatim)

@@ -435,7 +435,21 @@ func TestStaticConstraintCheck_Return(t *testing.T) {
 		`func f(): Positive = -1;`,
 		`func f(): Int = 3.14;`,
 		`func f(): String = 42;`,
+		`func f(): Array = 1;`,
+		`func f(): Int = true;`,
 		`constraint Pos(n) = n > 0; func f(): Pos = 0;`,
+		// A negated literal keeps its operand's kind, so a non-numeric operand is a
+		// violation rather than "statically unknown". Regression: these were accepted.
+		`func f(): Int = -"hi";`,
+		`func f(): Int = -true;`,
+		`func f(): Float = -"hi";`,
+		// The bitwise operators this branch adds have to be statically evaluable too,
+		// or a violated constraint is silently missed: `2 << 1 | 1` is 5, which is odd.
+		`constraint Even(n) = n % 2 == 0; func f(): Even = 2 << 1 | 1;`, // 5
+		`constraint Even(n) = n % 2 == 0; func f(): Even = 3 & 1;`,      // 1
+		`constraint Even(n) = n % 2 == 0; func f(): Even = 6 >> 1;`,     // 3
+		`constraint Even(n) = n % 2 == 0; func f(): Even = 1 ^ 2;`,      // 3
+		`constraint Even(n) = n % 2 == 0; func f(): Even = ^2;`,         // -3
 	}
 	for _, input := range violations {
 		if _, err := compileSource(input); err == nil {
@@ -447,8 +461,26 @@ func TestStaticConstraintCheck_Return(t *testing.T) {
 		`func f(): NonZero = 5;`,
 		`func f(): Positive = 5;`,
 		`func f(): Int = 7;`,
+		`func f(): Int = -7;`,
+		`func f(): Float = -2.5;`,
+		`constraint Even(n) = n % 2 == 0; func f(): Even = 2 << 1;`, // 4
+		`constraint Even(n) = n % 2 == 0; func f(): Even = 4 & 1;`,  // 0
+		`constraint Even(n) = n % 2 == 0; func f(): Even = 8 >> 1;`, // 4
+		`func f(): Int = 6 & 3;`,
+		`func f(): Int = 1 << 4;`,
+		`func f(): Int = 16 >> 2;`,
+		`func f(): Int = ^5;`,
+		`func f(): Int = 3 ^ 1;`,
 		`func f(): String = "hi";`,
+		`func f(): Array = [1, 2];`,
 		`func f(x): Positive = x;`, // non-literal return: skipped statically
+		// Non-literal bodies have no statically known type, so they must not be
+		// reported as violations. Regression: these used to fail with
+		// "return constraint `Int` violated: function returns  which ...".
+		`func add(a: Int, b: Int): Int = a + b;`,
+		`func len_of(s: String): Int = len(s);`,
+		`func neg(a: Int): Int = 0 - a;`,
+		`func num(): Number = 1 + 2;`,
 	}
 	for _, input := range valid {
 		if _, err := compileSource(input); err != nil {

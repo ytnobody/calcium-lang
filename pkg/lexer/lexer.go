@@ -127,6 +127,10 @@ func (l *Lexer) NextToken() token.Token {
 			ch := l.ch
 			l.readChar()
 			tok = token.Token{Type: token.LT_EQ, Literal: string(ch) + string(l.ch), Line: tok.Line, Column: tok.Column}
+		} else if l.peekChar() == '<' {
+			ch := l.ch
+			l.readChar()
+			tok = token.Token{Type: token.SHL, Literal: string(ch) + string(l.ch), Line: tok.Line, Column: tok.Column}
 		} else {
 			tok = newToken(token.LT, l.ch, tok.Line, tok.Column)
 		}
@@ -135,6 +139,10 @@ func (l *Lexer) NextToken() token.Token {
 			ch := l.ch
 			l.readChar()
 			tok = token.Token{Type: token.GT_EQ, Literal: string(ch) + string(l.ch), Line: tok.Line, Column: tok.Column}
+		} else if l.peekChar() == '>' {
+			ch := l.ch
+			l.readChar()
+			tok = token.Token{Type: token.SHR, Literal: string(ch) + string(l.ch), Line: tok.Line, Column: tok.Column}
 		} else {
 			tok = newToken(token.GT, l.ch, tok.Line, tok.Column)
 		}
@@ -146,6 +154,8 @@ func (l *Lexer) NextToken() token.Token {
 		} else {
 			tok = newToken(token.AMPERSAND, l.ch, tok.Line, tok.Column)
 		}
+	case '^':
+		tok = newToken(token.CARET, l.ch, tok.Line, tok.Column)
 	case '|':
 		if l.peekChar() == '|' {
 			ch := l.ch

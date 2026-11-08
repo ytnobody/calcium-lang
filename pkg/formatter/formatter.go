@@ -446,8 +446,30 @@ func (f *Formatter) formatMatchCase(c *ast.MatchCase) string {
 		pattern += " if " + f.formatExpression(c.Guard)
 	}
 
+	// A match as the body needs a column of its own: its arms are indented one level
+	// below this case, and if they landed on this match's arm column the output would
+	// be rejected by the nested-match rule (and would read as the outer match's arms).
+	if _, isMatch := c.Body.(*ast.MatchExpression); isMatch {
+		f.depth++
+		body := f.formatExpression(c.Body)
+		f.depth--
+		return pattern + " => " + body
+	}
+
 	body := f.formatExpression(c.Body)
 	return pattern + " => " + body
+}
+
+// bodyExpression formats the body of a handler case, giving a nested match a column of
+// its own for the same reason as formatMatchCase.
+func (f *Formatter) bodyExpression(e ast.Expression) string {
+	if _, isMatch := e.(*ast.MatchExpression); isMatch {
+		f.depth++
+		formatted := f.formatExpression(e)
+		f.depth--
+		return formatted
+	}
+	return f.formatExpression(e)
 }
 
 func (f *Formatter) formatEffectHandleExpression(e *ast.EffectHandleExpression) string {
@@ -457,8 +479,8 @@ func (f *Formatter) formatEffectHandleExpression(e *ast.EffectHandleExpression) 
 	ind := f.indent()
 	f.depth--
 
-	successCase := ind + "success(" + e.SuccessVar.Value + ") => " + f.formatExpression(e.SuccessBody)
-	failureCase := ind + "failure(" + e.FailureVar.Value + ") => " + f.formatExpression(e.FailureBody)
+	successCase := ind + "success(" + e.SuccessVar.Value + ") => " + f.bodyExpression(e.SuccessBody)
+	failureCase := ind + "failure(" + e.FailureVar.Value + ") => " + f.bodyExpression(e.FailureBody)
 
 	return subject + " !? {\n" + successCase + "\n" + failureCase + "\n" + f.indent() + "}"
 }
@@ -497,7 +519,7 @@ func (f *Formatter) formatConstructorPattern(e *ast.ConstructorPattern) string {
 	}
 	fields := make([]string, len(e.Fields))
 	for i, field := range e.Fields {
-		fields[i] = field.Value
+		fields[i] = f.formatExpression(field)
 	}
 	return name + "(" + strings.Join(fields, ", ") + ")"
 }
@@ -542,12 +564,38 @@ func (f *Formatter) formatStayExpression(e *ast.StayExpression) string {
 
 // escapeString escapes special characters in a string value for output.
 func escapeString(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\t", `\t`)
-	s = strings.ReplaceAll(s, "\r", `\r`)
-	return s
+	return EscapeStringLiteral(s)
+}
+
+// EscapeControl escapes the characters a single-line rendering cannot show:
+// backslash, newline, tab and carriage return. Quotes are left alone, because a
+// token's literal is the text *between* the quotes rather than a quoted literal.
+// `calcium lex` and the formatter both need this, so it lives here once instead of
+// in each of them, where the two could drift apart.
+func EscapeControl(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\r':
+			b.WriteString(`\r`)
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
+}
+
+// EscapeStringLiteral renders a string the way it would be written in source:
+// EscapeControl plus the quotes themselves.
+func EscapeStringLiteral(s string) string {
+	return strings.ReplaceAll(EscapeControl(s), `"`, `\"`)
 }
 
 // escapeStringRaw escapes a raw string segment (already unescaped by parser).

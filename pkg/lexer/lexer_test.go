@@ -486,6 +486,36 @@ func TestPropPipeToken(t *testing.T) {
 	}
 }
 
+func TestBitwiseTokenTypes(t *testing.T) {
+	tests := []struct {
+		input  string
+		tokens []token.TokenType
+	}{
+		{`a << b`, []token.TokenType{token.IDENT, token.SHL, token.IDENT}},
+		{`a >> b`, []token.TokenType{token.IDENT, token.SHR, token.IDENT}},
+		{`a & b`, []token.TokenType{token.IDENT, token.AMPERSAND, token.IDENT}},
+		{`a | b`, []token.TokenType{token.IDENT, token.PIPE_CHAR, token.IDENT}},
+		{`a ^ b`, []token.TokenType{token.IDENT, token.CARET, token.IDENT}},
+		{`^a`, []token.TokenType{token.CARET, token.IDENT}},
+		// Two-character forms must not be mistaken for the bitwise ones.
+		{`a < b`, []token.TokenType{token.IDENT, token.LT, token.IDENT}},
+		{`a > b`, []token.TokenType{token.IDENT, token.GT, token.IDENT}},
+		{`a && b`, []token.TokenType{token.IDENT, token.AND, token.IDENT}},
+		{`a || b`, []token.TokenType{token.IDENT, token.OR, token.IDENT}},
+		{`a |> f`, []token.TokenType{token.IDENT, token.PIPE, token.IDENT}},
+	}
+
+	for _, tt := range tests {
+		l := New(tt.input)
+		for i, expectedType := range tt.tokens {
+			tok := l.NextToken()
+			if tok.Type != expectedType {
+				t.Errorf("input %q, token %d: expected %q, got %q", tt.input, i, expectedType, tok.Type)
+			}
+		}
+	}
+}
+
 func TestRegexVsDivision(t *testing.T) {
 	// Test context detection: regex vs division
 	tests := []struct {

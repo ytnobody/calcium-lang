@@ -59,6 +59,16 @@ func TestConstantFoldingArithmetic(t *testing.T) {
 		// Mixed int/float
 		{"2 + 3.5;", float64(5.5)},
 		{"10.0 / 4;", float64(2.5)},
+
+		// Bitwise operators fold when both operands are int literals
+		{"12 & 10;", int64(8)},
+		{"12 | 10;", int64(14)},
+		{"12 ^ 10;", int64(6)},
+		{"1 << 4;", int64(16)},
+		{"256 >> 3;", int64(32)},
+		{"^0;", int64(-1)},
+		{"^5;", int64(-6)},
+		{"1 + 2 << 3;", int64(17)}, // Go precedence: 1 + (2 << 3)
 	}
 
 	for _, tt := range tests {

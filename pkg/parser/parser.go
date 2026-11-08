@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -21,10 +22,10 @@ const (
 	AND         // &&
 	EQUALS      // == !=
 	LESSGREATER // < > <= >=
-	SUM         // + -
-	PRODUCT     // * / %
+	SUM         // + -  | ^
+	PRODUCT     // * / %  << >> &
 	POWER       // **
-	PREFIX      // -x !x
+	PREFIX      // -x !x ^x
 	CALL        // func(x)
 	INDEX       // array[index]
 	MEMBER      // obj.prop
@@ -39,25 +40,33 @@ var precedences = map[token.TokenType]int{
 	token.EFFECT_END:  PIPE, // !? for result handling
 	token.OR:          OR,
 	token.AND:         AND,
-	token.EQ:          EQUALS,
-	token.NOT_EQ:      EQUALS,
-	token.LT:          LESSGREATER,
-	token.GT:          LESSGREATER,
-	token.LT_EQ:       LESSGREATER,
-	token.GT_EQ:       LESSGREATER,
-	token.PLUS:        SUM,
-	token.MINUS:       SUM,
-	token.ASTERISK:    PRODUCT,
-	token.SLASH:       PRODUCT,
-	token.PERCENT:     PRODUCT,
-	token.POWER:       POWER,
-	token.LPAREN:      CALL,
-	token.LBRACKET:    INDEX,
-	token.DOT:         MEMBER,
-	token.SPREAD:      SPREAD,
-	token.QUESTION:    SPREAD, // ? for constraint check (same precedence as spread)
-	token.ARROW:       LAMBDA, // => for lambda
-	token.TILDE:       EQUALS, // ~ for regex match
+	// Bitwise operators follow Go's precedence rather than C's: `<< >> &` bind
+	// like `* / %`, and `| ^` bind like `+ -`. This keeps `x & 0xFF == 0` and
+	// `1 + 2 << 3` meaning what they read as, without adding new levels.
+	token.AMPERSAND: PRODUCT, // &
+	token.SHL:       PRODUCT, // <<
+	token.SHR:       PRODUCT, // >>
+	token.PIPE_CHAR: SUM,     // |
+	token.CARET:     SUM,     // ^
+	token.EQ:        EQUALS,
+	token.NOT_EQ:    EQUALS,
+	token.LT:        LESSGREATER,
+	token.GT:        LESSGREATER,
+	token.LT_EQ:     LESSGREATER,
+	token.GT_EQ:     LESSGREATER,
+	token.PLUS:      SUM,
+	token.MINUS:     SUM,
+	token.ASTERISK:  PRODUCT,
+	token.SLASH:     PRODUCT,
+	token.PERCENT:   PRODUCT,
+	token.POWER:     POWER,
+	token.LPAREN:    CALL,
+	token.LBRACKET:  INDEX,
+	token.DOT:       MEMBER,
+	token.SPREAD:    SPREAD,
+	token.QUESTION:  SPREAD, // ? for constraint check (same precedence as spread)
+	token.ARROW:     LAMBDA, // => for lambda
+	token.TILDE:     EQUALS, // ~ for regex match
 }
 
 type (
@@ -78,14 +87,34 @@ type Parser struct {
 	infixParseFns  map[token.TokenType]infixParseFn
 
 	lookahead []token.Token // Buffer for lookahead tokens (used in destructuring detection)
+
+	// armColumns is the stack of case columns of the matches currently being
+	// parsed, one []int per enclosing match holding every arm column seen in it so
+	// far (arms need not share a column - ragged indentation is allowed). A nested
+	// match whose case sits at any of those columns cannot be told apart from that
+	// match's arms, so the parser reports it instead of silently attributing it to
+	// the inner match.
+	armColumns [][]int
+
+	// paramsSaved holds armColumns from before a parenthesised construct, so a lambda
+	// body can put it back: the `)` bounds the *parameter list*, and the body after
+	// `=>` is ordinary expression territory where an enclosing match's columns apply
+	// again.
+	paramsSaved [][]int
+
+	// noArrowLines remembers lines that cannot contain a case arrow. The statement loop
+	// retries a malformed line token by token, and without this each retry rescanned the
+	// line - quadratic in its length on input like `match x x x ...`.
+	noArrowLines map[int]bool
 }
 
 // New creates a new Parser
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
-		l:      l,
-		input:  l.Input(),
-		errors: []string{},
+		l:            l,
+		input:        l.Input(),
+		errors:       []string{},
+		noArrowLines: make(map[int]bool),
 	}
 
 	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
@@ -98,6 +127,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.FALSE, p.parseBooleanLiteral)
 	p.registerPrefix(token.BANG, p.parsePrefixExpression)
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(token.CARET, p.parsePrefixExpression)
 	p.registerPrefix(token.LPAREN, p.parseGroupedOrLambda)
 	p.registerPrefix(token.LBRACKET, p.parseArrayLiteral)
 	p.registerPrefix(token.LBRACE, p.parseHashLiteral)
@@ -133,6 +163,11 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.GT_EQ, p.parseInfixExpression)
 	p.registerInfix(token.AND, p.parseInfixExpression)
 	p.registerInfix(token.OR, p.parseInfixExpression)
+	p.registerInfix(token.AMPERSAND, p.parseInfixExpression) // bitwise AND
+	p.registerInfix(token.PIPE_CHAR, p.parseInfixExpression) // bitwise OR
+	p.registerInfix(token.CARET, p.parseInfixExpression)     // bitwise XOR
+	p.registerInfix(token.SHL, p.parseInfixExpression)
+	p.registerInfix(token.SHR, p.parseInfixExpression)
 	p.registerInfix(token.LPAREN, p.parseCallExpression)
 	p.registerInfix(token.LBRACKET, p.parseIndexExpression)
 	p.registerInfix(token.DOT, p.parseMemberExpression)
@@ -1248,6 +1283,10 @@ func (p *Parser) isComparisonOperator(t token.TokenType) bool {
 }
 
 func (p *Parser) parseGroupedOrLambda() ast.Expression {
+	return p.withSuspendedArms(func() ast.Expression { return p.parseGroupedOrLambdaInner() })
+}
+
+func (p *Parser) parseGroupedOrLambdaInner() ast.Expression {
 	// Could be grouped expression (expr) or lambda (params) => expr
 	tok := p.curToken
 
@@ -1327,6 +1366,7 @@ func (p *Parser) parseGroupedOrLambda() ast.Expression {
 }
 
 func (p *Parser) parseLambdaBody(tok token.Token, params []*ast.Identifier) ast.Expression {
+	p.resumeArmsForBody()
 	lambda := &ast.LambdaExpression{
 		Token:      tok,
 		Parameters: params,
@@ -1373,6 +1413,9 @@ func (p *Parser) parseLambdaFromIdent(left ast.Expression) ast.Expression {
 // Used for block-body lambdas: (x) => { stmt1; stmt2; lastExpr }
 // Reuses DoExpression structure: intermediate statements are popped, last expression is the return value.
 func (p *Parser) parseBraceBlockExpression() ast.Expression {
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+
 	expr := &ast.DoExpression{Token: p.curToken}
 	expr.Statements = []ast.Statement{}
 
@@ -1430,7 +1473,16 @@ func (p *Parser) exprToIdentifiers(expr ast.Expression) []*ast.Identifier {
 	}
 }
 
+// An array literal is bounded by `]`, so a match inside it cannot steal an enclosing
+// match's arms: the enclosing columns are suspended while its items are parsed, the
+// same way parentheses and `do ... end` suspend them.
 func (p *Parser) parseArrayLiteral() ast.Expression {
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+	return p.parseArrayLiteralInner()
+}
+
+func (p *Parser) parseArrayLiteralInner() ast.Expression {
 	array := &ast.ArrayLiteral{Token: p.curToken}
 	array.Elements = []ast.Expression{}
 
@@ -1468,7 +1520,15 @@ func (p *Parser) parseArrayLiteral() ast.Expression {
 	return array
 }
 
+// parseHashLiteral is bounded by `}`, so it suspends the enclosing columns like an
+// array literal does.
 func (p *Parser) parseHashLiteral() ast.Expression {
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+	return p.parseHashLiteralInner()
+}
+
+func (p *Parser) parseHashLiteralInner() ast.Expression {
 	hash := &ast.HashLiteral{Token: p.curToken}
 	hash.Pairs = []ast.HashPair{}
 
@@ -1539,7 +1599,11 @@ func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
 	}
 
 	exp := &ast.CallExpression{Token: p.curToken, Function: function}
+	// The argument list is bounded by `)`, so a match inside it cannot steal an
+	// enclosing match's arms: suspend the enclosing columns while it is parsed.
+	saved := p.suspendArms()
 	exp.Arguments = p.parseExpressionList(token.RPAREN)
+	p.resumeArms(saved)
 	return exp
 }
 
@@ -1563,6 +1627,9 @@ func (p *Parser) parseSecretWithExpression(tok token.Token) ast.Expression {
 	if !p.expectPeek(token.LBRACE) {
 		return nil
 	}
+
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
 
 	expr.Statements = []ast.Statement{}
 	p.nextToken()
@@ -1634,6 +1701,9 @@ func (p *Parser) parseStayExpression(tok token.Token) ast.Expression {
 		return nil
 	}
 
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+
 	// Parse body statements until '}'
 	stay.Body = []ast.Statement{}
 	p.nextToken()
@@ -1694,7 +1764,15 @@ func (p *Parser) parseExpressionList(end token.TokenType) []ast.Expression {
 	return list
 }
 
+// An index expression is bounded by `]`, so a match inside it suspends the enclosing
+// columns like an array literal does.
 func (p *Parser) parseIndexExpression(left ast.Expression) ast.Expression {
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
+	return p.parseIndexExpressionInner(left)
+}
+
+func (p *Parser) parseIndexExpressionInner(left ast.Expression) ast.Expression {
 	exp := &ast.IndexExpression{Token: p.curToken, Left: left}
 
 	p.nextToken()
@@ -1766,9 +1844,57 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 
 	exp.Cases = []*ast.MatchCase{}
 
-	// Parse cases until we hit a semicolon or EOF
-	for !p.peekTokenIs(token.SEMICOLON) && !p.peekTokenIs(token.EOF) {
+	// A match has no explicit terminator, so its cases end in one of two ways: an
+	// explicit delimiter (';', EOF, a closing bracket, a comma, `end`), or a token
+	// sequence that cannot be a case at all.
+	//
+	// Indentation is *not* the test. A case is `pattern => body` with the arrow on the
+	// pattern's line, while the statement that follows a match (`m = match ...` in a
+	// `do` block, say) has none - so looking for the arrow is both what ends a match
+	// before the next statement and what keeps arms that are indented inconsistently
+	// inside the match. Trusting the first arm's column instead rejected both.
+	caseColumn := 0
+
+	outerColumns := p.armColumns
+	p.armColumns = append(p.armColumns, []int(nil))
+	defer func() { p.armColumns = outerColumns }()
+
+	for !p.peekTokenIs(token.SEMICOLON) && !p.peekTokenIs(token.EOF) &&
+		!p.peekTokenIs(token.RPAREN) && !p.peekTokenIs(token.RBRACKET) &&
+		!p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.COMMA) &&
+		!p.isEndToken(p.peekToken) &&
+		// An interpolation's closing brace is its own token, and it ends a match the
+		// same way `}` does.
+		!p.peekTokenIs(token.STRING_TEMPLATE_MIDDLE) && !p.peekTokenIs(token.STRING_TEMPLATE_END) {
+		// Once this match has an arm, a case at or to the left of an enclosing match's
+		// leftmost known arm is that match's (or further out still) and this one is
+		// finished with it - a dedent can only mean returning to an enclosing level,
+		// even if the enclosing match hasn't reached that exact column yet itself (its
+		// own ragged arm there is parsed only after this nested match returns). Before
+		// the first arm a coinciding column can only be this match's own, which is the
+		// ambiguity reported below.
+		if caseColumn > 0 && p.belowOrAtEnclosingColumn(p.peekToken.Column, outerColumns) {
+			break
+		}
+		if !p.looksLikeMatchCase() {
+			break
+		}
 		p.nextToken()
+		if caseColumn == 0 {
+			caseColumn = p.curToken.Column
+		}
+		// Every arm's column is recorded, not just the first - arms need not share a
+		// column (ragged indentation), so an enclosing match's later arms must be
+		// checked against all columns this match has actually used so far.
+		p.armColumns[len(p.armColumns)-1] = append(p.armColumns[len(p.armColumns)-1], p.curToken.Column)
+		if len(p.armColumns[len(p.armColumns)-1]) == 1 {
+			// The ambiguity is this match's *own* column coinciding with an
+			// enclosing match's: its cases and that match's arms are then
+			// indistinguishable, and before this check the inner match took them all.
+			if p.atEnclosingCaseColumn(caseColumn, outerColumns) {
+				p.errorAmbiguousCaseColumn(p.curToken)
+			}
+		}
 		matchCase := p.parseMatchCase()
 		if matchCase != nil {
 			exp.Cases = append(exp.Cases, matchCase)
@@ -1776,6 +1902,144 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	}
 
 	return exp
+}
+
+// looksLikeMatchCase reports whether the upcoming tokens begin a case - `pattern =>`
+// with the arrow before the line ends - rather than something that merely follows the
+// match. Nesting is tracked so that an arrow inside an argument list (`map(x, x => ...)`)
+// does not count as this case's arrow.
+func (p *Parser) looksLikeMatchCase() bool {
+	line := p.peekToken.Line
+	depth := 0
+	// A cap, because this runs from the statement loop: a file of malformed `match`
+	// headers is retried token by token, and an unbounded scan makes that quadratic in
+	// the file size. 1024 tokens is far more than a real case needs - a guard with
+	// twenty comparisons is about 70 - while keeping recovery linear.
+	if p.noArrowLines[line] {
+		return false
+	}
+	const maxCaseLookaheadTokens = 256
+	for n := 1; n <= maxCaseLookaheadTokens; n++ {
+		tok := p.peekN(n)
+		if tok.Type == token.EOF || p.isEndToken(tok) ||
+			tok.Type == token.STRING_TEMPLATE_MIDDLE || tok.Type == token.STRING_TEMPLATE_END {
+			return false
+		}
+		// At depth 0 the arrow must be on the same line as the pattern's last token, so
+		// that the statement after a match (which has no arrow) ends it. Inside brackets
+		// a pattern may span lines, and the closing bracket resets the line.
+		if depth == 0 && tok.Line != line {
+			// The whole line was scanned without finding an arrow at depth 0.
+			p.noArrowLines[line] = true
+			return false
+		}
+		switch tok.Type {
+		case token.LPAREN, token.LBRACKET, token.LBRACE:
+			depth++
+		case token.RPAREN, token.RBRACKET, token.RBRACE:
+			if depth == 0 {
+				return false
+			}
+			depth--
+		case token.SEMICOLON:
+			if depth == 0 {
+				return false
+			}
+		case token.ARROW:
+			if depth == 0 {
+				return true
+			}
+		}
+		line = tok.Line
+	}
+	// The cap was reached: treat it as "not a case" rather than scanning the rest of
+	// the file.
+	return false
+}
+
+// suspendArms clears the enclosing-arm stack and returns it, so a caller can restore
+// it with resumeArms. `withSuspendedArms` is the expression-shaped wrapper; this pair
+// exists for the parse functions that return other types.
+func (p *Parser) suspendArms() [][]int {
+	saved := p.armColumns
+	p.armColumns = nil
+	return saved
+}
+
+func (p *Parser) resumeArms(saved [][]int) {
+	p.armColumns = saved
+}
+
+// withSuspendedArms clears the enclosing-arm stack while parsing a construct that
+// terminates itself - `( ... )` and `do ... end`. A match inside one is bounded by
+// the delimiter, so an enclosing match's columns cannot steal its cases and the
+// ambiguity check there could only produce a false positive. This is what makes the
+// hint ("wrap it in parentheses or `do ... end`") true.
+func (p *Parser) withSuspendedArms(parse func() ast.Expression) ast.Expression {
+	saved := p.armColumns
+	p.armColumns = nil
+	p.paramsSaved = saved
+	defer func() {
+		p.armColumns = saved
+		p.paramsSaved = nil
+	}()
+	return parse()
+}
+
+// resumeArmsForBody restores the enclosing columns when a lambda body starts. Without
+// it, `match x / true => (p) => match y ... / false => 3` silently gave the enclosing
+// match's `false` arm to the inner match: the suspension covered the body too.
+func (p *Parser) resumeArmsForBody() {
+	if p.paramsSaved != nil {
+		p.armColumns = p.paramsSaved
+	}
+}
+
+// atEnclosingCaseColumn reports whether a case at `column` would sit at the column of
+// an enclosing match's cases, where the two readings cannot be told apart.
+func (p *Parser) atEnclosingCaseColumn(column int, outerColumns [][]int) bool {
+	if column == 0 {
+		return false
+	}
+	for _, cols := range outerColumns {
+		if slices.Contains(cols, column) {
+			return true
+		}
+	}
+	return false
+}
+
+// belowOrAtEnclosingColumn reports whether `column` sits at or to the left of the
+// leftmost arm column any enclosing match has used so far. A dedent that reaches an
+// enclosing level can only be that level's (or one further out still) - unlike
+// atEnclosingCaseColumn's exact-equality test, this also catches an enclosing match's
+// own ragged arm that is further left than any column seen there yet, because that
+// arm is parsed only after this nested match returns control to it.
+func (p *Parser) belowOrAtEnclosingColumn(column int, outerColumns [][]int) bool {
+	if column == 0 {
+		return false
+	}
+	for _, cols := range outerColumns {
+		if len(cols) > 0 && column <= slices.Min(cols) {
+			return true
+		}
+	}
+	return false
+}
+
+// errorAmbiguousCaseColumn reports a case that cannot be attributed to either match.
+// Both readings parse - the case could be this match's or the enclosing one's - and
+// before this check the inner match silently took it, leaving the enclosing match
+// without the arm its author wrote.
+//
+// Only the nesting shape is rejected; indenting the inner match further, wrapping it
+// in parentheses or putting it in a `do ... end` block all say which reading is meant
+// (the last two suspend the check, since `)` and `end` terminate the match).
+func (p *Parser) errorAmbiguousCaseColumn(tok token.Token) {
+	p.errors = append(p.errors, p.formatErrorWithContext(
+		tok.Line, tok.Column,
+		"ambiguous nested match: this case is at the same column as an enclosing match's cases\n"+
+			"hint: indent the inner match further, or wrap it in parentheses or `do ... end`"))
 }
 
 func (p *Parser) parseMatchCase() *ast.MatchCase {
@@ -1787,7 +2051,9 @@ func (p *Parser) parseMatchCase() *ast.MatchCase {
 		mc.Pattern = &ast.WildcardExpression{Token: p.curToken}
 	} else if p.curTokenIs(token.IDENT) && isUpperCase(p.curToken.Literal) &&
 		p.peekTokenIs(token.DOT) && p.peekN(2).Type == token.IDENT && isUpperCase(p.peekN(2).Literal) {
-		// Qualified constructor pattern: Type.Name or Type.Name(x, y)
+		// Qualified constructor pattern: Type.Name or Type.Name(x, y). The
+		// qualifier is a *type* name, so it is upper-case; a module namespace is
+		// not a type and cannot qualify a tag.
 		mc.Pattern = p.parseQualifiedConstructorPattern()
 	} else if p.curTokenIs(token.IDENT) && p.peekTokenIs(token.LPAREN) && isUpperCase(p.curToken.Literal) {
 		// Constructor pattern: Name(x, y) where Name starts with uppercase
@@ -1825,23 +2091,82 @@ func (p *Parser) parseConstructorPattern() ast.Expression {
 	}
 
 	p.nextToken() // consume (
-	cp.Fields = []*ast.Identifier{}
-
-	if !p.peekTokenIs(token.RPAREN) {
-		p.nextToken()
-		cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
-		for p.peekTokenIs(token.COMMA) {
-			p.nextToken() // consume ,
-			p.nextToken() // move to next field
-			cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
-		}
-	}
+	cp.Fields = p.parseConstructorPatternFields()
 
 	if !p.expectPeek(token.RPAREN) {
 		return nil
 	}
 
 	return cp
+}
+
+// parseConstructorPatternFields parses the comma-separated payload patterns of
+// a constructor, up to but not including the closing ')'.
+func (p *Parser) parseConstructorPatternFields() []ast.Expression {
+	fields := []ast.Expression{}
+
+	if p.peekTokenIs(token.RPAREN) {
+		return fields
+	}
+
+	p.nextToken()
+	fields = append(fields, p.parsePatternAtom())
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken() // consume ','
+		p.nextToken() // move to next field
+		fields = append(fields, p.parsePatternAtom())
+	}
+
+	return fields
+}
+
+// parsePatternAtom parses one constructor-payload pattern. Only a binding name,
+// a wildcard, or a literal is allowed: a payload pattern is matched or bound,
+// never evaluated, so arbitrary expressions are rejected rather than silently
+// treated as bindings.
+func (p *Parser) parsePatternAtom() ast.Expression {
+	negated := false
+	negToken := p.curToken
+	if p.curTokenIs(token.MINUS) {
+		negated = true
+		p.nextToken()
+	}
+
+	var atom ast.Expression
+	switch p.curToken.Type {
+	case token.IDENT:
+		atom = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	case token.UNDERSCORE:
+		atom = &ast.WildcardExpression{Token: p.curToken}
+	case token.INT:
+		atom = p.parseIntegerLiteral()
+	case token.FLOAT:
+		atom = p.parseFloatLiteral()
+	case token.STRING:
+		atom = &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
+	case token.TRUE, token.FALSE:
+		atom = &ast.BooleanLiteral{Token: p.curToken, Value: p.curTokenIs(token.TRUE)}
+	default:
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			p.curToken.Line, p.curToken.Column,
+			fmt.Sprintf("unexpected %q in constructor pattern\nhint: a payload pattern must be a name, '_', or a literal", p.curToken.Literal)))
+		return nil
+	}
+
+	if !negated {
+		return atom
+	}
+
+	// Only a numeric literal can be negated. Testing `!INT && !FLOAT` rather than
+	// listing IDENT and UNDERSCORE is what rejects `-"a"`, `-true` and `-false` too.
+	if !p.curTokenIs(token.INT) && !p.curTokenIs(token.FLOAT) {
+		p.errors = append(p.errors, p.formatErrorWithContext(
+			negToken.Line, negToken.Column,
+			"'-' can only negate a numeric literal in a constructor pattern"))
+		return nil
+	}
+
+	return &ast.PrefixExpression{Token: negToken, Operator: "-", Right: atom}
 }
 
 // parseQualifiedConstructorPattern parses patterns such as Maybe.None,
@@ -1858,16 +2183,7 @@ func (p *Parser) parseQualifiedConstructorPattern() ast.Expression {
 
 	if p.peekTokenIs(token.LPAREN) {
 		p.nextToken() // consume '('
-		cp.Fields = []*ast.Identifier{}
-		if !p.peekTokenIs(token.RPAREN) {
-			p.nextToken()
-			cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
-			for p.peekTokenIs(token.COMMA) {
-				p.nextToken() // consume ','
-				p.nextToken() // move to next field
-				cp.Fields = append(cp.Fields, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
-			}
-		}
+		cp.Fields = p.parseConstructorPatternFields()
 		p.expectPeek(token.RPAREN)
 	}
 
@@ -1887,6 +2203,9 @@ func (p *Parser) parseEffectHandleExpression(subject ast.Expression) ast.Express
 	if !p.expectPeek(token.LBRACE) {
 		return nil
 	}
+
+	saved := p.suspendArms()
+	defer p.resumeArms(saved)
 
 	// Parse success and failure cases
 	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
@@ -1983,6 +2302,10 @@ func (p *Parser) parseReturnExpression() ast.Expression {
 // Syntax: do <stmt1>; <stmt2>; ... <finalExpr> end
 // The block evaluates each statement in sequence and returns the value of the final expression.
 func (p *Parser) parseDoExpression() ast.Expression {
+	return p.withSuspendedArms(func() ast.Expression { return p.parseDoExpressionInner() })
+}
+
+func (p *Parser) parseDoExpressionInner() ast.Expression {
 	expr := &ast.DoExpression{Token: p.curToken}
 	expr.Statements = []ast.Statement{}
 

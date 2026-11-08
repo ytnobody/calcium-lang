@@ -226,6 +226,9 @@ func (c *Checker) inferInfix(e *ast.InfixExpression) types.TypeExpr {
 		return types.Any
 	case "==", "!=", "<", ">", "<=", ">=", "&&", "||":
 		return types.Bool
+	case "&", "|", "^", "<<", ">>":
+		// Bitwise operators are integer-only and always produce an Int.
+		return types.Int
 	default:
 		return types.Any
 	}
@@ -244,6 +247,9 @@ func (c *Checker) inferPrefix(e *ast.PrefixExpression) types.TypeExpr {
 			return types.Float
 		}
 		return types.Any
+	case "^":
+		// Bitwise NOT is integer-only.
+		return types.Int
 	}
 	return types.Any
 }

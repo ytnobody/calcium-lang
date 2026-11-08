@@ -1,9 +1,8 @@
 package optimizer
 
 import (
-	"math"
-
 	"github.com/ytnobody/calcium-lang/pkg/ast"
+	"github.com/ytnobody/calcium-lang/pkg/ops"
 	"github.com/ytnobody/calcium-lang/pkg/token"
 )
 
@@ -160,7 +159,7 @@ func foldPrefixExpression(pe *ast.PrefixExpression) ast.Expression {
 	right := foldNode(pe.Right).(ast.Expression)
 
 	// Try to evaluate constant expressions
-	if result := evalConstantPrefix(pe.Operator, right, pe.Token); result != nil {
+	if result := ops.Prefix(pe.Operator, right, pe.Token); result != nil {
 		return result
 	}
 
@@ -274,6 +273,7 @@ func foldMatchExpression(me *ast.MatchExpression) *ast.MatchExpression {
 		cases[i] = &ast.MatchCase{
 			Token:     c.Token,
 			Pattern:   foldNode(c.Pattern).(ast.Expression),
+			Guard:     withGuard(foldNode, c.Guard),
 			Body:      foldNode(c.Body).(ast.Expression),
 			IsDefault: c.IsDefault,
 		}
@@ -388,7 +388,7 @@ func evalConstantInfix(op string, left, right ast.Expression, tok token.Token) a
 	rightInt, rightIsInt := right.(*ast.IntegerLiteral)
 
 	if leftIsInt && rightIsInt {
-		return evalIntegerInfix(op, leftInt.Value, rightInt.Value, tok)
+		return ops.IntInfix(op, leftInt.Value, rightInt.Value, tok)
 	}
 
 	// Float operations
@@ -414,7 +414,7 @@ func evalConstantInfix(op string, left, right ast.Expression, tok token.Token) a
 	}
 
 	if hasFloat && (leftIsInt || leftIsFloat) && (rightIsInt || rightIsFloat) {
-		return evalFloatInfix(op, leftNum, rightNum, tok)
+		return ops.FloatInfix(op, leftNum, rightNum, tok)
 	}
 
 	// String concatenation
@@ -439,73 +439,6 @@ func evalConstantInfix(op string, left, right ast.Expression, tok token.Token) a
 	return nil
 }
 
-func evalIntegerInfix(op string, left, right int64, tok token.Token) ast.Expression {
-	switch op {
-	case "+":
-		return &ast.IntegerLiteral{Token: tok, Value: left + right}
-	case "-":
-		return &ast.IntegerLiteral{Token: tok, Value: left - right}
-	case "*":
-		return &ast.IntegerLiteral{Token: tok, Value: left * right}
-	case "/":
-		if right == 0 {
-			return nil // Don't fold division by zero
-		}
-		return &ast.IntegerLiteral{Token: tok, Value: left / right}
-	case "%":
-		if right == 0 {
-			return nil // Don't fold modulo by zero
-		}
-		return &ast.IntegerLiteral{Token: tok, Value: left % right}
-	case "**":
-		return &ast.IntegerLiteral{Token: tok, Value: int64(math.Pow(float64(left), float64(right)))}
-	case "<":
-		return &ast.BooleanLiteral{Token: tok, Value: left < right}
-	case ">":
-		return &ast.BooleanLiteral{Token: tok, Value: left > right}
-	case "<=":
-		return &ast.BooleanLiteral{Token: tok, Value: left <= right}
-	case ">=":
-		return &ast.BooleanLiteral{Token: tok, Value: left >= right}
-	case "==":
-		return &ast.BooleanLiteral{Token: tok, Value: left == right}
-	case "!=":
-		return &ast.BooleanLiteral{Token: tok, Value: left != right}
-	}
-	return nil
-}
-
-func evalFloatInfix(op string, left, right float64, tok token.Token) ast.Expression {
-	switch op {
-	case "+":
-		return &ast.FloatLiteral{Token: tok, Value: left + right}
-	case "-":
-		return &ast.FloatLiteral{Token: tok, Value: left - right}
-	case "*":
-		return &ast.FloatLiteral{Token: tok, Value: left * right}
-	case "/":
-		if right == 0 {
-			return nil // Don't fold division by zero
-		}
-		return &ast.FloatLiteral{Token: tok, Value: left / right}
-	case "**":
-		return &ast.FloatLiteral{Token: tok, Value: math.Pow(left, right)}
-	case "<":
-		return &ast.BooleanLiteral{Token: tok, Value: left < right}
-	case ">":
-		return &ast.BooleanLiteral{Token: tok, Value: left > right}
-	case "<=":
-		return &ast.BooleanLiteral{Token: tok, Value: left <= right}
-	case ">=":
-		return &ast.BooleanLiteral{Token: tok, Value: left >= right}
-	case "==":
-		return &ast.BooleanLiteral{Token: tok, Value: left == right}
-	case "!=":
-		return &ast.BooleanLiteral{Token: tok, Value: left != right}
-	}
-	return nil
-}
-
 func evalBooleanInfix(op string, left, right bool, tok token.Token) ast.Expression {
 	switch op {
 	case "&&":
@@ -516,24 +449,6 @@ func evalBooleanInfix(op string, left, right bool, tok token.Token) ast.Expressi
 		return &ast.BooleanLiteral{Token: tok, Value: left == right}
 	case "!=":
 		return &ast.BooleanLiteral{Token: tok, Value: left != right}
-	}
-	return nil
-}
-
-// evalConstantPrefix evaluates a unary operation on a constant operand
-func evalConstantPrefix(op string, right ast.Expression, tok token.Token) ast.Expression {
-	switch op {
-	case "-":
-		if intLit, ok := right.(*ast.IntegerLiteral); ok {
-			return &ast.IntegerLiteral{Token: tok, Value: -intLit.Value}
-		}
-		if floatLit, ok := right.(*ast.FloatLiteral); ok {
-			return &ast.FloatLiteral{Token: tok, Value: -floatLit.Value}
-		}
-	case "!":
-		if boolLit, ok := right.(*ast.BooleanLiteral); ok {
-			return &ast.BooleanLiteral{Token: tok, Value: !boolLit.Value}
-		}
 	}
 	return nil
 }

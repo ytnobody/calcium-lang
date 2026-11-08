@@ -100,6 +100,7 @@ const version = "0.2.0"
 const packMagic = "BONEPACK"
 
 func main() {
+
 	// Check if this binary has embedded .bone data
 	if tryRunEmbedded() {
 		return
@@ -178,6 +179,12 @@ func main() {
 	case "lint":
 		os.Exit(runLint(args[1:]))
 
+	case "lex":
+		os.Exit(runLex(args[1:]))
+
+	case "check":
+		os.Exit(runCheck(args[1:]))
+
 	case "fmt":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "Usage: calcium fmt [--check] <file.ca> [...]")
@@ -222,17 +229,13 @@ func main() {
 // With --check flag, it reports whether any file would be changed.
 // Without --check flag, it formats files in-place.
 func runFmt(args []string) {
+	flags, files := splitArgs(args, "--check")
 	checkOnly := false
-	var files []string
-
-	for _, arg := range args {
-		if arg == "--check" {
+	for _, f := range flags {
+		if f == "--check" {
 			checkOnly = true
-		} else {
-			files = append(files, arg)
 		}
 	}
-
 	if len(files) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: calcium fmt [--check] <file.ca> [...]")
 		os.Exit(1)
@@ -290,6 +293,8 @@ Usage:
   calcium build [-O0|-O1|-O2] <file> [-o out]    Build standalone executable
   calcium fmt [--check] <file.ca> [...]      Format source files
   calcium lint [--json] <file.ca> [...]      Static analysis of source files
+  calcium lex <file.ca> [...]                Dump the token stream (debugging)
+  calcium check <file.ca> [...]              Dump type checker findings (debugging)
   calcium test [dir]                         Run all .test.ca files in directory
   calcium cache <file.ca>                    Pre-fetch dependencies recursively
   calcium cache --list                       List cached modules

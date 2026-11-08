@@ -61,7 +61,7 @@ Calcium can handle the following 6 types of values:
 - Strings: `"hello"`, `"world"`
   - Escape sequences: `\\`(backslash), `\"`(double quote), `\'`(single quote), `\n`(newline), `\r`(carriage return), `\t`(tab), `\b`(backspace), `\f`(formfeed)
   - Unicode escapes: `\uXXXX` decodes a single BMP code point (4 hex digits, e.g. `\u0041` → `A`, `\u30A2` → `ア`). A surrogate pair written as two escapes (`\uD83D\uDE00`) decodes to a supplementary character (`😀`, U+1F600), consistent with the JSON module. Invalid hex, lone high/low surrogates, and out-of-range values are left as-is.
-  - **String semantics are rune-based (Unicode code points), not byte-based.** `len`, `char_at`, and `substring` index/count by rune. Every string operation in `core.string` and the builtin `len` MUST use rune semantics; byte-level access is an implementation detail and must never leak into the public API.
+  - **String semantics are rune-based (Unicode code points), not byte-based.** `len`, `char_at`, and `substring` index/count by rune. Every string operation in `core.string` and the builtin `len` MUST use rune semantics. Byte offsets are a separate concern and are exposed only through the explicitly named functions in `core.bytes` (see below); they must never leak into `core.string`.
 - Arrays: `[1, 2, 3]`, `["a", "b", "c"]`
 - Functions: `(x) => x * 2`
 - Result types: `success(value)`, `failure(error)`
@@ -136,6 +136,58 @@ y = None;
 func describe(m) = match m
   Some(v) => concat("Got: ", to_string(v))
   None() => "Nothing";
+```
+
+#### Payload patterns
+
+Each payload position is one of three things:
+
+| Form | Meaning |
+|---|---|
+| a name (`v`) | Binds the payload to that variable |
+| `_` | Ignores the payload |
+| a literal (`5`, `"ok"`, `-2`, `3.5`, `true`) | Matches only if the payload equals that literal |
+
+```calcium
+type Token = Ident(name) | Keyword(word) | Number(n);
+
+func classify(t) = match t
+  Keyword("if") => "conditional"      // literal: compares
+  Keyword("else") => "conditional"   // literal: compares
+  Keyword(w) => concat("keyword ", w) // name: binds
+  Number(0) => "zero"                 // literal: compares
+  Number(n) => concat("number ", to_string(n))
+  Ident(_) => "identifier"            // wildcard: ignores
+  _ => "other";
+```
+
+A payload pattern is **matched or bound, never evaluated**. Anything that is not
+a name, `_`, or a literal is a parse error:
+
+```calcium
+match t
+  Number(n + 1) => n     // parse error: not a pattern
+```
+
+Every arm is conditional, including the last one. If no arm matches, the match
+raises a runtime error naming the value. End a match with `_ => ...` when the
+arms are not exhaustive:
+
+```calcium
+match t
+  Number(0) => "zero"
+  Number(1) => "one"
+  _ => "other";        // without this, any other Number is a runtime error
+```
+
+The idiomatic form for a chain of conditions uses a boolean subject and a `_`
+arm, which always matches:
+
+```calcium
+func sign(n) = match true
+  n < 0 => -1
+  n > 0 => 1
+  _ => 0;
 ```
 
 Variant constructors are first-class values and are exported from modules
@@ -407,6 +459,36 @@ concat("Hello", " ", "World") // "Hello World"
 concat("value: ", 42)        // "value: 42"
 ```
 
+### Bitwise Operators
+
+Bitwise operators are integer-only; applying them to any other type is a runtime error.
+
+```calcium
+&   // Bitwise AND
+|   // Bitwise OR
+^   // Bitwise XOR (infix) / bitwise NOT (prefix)
+<<  // Left shift
+>>  // Right shift (arithmetic: the sign bit is replicated)
+```
+
+```calcium
+0xFF & 0x0F       // 15
+0x10 | 0x01       // 17
+0x0C ^ 0x0A       // 6
+1 << 4            // 16
+256 >> 3          // 32
+^0                // -1
+^5                // -6
+-1 >> 1           // -1 (arithmetic shift)
+```
+
+Shift counts must be non-negative; a negative count is a runtime error. Counts of 64
+or more are well defined: `x << 64` is `0`, and `x >> 64` is the sign fill (`-1` for
+negative `x`, otherwise `0`).
+
+As in Go, the bitwise operators bind tighter than comparison: `x & 0xFF == 0` means
+`(x & 0xFF) == 0`, and `1 + 2 << 3` means `1 + (2 << 3)`.
+
 ### Comparison Operators
 
 ```calcium
@@ -468,10 +550,10 @@ From highest to lowest:
 | Precedence | Operators | Description |
 |------------|-----------|-------------|
 | 1 | `f(x)`, `obj.key`, `...` | Function call, member access, spread |
-| 2 | `-`, `!` | Unary operators (negation, logical not) |
+| 2 | `-`, `!`, `^` | Unary operators (negation, logical not, bitwise not) |
 | 3 | `**` | Exponentiation |
-| 4 | `*`, `/`, `%` | Multiplication, division, modulo |
-| 5 | `+`, `-` | Addition, subtraction |
+| 4 | `*`, `/`, `%`, `<<`, `>>`, `&` | Multiplication, division, modulo, bitwise shift/AND |
+| 5 | `+`, `-`, `\|`, `^` | Addition, subtraction, bitwise OR/XOR |
 | 6 | `<`, `>`, `<=`, `>=` | Comparison |
 | 7 | `==`, `!=` | Equality, inequality |
 | 8 | `&&` | Logical AND |
@@ -1490,6 +1572,26 @@ string.words(s)              // Split into words (whitespace)
 string.reverse(s)            // Reverse characters (runes)
 string.from_code(cp)         // Code point -> string (success/failure)
 ```
+
+### bytes Namespace
+
+Byte offsets are what the UTF-8 encoding is made of, and they are what source
+positions are reported in. They are exposed here, separately from the
+rune-based `core.string`, so the distinction is always explicit.
+
+```calcium
+use bytes;
+
+bytes.to_bytes(s)        // UTF-8 bytes as an array of ints 0-255
+bytes.from_bytes(bs)     // Array of bytes -> string (bytes copied verbatim)
+bytes.byte_len(s)        // Length in bytes
+bytes.char_count(s)      // Length in Unicode code points
+bytes.from_int(v)        // Int -> eight big-endian bytes (two's complement)
+bytes.from_float(v)      // Float -> eight big-endian IEEE 754 bytes
+```
+
+`bytes.from_bytes` copies bytes verbatim, so a run of single bytes reassembles
+the original text, including multi-byte characters.
 
 ### math Namespace
 
